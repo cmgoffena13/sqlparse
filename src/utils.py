@@ -5,6 +5,13 @@ import sys
 import tomllib
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    pass
+else:
+    load_dotenv()
+
 
 def get_version() -> str:
     pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"

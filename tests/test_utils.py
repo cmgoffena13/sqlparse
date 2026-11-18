@@ -1,9 +1,32 @@
+import os
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
 from src.utils import get_version, is_compiled
+
+
+def test_env_file_sets_the_config_dir(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("SQLPARSE_CONFIG_DIR=from-dotenv\n", encoding="utf-8")
+    env = os.environ.copy()
+    env.pop("SQLPARSE_CONFIG_DIR", None)
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from src.utils import get_sqlparse_config_dir; print(get_sqlparse_config_dir())",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert completed.stdout.strip() == "from-dotenv"
+    assert (tmp_path / "from-dotenv").is_dir()
 
 
 def test_is_compiled_is_false_under_pytest() -> None:

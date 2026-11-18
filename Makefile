@@ -17,6 +17,7 @@ upgrade:
 	uv sync --upgrade --all-extras
 
 run:
+	rm -rf .sqlparse/
 	uv run -- python main.py
 
 ready: lint format type-check test-cov

@@ -14,6 +14,10 @@ _SKILL_BODY = """\
 # INSTRUCTIONS
 
 1. Use ``example`` to confirm the sqlparse server is connected.
+
+# CAVEATS
+ - A macro is expanded away, so column lineage does not show which macro produced a column.
+ - A macro change affects columns only after rendering before and after the change.
 """
 
 

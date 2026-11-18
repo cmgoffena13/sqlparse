@@ -11,6 +11,16 @@ from src.db import TABLE_BATCH_MAP, ProjectDB
 from src.git_utils import path_spec_for_indexing, relative_path_is_ignored
 
 
+def _language(file_extension: str) -> str | None:
+    languages = {
+        ".py": "python",
+        ".yml": "yaml",
+        ".yaml": "yaml",
+        ".sql": "sql",
+    }
+    return languages.get(file_extension)
+
+
 def _join_rel(dir_rel: str, name: str) -> str:
     return name if not dir_rel else f"{dir_rel}/{name}"
 
@@ -56,11 +66,26 @@ class ProjectProcessor:
                 "seen": True,
             }
 
-    def _normalize_path(self, path: str) -> str:
-        dot = path.rfind(".")
-        slash = path.rfind("/")
-        stem = path[:dot] if dot > slash else path
-        return stem.lower()
+    def _python_import_path(self, relative: str) -> str:
+        parts = relative.split("/")
+        dirs = parts[:-1]
+        index = 0
+        found = False
+        while index < len(dirs) and not found:
+            package = self.root.joinpath(*dirs[: index + 1])
+            found = (package / "__init__.py").is_file()
+            index += 1
+        return "/".join(parts[index - 1 :]) if found else relative
+
+    def _normalize_path(self, path: str, language: str | None) -> str:
+        module_path = self._python_import_path(path) if language == "python" else path
+        dot = module_path.rfind(".")
+        slash = module_path.rfind("/")
+        stem = module_path[:dot] if dot > slash else module_path
+        posix = stem.lower()
+        if language == "python":
+            posix = posix.replace("/", ".").removesuffix(".__init__")
+        return posix
 
     def _process_file(self, file_name: str, directory_path: str, dir_rel: str, full: bool) -> None:
         file_relative_path = _join_rel(dir_rel, file_name)
@@ -113,13 +138,14 @@ class ProjectProcessor:
             self.files_skipped += 1
             return
 
+        language = _language(file_extension)
         file_row = {
             "id": file_id,
             "directory_id": directory_id,
             "name": file_name,
             "path": file_relative_path,
-            "normalized_path": self._normalize_path(file_relative_path),
-            "language": None,
+            "normalized_path": self._normalize_path(file_relative_path, language),
+            "language": language,
             "content_hash": file_hash,
             "mtime_ns": mtime_ns,
             "size_bytes": size_bytes,
