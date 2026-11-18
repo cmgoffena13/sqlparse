@@ -1,0 +1,12 @@
+test_orders_exist:
+  model: sushi.orders
+  inputs:
+    sushi.customers:
+      rows:
+        - customer_id: 1
+          status: active
+  outputs:
+    query:
+      rows:
+        - order_id: 1
+          customer_id: 1

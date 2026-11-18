@@ -1,0 +1,3 @@
+default_gateway: local
+model_defaults:
+  dialect: duckdb

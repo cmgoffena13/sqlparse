@@ -1,0 +1,4 @@
+- name: raw.customers
+  columns:
+    customer_id: int
+    status: text
