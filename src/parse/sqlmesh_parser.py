@@ -266,7 +266,7 @@ class SQLMeshParser:
         files_snapshot: dict[str, FileSnapshot],
         models_snapshot: dict[str, ModelSnapshot],
     ) -> None:
-        qualified_name = model.fqn
+        qualified_name = model.name
         kind = model.kind.name
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
         project_name = self._project_name_for_model(model)
@@ -334,7 +334,7 @@ class SQLMeshParser:
         macros_snapshot: dict[str, MacroSnapshot],
         model_macros_snapshot: dict[str, ModelMacroSnapshot],
     ) -> None:
-        model_id = models_snapshot[model.fqn]["id"]
+        model_id = models_snapshot[model.name]["id"]
         macro_names = set(model.jinja_macros.root_macros)
         for name in model.python_env or {}:
             if name in macros_snapshot:
@@ -365,7 +365,7 @@ class SQLMeshParser:
         audits_snapshot: dict[str, AuditSnapshot],
         model_audits_snapshot: dict[str, ModelAuditSnapshot],
     ) -> None:
-        model_id = models_snapshot[model.fqn]["id"]
+        model_id = models_snapshot[model.name]["id"]
         audit_names = {audit_name for audit_name, _ in model.audits}
         audit_names |= set(model.audit_definitions)
         for audit_name in audit_names:
@@ -395,7 +395,7 @@ class SQLMeshParser:
         models_snapshot: dict[str, ModelSnapshot],
         columns_snapshot: dict[str, ColumnSnapshot],
     ) -> None:
-        model_id = models_snapshot[model.fqn]["id"]
+        model_id = models_snapshot[model.name]["id"]
         column_descriptions = model.column_descriptions
         for column in extract_model_columns(model):
             query_name = column["query_name"]
@@ -477,11 +477,11 @@ class SQLMeshParser:
         columns_snapshot: dict[str, ColumnSnapshot],
         column_lineage_snapshot: dict[str, ColumnLineageSnapshot],
     ) -> None:
-        model_id = models_snapshot[model.fqn]["id"]
+        model_id = models_snapshot[model.name]["id"]
         model_name_to_id = {
-            synced.name: models_snapshot[synced.fqn]["id"]
+            synced.name: models_snapshot[synced.name]["id"]
             for synced in self.context.models.values()
-            if synced.fqn in models_snapshot
+            if synced.name in models_snapshot
         }
         for reference in extract_model_column_references(model):
             ref_query_name = reference["ref_column_query_name"]
@@ -586,9 +586,9 @@ class SQLMeshParser:
             path = Path(str(metadata.path))
             file_id = self._file_id(path, files_snapshot)
             model = self.context.get_model(metadata.model_name)
-            if model is None or model.fqn not in models_snapshot:
+            if model is None or model.name not in models_snapshot:
                 continue
-            model_id = models_snapshot[model.fqn]["id"]
+            model_id = models_snapshot[model.name]["id"]
             name = metadata.test_name
             line_start, line_end = test_line_span(path, name)
             digest = snapshot_hash([file_id, model_id, name, line_start, line_end])

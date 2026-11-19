@@ -6,14 +6,14 @@ from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
 
-CUSTOMERS_FQN = '"memory"."sushi"."customers"'
-CUSTOMER_ORDERS_FQN = '"memory"."sushi"."customer_orders"'
-CUSTOMER_STATUS_FQN = '"memory"."sushi"."customer_status"'
-ORDERS_FQN = '"memory"."sushi"."orders"'
-WAITERS_FQN = '"memory"."sushi"."waiters"'
-RAW_SEED_FQN = '"memory"."sushi"."raw_seed"'
-RAW_CUSTOMERS_FQN = '"memory"."raw"."customers"'
-RAW_ORDERS_FQN = '"memory"."raw"."orders"'
+CUSTOMERS_FQN = "sushi.customers"
+CUSTOMER_ORDERS_FQN = "sushi.customer_orders"
+CUSTOMER_STATUS_FQN = "sushi.customer_status"
+ORDERS_FQN = "sushi.orders"
+WAITERS_FQN = "sushi.waiters"
+RAW_SEED_FQN = "sushi.raw_seed"
+RAW_CUSTOMERS_FQN = "raw.customers"
+RAW_ORDERS_FQN = "raw.orders"
 
 
 def test_processor_indexes_files_and_directories() -> None:
@@ -279,6 +279,12 @@ def test_processor_indexes_files_and_directories() -> None:
         for row in first_models.values()
     )
     assert second_models == first_models
+    assert first_models[CUSTOMERS_FQN]["qualified_name"] == "sushi.customers"
+    assert '"' not in first_models[CUSTOMERS_FQN]["qualified_name"]
+    assert (
+        first_columns["sushi.customers.customer_id"]["query_name"]
+        == (first_models[CUSTOMERS_FQN]["qualified_name"])
+    )
     assert first_columns["sushi.customers.customer_id"]["query_name"] == "sushi.customers"
     assert first_columns["sushi.customers.customer_id"]["name"] == "customer_id"
     assert first_columns["sushi.customers.customer_id"]["description"] == "Customer identifier"
