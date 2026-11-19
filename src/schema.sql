@@ -33,4 +33,59 @@ CREATE TABLE IF NOT EXISTS files (
     size_bytes          INTEGER NOT NULL,
     line_count          INTEGER NOT NULL DEFAULT 0
 );
-CREATE UNIQUE INDEX IF NOT EXISTS files_normalized_path_index ON files (normalized_path);
+
+CREATE TABLE IF NOT EXISTS models (
+    id                  INTEGER NOT NULL PRIMARY KEY,
+    file_id             INTEGER REFERENCES files(id),
+    qualified_name      TEXT NOT NULL,
+    kind                TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS macros (
+    id                  INTEGER NOT NULL PRIMARY KEY,
+    name                TEXT NOT NULL,
+    kind                TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS model_macros (
+    macro_name          TEXT NOT NULL,
+    model_id            INTEGER NOT NULL REFERENCES models(id),
+    PRIMARY KEY (macro_name, model_id)
+);
+CREATE INDEX IF NOT EXISTS model_macros_model_id_index ON model_macros (model_id);
+
+CREATE TABLE IF NOT EXISTS columns (
+    id                  INTEGER NOT NULL PRIMARY KEY,
+    model_id            INTEGER NOT NULL REFERENCES models(id),
+    query_name          TEXT NOT NULL,
+    name                TEXT NOT NULL,
+    qualified_name      TEXT NOT NULL,
+    file_line          INTEGER NOT NULL,
+    context             TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS column_references_staging (
+    id                              INTEGER NOT NULL,
+    ref_column_qualified_name       TEXT NOT NULL,
+    source_column_id                INTEGER REFERENCES columns(id),
+    source_model_id                 INTEGER NOT NULL REFERENCES models(id),
+    source_column_qualified_name    TEXT NULL,
+    source_line                     INTEGER NOT NULL,
+    source_column                   INTEGER NOT NULL,
+    ref_kind                        TEXT NOT NULL,
+    context                         TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS column_references (
+    id                              INTEGER NOT NULL PRIMARY KEY,
+    ref_column_id                   INTEGER NOT NULL REFERENCES columns(id),
+    ref_column_file_id              INTEGER NOT NULL REFERENCES files(id),
+    ref_column_qualified_name       TEXT NOT NULL,
+    source_column_id                INTEGER REFERENCES columns(id),
+    source_file_id                  INTEGER NOT NULL REFERENCES files(id),
+    source_column_qualified_name    TEXT NULL,
+    source_line                     INTEGER NOT NULL,
+    source_column                   INTEGER NOT NULL,
+    ref_kind                        TEXT NOT NULL,
+    context                         TEXT NOT NULL
+);
