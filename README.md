@@ -2,6 +2,12 @@
   <img alt="SQLParse" src="static/logo.svg" width="560">
 </p>
 
+<p align="center">
+  <img alt="Lines of Code" src="https://aschey.tech/tokei/github/cmgoffena13/sqlparse?category=code">
+  <a href="https://github.com/cmgoffena13/sqlparse/actions"><img alt="Build Status" src="https://github.com/cmgoffena13/sqlparse/actions/workflows/build-release.yml/badge.svg"></a>
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-informational?style=flat">
+</p>
+
 SQLParse is a SQLMesh project indexer that gives agents fast, accurate, and compact context while reducing token usage. It parses your SQLMesh project and stores those relationships in a local SQLite database.
 
 ## Commands
