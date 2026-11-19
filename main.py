@@ -46,6 +46,24 @@ async def _print_tools() -> None:
             "DIRECTORY TREE",
             _body(await client.call_tool("get_directory_tree", {})),
         )
+        _print_section(
+            "MODEL DEPENDENCIES",
+            _body(
+                await client.call_tool(
+                    "get_model_relations",
+                    {"model_name": "sushi.customer_orders", "relation": "dependencies"},
+                )
+            ),
+        )
+        _print_section(
+            "MODEL DEPENDENTS",
+            _body(
+                await client.call_tool(
+                    "get_model_relations",
+                    {"model_name": "sushi.customers", "relation": "dependents"},
+                )
+            ),
+        )
 
 
 def main() -> None:

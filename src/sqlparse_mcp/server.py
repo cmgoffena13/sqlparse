@@ -2,12 +2,14 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastmcp import Context, FastMCP
 
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_tree
+from src.sqlparse_mcp.model_relations import get_model_relations as run_model_relations
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
 from src.utils import get_sqlparse_config_dir
@@ -78,3 +80,18 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
     Optional ``directory_path`` scopes to one directory tree (exact path).
     """
     return run_directory_tree(_db(ctx), directory_path)
+
+
+@mcp.tool()
+def get_model_relations(
+    ctx: Context,
+    model_name: str,
+    relation: Literal["dependents", "dependencies"] = "dependents",
+) -> str:
+    """
+    Return model relations for ``model_name``.
+
+    ``dependencies`` lists upstream models this model reads.
+    ``dependents`` lists downstream models that read it.
+    """
+    return run_model_relations(_db(ctx), model_name, relation)

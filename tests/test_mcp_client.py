@@ -8,7 +8,7 @@ from fastmcp.client.client import CallToolResult
 from src.sqlparse_mcp.skill import SKILL_INSTRUCTIONS
 from tests.conftest import FIXTURE_PROJECT
 
-_TOOLS = {"search", "get_directory_tree"}
+_TOOLS = {"search", "get_directory_tree", "get_model_relations"}
 
 
 def _text(result: CallToolResult) -> str:
@@ -47,5 +47,13 @@ def test_client_lists_tools_and_reads_the_project(
             )
             assert tree_out.startswith("models/")
             assert "sushi.customers" in tree_out
+            relations_out = _text(
+                await mcp_client.call_tool(
+                    "get_model_relations",
+                    {"model_name": "sushi.customers", "relation": "dependents"},
+                )
+            )
+            assert relations_out.startswith("sushi.customers\n")
+            assert "sushi.customer_orders" in relations_out
 
     asyncio.run(run())

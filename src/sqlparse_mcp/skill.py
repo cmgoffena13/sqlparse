@@ -15,6 +15,7 @@ _SKILL_BODY = """\
 
 1. Use ``search`` to find models, queries, and columns by name.
 2. Use ``get_directory_tree`` to browse files and see model names per file.
+3. Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
 
 # CAVEATS
  - A macro is expanded away, so column lineage does not show which macro produced a column.
