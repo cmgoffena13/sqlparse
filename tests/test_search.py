@@ -26,7 +26,9 @@ def test_search_finds_models_queries_and_columns() -> None:
     assert "sushi.customers" in out
     assert "queries" in out
     assert "sushi.customers / cte" in out
+    assert "sushi.customers / $" in out
     assert "columns" in out
+    assert "sushi.customers / $ / customer_id" in out
     assert "raw.customers.customer_id" in out or "customer_id" in out
 
 

@@ -50,15 +50,10 @@ def search(db: ProjectDB, query: str, limit: int) -> str:
                 model_name = str(row["model_name"])
                 query_name = str(row["query_name"])
                 column_name = str(row["column_name"])
+                query_label = query_name if query_name else "$"
                 models.setdefault(model_name, rank)
-                if query_name:
-                    queries.setdefault(f"{model_name} / {query_name}", rank)
-                column_label = (
-                    f"{model_name} / {query_name} / {column_name}"
-                    if query_name
-                    else f"{model_name} / {column_name}"
-                )
-                columns.append((rank, column_label))
+                queries.setdefault(f"{model_name} / {query_label}", rank)
+                columns.append((rank, f"{model_name} / {query_label} / {column_name}"))
             lines: list[str] = []
             if models:
                 lines.append("models")
