@@ -30,6 +30,7 @@ def test_recreate_schema_keeps_column_lineage_shape(tmp_path: Path) -> None:
         "source_line",
         "ref_kind",
         "context",
+        "snapshot_hash",
     ]
 
 

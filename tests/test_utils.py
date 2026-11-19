@@ -4,8 +4,16 @@ import sys
 from pathlib import Path
 
 import pytest
+import xxhash
 
-from src.utils import get_version, is_compiled
+from src.utils import get_version, is_compiled, snapshot_hash
+
+
+def test_snapshot_hash_joins_values_and_blank_nones() -> None:
+    payload = "1||full|note"
+    assert snapshot_hash([1, None, "full", "note"]) == xxhash.xxh128(payload.encode()).hexdigest()
+    assert snapshot_hash([1, None, "full", "note"]) == snapshot_hash([1, "", "full", "note"])
+    assert snapshot_hash([1, None, "full", "note"]) != snapshot_hash([2, None, "full", "note"])
 
 
 def test_env_file_sets_the_config_dir(tmp_path: Path) -> None:

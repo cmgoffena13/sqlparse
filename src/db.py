@@ -46,20 +46,13 @@ class FileSnapshot(TypedDict):
 
 class ModelSnapshot(TypedDict):
     id: int
-    file_id: int
-    kind: str
-    config_start_line: int
-    config_end_line: int
-    description: str | None
+    snapshot_hash: str
     seen: bool
 
 
 class ColumnSnapshot(TypedDict):
     id: int
-    qualified_name: str
-    line_start: int
-    line_end: int
-    description: str | None
+    snapshot_hash: str
     seen: bool
 
 
@@ -88,8 +81,7 @@ class ModelAuditSnapshot(TypedDict):
 
 class ColumnLineageSnapshot(TypedDict):
     id: int
-    ref_column_id: int
-    source_column_id: int
+    snapshot_hash: str
     seen: bool
 
 
@@ -221,10 +213,7 @@ class ProjectDB:
         self.delete_ids("files", file_ids)
 
     def get_models_snapshot(self) -> dict[str, ModelSnapshot]:
-        cursor = self.connection.execute(
-            "SELECT id, file_id, qualified_name, kind, config_start_line, "
-            "config_end_line, description FROM models"
-        )
+        cursor = self.connection.execute("SELECT id, qualified_name, snapshot_hash FROM models")
         return {str(row["qualified_name"]): self._model_snapshot(row) for row in cursor}
 
     def delete_models(self, models: dict[str, ModelSnapshot]) -> None:
@@ -232,9 +221,7 @@ class ProjectDB:
         self.delete_ids("models", model_ids)
 
     def get_columns_snapshot(self) -> dict[str, ColumnSnapshot]:
-        cursor = self.connection.execute(
-            "SELECT id, qualified_name, line_start, line_end, description FROM columns"
-        )
+        cursor = self.connection.execute("SELECT id, qualified_name, snapshot_hash FROM columns")
         return {str(row["qualified_name"]): self._column_snapshot(row) for row in cursor}
 
     def delete_columns(self, columns: dict[str, ColumnSnapshot]) -> None:
@@ -293,9 +280,8 @@ class ProjectDB:
 
     def get_column_lineage_snapshot(self) -> dict[str, ColumnLineageSnapshot]:
         cursor = self.connection.execute(
-            "SELECT id, ref_column_id, ref_column_qualified_name, source_column_id, "
-            "source_column_qualified_name, source_line, ref_kind "
-            "FROM column_lineage"
+            "SELECT id, ref_column_qualified_name, source_column_qualified_name, "
+            "source_line, ref_kind, snapshot_hash FROM column_lineage"
         )
         return {
             self._column_lineage_key(
@@ -359,25 +345,16 @@ class ProjectDB:
         }
 
     def _model_snapshot(self, row: sqlite3.Row) -> ModelSnapshot:
-        description = row["description"]
         return {
             "id": int(row["id"]),
-            "file_id": int(row["file_id"]),
-            "kind": str(row["kind"]),
-            "config_start_line": int(row["config_start_line"]),
-            "config_end_line": int(row["config_end_line"]),
-            "description": None if description is None else str(description),
+            "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
 
     def _column_snapshot(self, row: sqlite3.Row) -> ColumnSnapshot:
-        description = row["description"]
         return {
             "id": int(row["id"]),
-            "qualified_name": str(row["qualified_name"]),
-            "line_start": int(row["line_start"]),
-            "line_end": int(row["line_end"]),
-            "description": None if description is None else str(description),
+            "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
 
@@ -411,8 +388,7 @@ class ProjectDB:
     def _column_lineage_snapshot(self, row: sqlite3.Row) -> ColumnLineageSnapshot:
         return {
             "id": int(row["id"]),
-            "ref_column_id": int(row["ref_column_id"]),
-            "source_column_id": int(row["source_column_id"]),
+            "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
 
@@ -456,10 +432,10 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO models (
                     id, file_id, qualified_name, kind,
-                    config_start_line, config_end_line, description
+                    config_start_line, config_end_line, description, snapshot_hash
                 ) VALUES (
                     :id, :file_id, :qualified_name, :kind,
-                    :config_start_line, :config_end_line, :description
+                    :config_start_line, :config_end_line, :description, :snapshot_hash
                 )
                 """,
                 batches["models"],
@@ -508,10 +484,12 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO columns (
                     id, model_id, query_name, from_table, name,
-                    qualified_name, line_start, line_end, context, description
+                    qualified_name, line_start, line_end, context, description,
+                    snapshot_hash
                 ) VALUES (
                     :id, :model_id, :query_name, :from_table, :name,
-                    :qualified_name, :line_start, :line_end, :context, :description
+                    :qualified_name, :line_start, :line_end, :context, :description,
+                    :snapshot_hash
                 )
                 """,
                 batches["columns"],
@@ -522,12 +500,12 @@ class ProjectDB:
                     id, ref_column_id, ref_column_model_id, ref_column_query_name,
                     ref_column_qualified_name, source_column_id, source_models_id,
                     source_query_name, source_column_qualified_name,
-                    source_line, ref_kind, context
+                    source_line, ref_kind, context, snapshot_hash
                 ) VALUES (
                     :id, :ref_column_id, :ref_column_model_id, :ref_column_query_name,
                     :ref_column_qualified_name, :source_column_id, :source_models_id,
                     :source_query_name, :source_column_qualified_name,
-                    :source_line, :ref_kind, :context
+                    :source_line, :ref_kind, :context, :snapshot_hash
                 )
                 """,
                 batches["column_lineage"],

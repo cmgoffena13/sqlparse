@@ -23,14 +23,14 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, file_id, qualified_name, kind, config_start_line, "
-                "config_end_line, description FROM models"
+                "config_end_line, description, snapshot_hash FROM models"
             )
         }
         first_columns = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, model_id, query_name, from_table, name, qualified_name, "
-                "line_start, line_end, context, description FROM columns"
+                "line_start, line_end, context, description, snapshot_hash FROM columns"
             )
         }
         first_macros = {
@@ -58,7 +58,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
                 "ref_column_qualified_name, source_column_id, source_models_id, "
                 "source_query_name, source_column_qualified_name, "
-                "source_line, ref_kind, context FROM column_lineage"
+                "source_line, ref_kind, context, snapshot_hash FROM column_lineage"
             )
         }
         first_tests = {
@@ -77,14 +77,14 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, file_id, qualified_name, kind, config_start_line, "
-                "config_end_line, description FROM models"
+                "config_end_line, description, snapshot_hash FROM models"
             )
         }
         second_columns = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, model_id, query_name, from_table, name, qualified_name, "
-                "line_start, line_end, context, description FROM columns"
+                "line_start, line_end, context, description, snapshot_hash FROM columns"
             )
         }
         second_macros = {
@@ -112,7 +112,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
                 "ref_column_qualified_name, source_column_id, source_models_id, "
                 "source_query_name, source_column_qualified_name, "
-                "source_line, ref_kind, context FROM column_lineage"
+                "source_line, ref_kind, context, snapshot_hash FROM column_lineage"
             )
         }
         second_tests = {
@@ -186,6 +186,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[CUSTOMERS_FQN]["config_start_line"] == 1
     assert first_models[CUSTOMERS_FQN]["config_end_line"] == 6
     assert first_models[CUSTOMERS_FQN]["description"] == "Customer grain with order amounts"
+    assert first_models[CUSTOMERS_FQN]["snapshot_hash"]
     assert first_models[ORDERS_FQN]["kind"] == "INCREMENTAL_BY_TIME_RANGE"
     assert first_models[ORDERS_FQN]["description"] is None
     assert first_models[ORDERS_FQN]["file_id"] == orders["id"]
@@ -213,6 +214,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_columns["sushi.customers.customer_id"]["query_name"] == "sushi.customers"
     assert first_columns["sushi.customers.customer_id"]["name"] == "customer_id"
     assert first_columns["sushi.customers.customer_id"]["description"] == "Customer identifier"
+    assert first_columns["sushi.customers.customer_id"]["snapshot_hash"]
     assert first_columns["sushi.customers.amount"]["description"] == "Order amount in dollars"
     assert first_columns["sushi.customers.status"]["description"] == "Customer status"
     assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["description"] is None

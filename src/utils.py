@@ -3,7 +3,10 @@ import os
 import shutil
 import sys
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
+
+import xxhash
 
 try:
     from dotenv import load_dotenv
@@ -11,6 +14,11 @@ except ImportError:
     pass
 else:
     load_dotenv()
+
+
+def snapshot_hash(values: Sequence[object]) -> str:
+    payload = "|".join("" if value is None else str(value) for value in values)
+    return xxhash.xxh128(payload.encode()).hexdigest()
 
 
 def get_version() -> str:

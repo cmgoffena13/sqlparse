@@ -21,6 +21,7 @@ from src.db import (
 from src.parse.column_lineage import extract_model_column_references, extract_model_columns
 from src.parse.model_utils import model_config_lines
 from src.parse.test_utils import fixture_column_names
+from src.utils import snapshot_hash
 
 
 class SQLMeshParser:
@@ -127,6 +128,16 @@ class SQLMeshParser:
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
         config_start_line, config_end_line = model_config_lines(model)
         description = model.description
+        digest = snapshot_hash(
+            [
+                file_id,
+                qualified_name,
+                kind,
+                config_start_line,
+                config_end_line,
+                description,
+            ]
+        )
         prior = models_snapshot.get(qualified_name)
         if prior is None:
             model_id = self.assigner.reserve("models", 1)[0]
@@ -139,17 +150,12 @@ class SQLMeshParser:
                     "config_start_line": config_start_line,
                     "config_end_line": config_end_line,
                     "description": description,
+                    "snapshot_hash": digest,
                 }
             )
         else:
             model_id = prior["id"]
-            if (
-                prior["kind"] != kind
-                or prior["file_id"] != file_id
-                or prior["config_start_line"] != config_start_line
-                or prior["config_end_line"] != config_end_line
-                or prior["description"] != description
-            ):
+            if prior["snapshot_hash"] != digest:
                 self.batches["models"].append(
                     {
                         "id": model_id,
@@ -159,15 +165,12 @@ class SQLMeshParser:
                         "config_start_line": config_start_line,
                         "config_end_line": config_end_line,
                         "description": description,
+                        "snapshot_hash": digest,
                     }
                 )
         models_snapshot[qualified_name] = {
             "id": model_id,
-            "file_id": file_id,
-            "kind": kind,
-            "config_start_line": config_start_line,
-            "config_end_line": config_end_line,
-            "description": description,
+            "snapshot_hash": digest,
             "seen": True,
         }
 
@@ -250,6 +253,19 @@ class SQLMeshParser:
             line_end = column["line_end"]
             context = column["context"]
             description = column_descriptions.get(name) if query_name == model.name else None
+            digest = snapshot_hash(
+                [
+                    model_id,
+                    query_name,
+                    from_table,
+                    name,
+                    qualified_name,
+                    line_start,
+                    line_end,
+                    context,
+                    description,
+                ]
+            )
             prior = columns_snapshot.get(qualified_name)
             if prior is None:
                 column_id = self.assigner.reserve("columns", 1)[0]
@@ -265,23 +281,17 @@ class SQLMeshParser:
                         "line_end": line_end,
                         "context": context,
                         "description": description,
+                        "snapshot_hash": digest,
                     }
                 )
                 columns_snapshot[qualified_name] = {
                     "id": column_id,
-                    "qualified_name": qualified_name,
-                    "line_start": line_start,
-                    "line_end": line_end,
-                    "description": description,
+                    "snapshot_hash": digest,
                     "seen": True,
                 }
                 continue
             column_id = prior["id"]
-            if (
-                prior["line_start"] != line_start
-                or prior["line_end"] != line_end
-                or prior["description"] != description
-            ):
+            if prior["snapshot_hash"] != digest:
                 self.batches["columns"].append(
                     {
                         "id": column_id,
@@ -294,14 +304,12 @@ class SQLMeshParser:
                         "line_end": line_end,
                         "context": context,
                         "description": description,
+                        "snapshot_hash": digest,
                     }
                 )
             columns_snapshot[qualified_name] = {
                 "id": column_id,
-                "qualified_name": qualified_name,
-                "line_start": line_start,
-                "line_end": line_end,
-                "description": description,
+                "snapshot_hash": digest,
                 "seen": True,
             }
 
@@ -338,6 +346,21 @@ class SQLMeshParser:
                 ):
                     matched_name = name
                     source_models_id = mid
+            digest = snapshot_hash(
+                [
+                    ref_column_id,
+                    model_id,
+                    ref_query_name,
+                    ref_qn,
+                    source_column_id,
+                    source_models_id,
+                    source_query_name,
+                    source_qn,
+                    source_line,
+                    ref_kind,
+                    context,
+                ]
+            )
             key = self.db._column_lineage_key(ref_qn, source_qn, source_line, ref_kind)
             prior = column_lineage_snapshot.get(key)
             if prior is None:
@@ -356,20 +379,17 @@ class SQLMeshParser:
                         "source_line": source_line,
                         "ref_kind": ref_kind,
                         "context": context,
+                        "snapshot_hash": digest,
                     }
                 )
                 column_lineage_snapshot[key] = {
                     "id": lineage_id,
-                    "ref_column_id": ref_column_id,
-                    "source_column_id": source_column_id,
+                    "snapshot_hash": digest,
                     "seen": True,
                 }
                 continue
             lineage_id = prior["id"]
-            if (
-                prior["ref_column_id"] != ref_column_id
-                or prior["source_column_id"] != source_column_id
-            ):
+            if prior["snapshot_hash"] != digest:
                 self.batches["column_lineage"].append(
                     {
                         "id": lineage_id,
@@ -384,12 +404,12 @@ class SQLMeshParser:
                         "source_line": source_line,
                         "ref_kind": ref_kind,
                         "context": context,
+                        "snapshot_hash": digest,
                     }
                 )
             column_lineage_snapshot[key] = {
                 "id": lineage_id,
-                "ref_column_id": ref_column_id,
-                "source_column_id": source_column_id,
+                "snapshot_hash": digest,
                 "seen": True,
             }
 
