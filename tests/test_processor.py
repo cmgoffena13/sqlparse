@@ -8,6 +8,7 @@ from tests.conftest import FIXTURE_PROJECT
 
 CUSTOMERS_FQN = '"memory"."sushi"."customers"'
 CUSTOMER_ORDERS_FQN = '"memory"."sushi"."customer_orders"'
+CUSTOMER_STATUS_FQN = '"memory"."sushi"."customer_status"'
 ORDERS_FQN = '"memory"."sushi"."orders"'
 WAITERS_FQN = '"memory"."sushi"."waiters"'
 RAW_SEED_FQN = '"memory"."sushi"."raw_seed"'
@@ -221,7 +222,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert customer["is_test"] == 0
     assert external["is_test"] == 0
     assert test_orders["is_test"] == 1
-    assert file_count == 13
+    assert file_count == 14
     assert set(first_projects) == {"sushi"}
     assert set(first_gateways) == {"local"}
     assert first_gateways["local"]["project_id"] == first_projects["sushi"]["id"]
@@ -231,6 +232,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert set(first_models) == {
         CUSTOMERS_FQN,
         CUSTOMER_ORDERS_FQN,
+        CUSTOMER_STATUS_FQN,
         ORDERS_FQN,
         WAITERS_FQN,
         RAW_SEED_FQN,
@@ -576,6 +578,73 @@ def test_processor_indexes_files_and_directories() -> None:
         )
     ]
     assert cte_join_orders_ref["ref_column_query_name"] == "sushi.customers.cte.join"
+    assert first_models[CUSTOMER_STATUS_FQN]["kind"] == "FULL"
+    assert first_models[CUSTOMER_STATUS_FQN]["description"] == (
+        "Nested CTE chain over raw customers"
+    )
+    assert first_columns["sushi.customer_status.base.raw.customers.customer_id"]["query_name"] == (
+        "sushi.customer_status.base"
+    )
+    assert first_columns["sushi.customer_status.base.raw.customers.customer_id"]["from_table"] == (
+        "raw.customers"
+    )
+    assert first_columns["sushi.customer_status.filtered.base.customer_id"]["query_name"] == (
+        "sushi.customer_status.filtered"
+    )
+    assert first_columns["sushi.customer_status.filtered.base.customer_id"]["from_table"] == "base"
+    assert first_columns["sushi.customer_status.customer_id"]["query_name"] == (
+        "sushi.customer_status"
+    )
+    assert (
+        first_columns["sushi.customer_status.filtered.where.sushi.customer_status.base.status"][
+            "query_name"
+        ]
+        == "sushi.customer_status.filtered.where"
+    )
+    nested_base_customer_ref = first_references[
+        (
+            "sushi.customer_status.base.raw.customers.customer_id",
+            "raw.customers.customer_id",
+            9,
+            9,
+            "alias",
+        )
+    ]
+    assert nested_base_customer_ref["ref_column_query_name"] == "sushi.customer_status.base"
+    nested_filtered_customer_ref = first_references[
+        (
+            "sushi.customer_status.filtered.base.customer_id",
+            "sushi.customer_status.base.raw.customers.customer_id",
+            15,
+            15,
+            "alias",
+        )
+    ]
+    assert nested_filtered_customer_ref["ref_column_query_name"] == (
+        "sushi.customer_status.filtered"
+    )
+    assert nested_filtered_customer_ref["source_query_name"] == "sushi.customer_status.base"
+    nested_outer_customer_ref = first_references[
+        (
+            "sushi.customer_status.customer_id",
+            "sushi.customer_status.filtered.base.customer_id",
+            15,
+            21,
+            "alias",
+        )
+    ]
+    assert nested_outer_customer_ref["ref_column_query_name"] == "sushi.customer_status"
+    assert nested_outer_customer_ref["source_query_name"] == "sushi.customer_status.filtered"
+    nested_where_ref = first_references[
+        (
+            "sushi.customer_status.filtered.where.sushi.customer_status.base.status",
+            "sushi.customer_status.base.raw.customers.status",
+            18,
+            18,
+            "where",
+        )
+    ]
+    assert nested_where_ref["ref_column_query_name"] == "sushi.customer_status.filtered.where"
 
 
 def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:
@@ -634,6 +703,7 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
     assert CUSTOMERS_FQN in before
     assert after == {
         CUSTOMER_ORDERS_FQN,
+        CUSTOMER_STATUS_FQN,
         ORDERS_FQN,
         WAITERS_FQN,
         RAW_SEED_FQN,

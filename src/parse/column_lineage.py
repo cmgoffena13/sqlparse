@@ -134,7 +134,7 @@ def _columns_from_query(
                     "context": expression.sql(dialect=dialect),
                 }
             )
-        columns.extend(_columns_from_clauses(query_name, scope, dialect))
+        columns.extend(_columns_from_clauses(query_name, scope, dialect, model_name=model_name))
     return columns
 
 
@@ -186,12 +186,21 @@ def _cte_projection_qn(
     return _qualified_name(f"{model_name}.{cte_name}", from_table, name)
 
 
-def _table_column_qn(scope: Scope, column: exp.Column) -> tuple[str, str] | None:
+def _table_column_qn(
+    scope: Scope, column: exp.Column, *, model_name: str
+) -> tuple[str, str] | None:
     resolved: tuple[str, str] | None = None
     source = scope.sources.get(column.table) if column.table else None
     if isinstance(source, exp.Table):
         query_name = _table_source_name(source)
         resolved = (query_name, f"{query_name}.{column.name}")
+    if isinstance(source, Scope):
+        cte_name = column.table
+        query_name = f"{model_name}.{cte_name}"
+        expression = next(
+            e for e in source.expression.expressions if e.alias_or_name == column.name
+        )
+        resolved = (query_name, _cte_projection_qn(model_name, cte_name, source, expression))
     return resolved
 
 
@@ -208,12 +217,14 @@ def _clause_nodes(select: exp.Select) -> list[tuple[str, exp.Expression]]:
     return nodes
 
 
-def _columns_from_clauses(query_base: str, scope: Scope, dialect: str) -> list[ExtractedColumn]:
+def _columns_from_clauses(
+    query_base: str, scope: Scope, dialect: str, *, model_name: str
+) -> list[ExtractedColumn]:
     columns: list[ExtractedColumn] = []
     for kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
         query_name = f"{query_base}.{kind}"
         for column in node.find_all(exp.Column):
-            source = _table_column_qn(scope, column)
+            source = _table_column_qn(scope, column, model_name=model_name)
             if source is not None:
                 from_table, _source_qn = source
                 line_start, line_end = _line_span(column)
@@ -238,11 +249,12 @@ def _emit_clause_refs(
     query_base: str,
     scope: Scope,
     dialect: str,
+    model_name: str,
 ) -> None:
     for kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
         ref_query_name = f"{query_base}.{kind}"
         for column in node.find_all(exp.Column):
-            source = _table_column_qn(scope, column)
+            source = _table_column_qn(scope, column, model_name=model_name)
             if source is not None:
                 source_query_name, source_qn = source
                 _append_reference(
@@ -271,7 +283,7 @@ def _emit_cte_projection_refs(
         ref_qn = _cte_projection_qn(model_name, cte_name, scope, expression)
         inner = _unwrap(expression)
         if isinstance(inner, exp.Column):
-            source = _table_column_qn(scope, inner)
+            source = _table_column_qn(scope, inner, model_name=model_name)
             if source is not None:
                 source_query_name, source_qn = source
                 _append_reference(
@@ -287,7 +299,7 @@ def _emit_cte_projection_refs(
                 )
             continue
         for column in inner.find_all(exp.Column):
-            source = _table_column_qn(scope, column)
+            source = _table_column_qn(scope, column, model_name=model_name)
             if source is not None:
                 source_query_name, source_qn = source
                 _append_reference(
@@ -389,6 +401,7 @@ def extract_model_column_references(model: Model) -> list[ExtractedColumnReferen
                 query_base=query_base,
                 scope=scope,
                 dialect=dialect,
+                model_name=model_name,
             )
         _emit_root_lineage_refs(
             refs,

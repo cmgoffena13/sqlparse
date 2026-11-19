@@ -74,7 +74,7 @@ def test_reload_indexes_the_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
         count = db.fetch("SELECT COUNT(*) AS file_count FROM files")[0]["file_count"]
     finally:
         db.close()
-        assert count == 13
+        assert count == 14
 
 
 def test_reload_missing_directory_exits_one(
