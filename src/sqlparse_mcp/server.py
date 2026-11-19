@@ -7,6 +7,7 @@ from fastmcp import Context, FastMCP
 
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
+from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_tree
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
 from src.utils import get_sqlparse_config_dir
@@ -67,3 +68,13 @@ def search(ctx: Context, query: str, limit: int = 20) -> str:
     "$" is the default query name for the final output query.
     """
     return run_search(_db(ctx), query, limit)
+
+
+@mcp.tool()
+def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
+    """
+    Return the project's directory/file tree with line counts and model names.
+
+    Optional ``directory_path`` scopes to one directory tree (exact path).
+    """
+    return run_directory_tree(_db(ctx), directory_path)

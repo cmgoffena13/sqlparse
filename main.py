@@ -42,6 +42,14 @@ async def _print_tools() -> None:
             "SEARCH",
             _body(await client.call_tool("search", {"query": "customers", "limit": 20})),
         )
+        _print_section(
+            "DIRECTORY TREE",
+            _body(await client.call_tool("get_directory_tree", {})),
+        )
+        _print_section(
+            "DIRECTORY TREE models",
+            _body(await client.call_tool("get_directory_tree", {"directory_path": "models"})),
+        )
 
 
 def main() -> None:

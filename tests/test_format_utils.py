@@ -1,4 +1,4 @@
-from src.sqlparse_mcp.format_utils import bullet, gutter_width
+from src.sqlparse_mcp.format_utils import bullet, file_label, gutter_width, tree_glyphs
 
 
 def test_bullet_default_lead() -> None:
@@ -16,3 +16,16 @@ def test_gutter_width_pads_to_widest_rank() -> None:
     assert bullet("sushi.customers", f"#{1:<{gutter_width([1, 20])}} ") == (
         "  #1  • sushi.customers"
     )
+
+
+def test_file_label_lines_and_models_without_symbol_count() -> None:
+    assert file_label("empty.sql", 0) == "empty.sql"
+    assert file_label("customers.sql", 18) == "customers.sql (18L)"
+    assert file_label("customers.sql", 18, ["sushi.customers"]) == (
+        "customers.sql (18L) — sushi.customers"
+    )
+
+
+def test_tree_glyphs_wide() -> None:
+    assert tree_glyphs(False, wide=True) == ("├── ", "│   ")
+    assert tree_glyphs(True, wide=True) == ("└── ", "    ")
