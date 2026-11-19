@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS macros (
     name                TEXT NOT NULL,
     kind                TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS macros_name_index ON macros (name);
 
 CREATE TABLE IF NOT EXISTS model_macros (
     macro_name          TEXT NOT NULL,
@@ -67,18 +68,6 @@ CREATE TABLE IF NOT EXISTS columns (
     context             TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS columns_qualified_name_index ON columns (qualified_name);
-
-CREATE TABLE IF NOT EXISTS column_references_staging (
-    id                              INTEGER NOT NULL,
-    ref_column_qualified_name       TEXT NOT NULL,
-    source_column_id                INTEGER REFERENCES columns(id),
-    source_model_id                 INTEGER NOT NULL REFERENCES models(id),
-    source_column_qualified_name    TEXT NULL,
-    source_line                     INTEGER NOT NULL,
-    source_column                   INTEGER NOT NULL,
-    ref_kind                        TEXT NOT NULL,
-    context                         TEXT NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS column_references (
     id                              INTEGER NOT NULL PRIMARY KEY,

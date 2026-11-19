@@ -1,6 +1,6 @@
 import threading
 
-from src.db import TABLE_BATCH_MAP, ProjectDB
+from src.db import ASSIGNER_TABLES, ProjectDB
 
 
 class GlobalIDAssigner:
@@ -8,7 +8,7 @@ class GlobalIDAssigner:
         self._counters: dict[str, int] = {}
         self._lock = threading.Lock()
         self.db = db
-        self.tables = TABLE_BATCH_MAP
+        self.tables = ASSIGNER_TABLES
         self._get_starter_ids()
 
     def _init_table(self, table: str, start_id: int) -> None:

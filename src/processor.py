@@ -7,7 +7,7 @@ from pathlib import Path
 import xxhash
 
 from src.assigner import GlobalIDAssigner
-from src.db import TABLE_BATCH_MAP, ProjectDB
+from src.db import BATCH_TABLES, ProjectDB
 from src.git_utils import path_spec_for_indexing, relative_path_is_ignored
 from src.parsers.sqlmesh_parser import SQLMeshParser
 
@@ -41,6 +41,8 @@ class ProjectProcessor:
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
         self.models_snapshot = self.db.get_models_snapshot()
+        self.macros_snapshot = self.db.get_macros_snapshot()
+        self.model_macros_snapshot = self.db.get_model_macros_snapshot()
         self.columns_snapshot = self.db.get_columns_snapshot()
         self.parser = SQLMeshParser(self.db, self.assigner, self.root)
 
@@ -177,7 +179,7 @@ class ProjectProcessor:
             self._insert_batch()
 
     def _new_batches(self) -> dict[str, list[dict[str, object]]]:
-        return {table: [] for table in TABLE_BATCH_MAP}
+        return {table: [] for table in BATCH_TABLES}
 
     def _process_files(
         self, file_names: list[str], directory_path: str, dir_rel: str, full: bool
@@ -234,12 +236,26 @@ class ProjectProcessor:
             self.db_batches["models"],
         )
         self._insert_batch(final=True)
+        self.parser.sync_macros(
+            self.macros_snapshot,
+            self.db_batches["macros"],
+        )
+        self._insert_batch(final=True)
+        self.parser.sync_model_macros(
+            self.models_snapshot,
+            self.macros_snapshot,
+            self.model_macros_snapshot,
+            self.db_batches["model_macros"],
+        )
+        self._insert_batch(final=True)
         self.parser.sync_columns(
             self.models_snapshot,
             self.columns_snapshot,
             self.db_batches["columns"],
         )
         self._insert_batch(final=True)
+        self.db.delete_model_macros(self.model_macros_snapshot)
+        self.db.delete_macros(self.macros_snapshot)
         self.db.delete_columns(self.columns_snapshot)
         self.db.delete_models(self.models_snapshot)
         self.db.delete_files(self.files_snapshot)

@@ -4,10 +4,20 @@ from typing import TypedDict
 
 from src.utils import db_path_for_index_root, get_sqlparse_config_dir
 
-TABLE_BATCH_MAP = {
+BATCH_TABLES = {
     "directories",
     "files",
     "models",
+    "macros",
+    "model_macros",
+    "columns",
+}
+
+ASSIGNER_TABLES = {
+    "directories",
+    "files",
+    "models",
+    "macros",
     "columns",
 }
 
@@ -39,6 +49,18 @@ class ColumnSnapshot(TypedDict):
     qualified_name: str
     line_start: int
     line_end: int
+    seen: bool
+
+
+class MacroSnapshot(TypedDict):
+    id: int
+    kind: str
+    seen: bool
+
+
+class ModelMacroSnapshot(TypedDict):
+    macro_name: str
+    model_id: int
     seen: bool
 
 
@@ -123,7 +145,7 @@ class ProjectDB:
         return list(self.connection.execute(query, params))
 
     def table_max_id(self, table: str) -> int:
-        if table not in TABLE_BATCH_MAP:
+        if table not in ASSIGNER_TABLES:
             raise ValueError(f"unsupported table: {table}")
         query = f"SELECT COALESCE(MAX(id), 0) AS max_id FROM {table}"  # noqa: S608
         row = self.connection.execute(query).fetchone()
@@ -150,7 +172,7 @@ class ProjectDB:
     def delete_ids(self, table: str, ids: list[int]) -> None:
         if not ids:
             return
-        if table not in TABLE_BATCH_MAP:
+        if table not in ASSIGNER_TABLES:
             raise ValueError(f"unsupported table for delete_ids: {table}")
         placeholders = ",".join(["?"] * len(ids))
         query = f"DELETE FROM {table} WHERE id IN ({placeholders})"  # noqa: S608
@@ -193,6 +215,31 @@ class ProjectDB:
         column_ids = [row["id"] for row in columns.values() if not row["seen"]]
         self.delete_ids("columns", column_ids)
 
+    def get_macros_snapshot(self) -> dict[str, MacroSnapshot]:
+        cursor = self.connection.execute("SELECT id, name, kind FROM macros")
+        return {str(row["name"]): self._macro_snapshot(row) for row in cursor}
+
+    def delete_macros(self, macros: dict[str, MacroSnapshot]) -> None:
+        macro_ids = [row["id"] for row in macros.values() if not row["seen"]]
+        self.delete_ids("macros", macro_ids)
+
+    def get_model_macros_snapshot(self) -> dict[str, ModelMacroSnapshot]:
+        cursor = self.connection.execute("SELECT macro_name, model_id FROM model_macros")
+        return {
+            f"{row['macro_name']}:{row['model_id']}": self._model_macro_snapshot(row)
+            for row in cursor
+        }
+
+    def delete_model_macros(self, model_macros: dict[str, ModelMacroSnapshot]) -> None:
+        rows = [
+            (row["macro_name"], row["model_id"]) for row in model_macros.values() if not row["seen"]
+        ]
+        with self.connection:
+            self.connection.executemany(
+                "DELETE FROM model_macros WHERE macro_name = ? AND model_id = ?",
+                rows,
+            )
+
     def _file_snapshot(self, row: sqlite3.Row) -> FileSnapshot:
         directory_id = row["directory_id"]
         return {
@@ -220,6 +267,20 @@ class ProjectDB:
             "qualified_name": str(row["qualified_name"]),
             "line_start": int(row["line_start"]),
             "line_end": int(row["line_end"]),
+            "seen": False,
+        }
+
+    def _macro_snapshot(self, row: sqlite3.Row) -> MacroSnapshot:
+        return {
+            "id": int(row["id"]),
+            "kind": str(row["kind"]),
+            "seen": False,
+        }
+
+    def _model_macro_snapshot(self, row: sqlite3.Row) -> ModelMacroSnapshot:
+        return {
+            "macro_name": str(row["macro_name"]),
+            "model_id": int(row["model_id"]),
             "seen": False,
         }
 
@@ -253,6 +314,26 @@ class ProjectDB:
                 )
                 """,
                 batches["models"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR REPLACE INTO macros (
+                    id, name, kind
+                ) VALUES (
+                    :id, :name, :kind
+                )
+                """,
+                batches["macros"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR IGNORE INTO model_macros (
+                    macro_name, model_id
+                ) VALUES (
+                    :macro_name, :model_id
+                )
+                """,
+                batches["model_macros"],
             )
             self.connection.executemany(
                 """

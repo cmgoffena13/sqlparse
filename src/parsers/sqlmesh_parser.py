@@ -3,7 +3,14 @@ from pathlib import Path
 from sqlmesh.core.context import Context
 
 from src.assigner import GlobalIDAssigner
-from src.db import ColumnSnapshot, FileSnapshot, ModelSnapshot, ProjectDB
+from src.db import (
+    ColumnSnapshot,
+    FileSnapshot,
+    MacroSnapshot,
+    ModelMacroSnapshot,
+    ModelSnapshot,
+    ProjectDB,
+)
 from src.parsers.column_lineage import extract_model_columns
 
 
@@ -60,6 +67,59 @@ class SQLMeshParser:
                 "kind": kind,
                 "seen": True,
             }
+
+    def sync_macros(
+        self,
+        macros_snapshot: dict[str, MacroSnapshot],
+        macro_batch: list[dict[str, object]],
+    ) -> None:
+        macros: list[tuple[str, str]] = [
+            (name, "jinja") for name in self.context._jinja_macros.root_macros
+        ]
+        for name, macro in self.context._macros.items():
+            if not getattr(macro, "__sqlmesh__builtin__", False):
+                macros.append((name, "python"))
+        for name, kind in macros:
+            prior = macros_snapshot.get(name)
+            if prior is None:
+                macro_id = self.assigner.reserve("macros", 1)[0]
+                macro_batch.append({"id": macro_id, "name": name, "kind": kind})
+                macros_snapshot[name] = {"id": macro_id, "kind": kind, "seen": True}
+                continue
+            macro_id = prior["id"]
+            if prior["kind"] != kind:
+                macro_batch.append({"id": macro_id, "name": name, "kind": kind})
+            macros_snapshot[name] = {"id": macro_id, "kind": kind, "seen": True}
+
+    def sync_model_macros(
+        self,
+        models_snapshot: dict[str, ModelSnapshot],
+        macros_snapshot: dict[str, MacroSnapshot],
+        model_macros_snapshot: dict[str, ModelMacroSnapshot],
+        model_macro_batch: list[dict[str, object]],
+    ) -> None:
+        for model in self.context.models.values():
+            model_id = models_snapshot[model.fqn]["id"]
+            macro_names = set(model.jinja_macros.root_macros)
+            for name in model.python_env or {}:
+                if name in macros_snapshot:
+                    macro_names.add(name)
+            for macro_name in macro_names:
+                key = f"{macro_name}:{model_id}"
+                prior = model_macros_snapshot.get(key)
+                if prior is None:
+                    model_macro_batch.append({"macro_name": macro_name, "model_id": model_id})
+                    model_macros_snapshot[key] = {
+                        "macro_name": macro_name,
+                        "model_id": model_id,
+                        "seen": True,
+                    }
+                    continue
+                model_macros_snapshot[key] = {
+                    "macro_name": macro_name,
+                    "model_id": model_id,
+                    "seen": True,
+                }
 
     def sync_columns(
         self,

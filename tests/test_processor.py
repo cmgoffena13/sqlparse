@@ -28,6 +28,13 @@ def test_processor_indexes_files_and_directories() -> None:
                 "line_start, line_end, context FROM columns"
             )
         }
+        first_macros = {
+            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name, kind FROM macros")
+        }
+        first_model_macros = {
+            (str(row["macro_name"]), int(row["model_id"]))
+            for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+        }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
         second_models = {
             str(row["qualified_name"]): dict(row)
@@ -39,6 +46,13 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, model_id, query_name, from_table, name, qualified_name, "
                 "line_start, line_end, context FROM columns"
             )
+        }
+        second_macros = {
+            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name, kind FROM macros")
+        }
+        second_model_macros = {
+            (str(row["macro_name"]), int(row["model_id"]))
+            for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))
         config = db.fetch(
@@ -109,16 +123,18 @@ def test_processor_indexes_files_and_directories() -> None:
     )
     assert first_columns["sushi.customers.cte.raw.customers.status"]["name"] == "status"
     assert first_columns["sushi.customers.customer_id"]["from_table"] is None
-    assert first_columns["sushi.customers.customer_id"]["line_start"] == 16
-    assert first_columns["sushi.customers.customer_id"]["line_end"] == 16
-    assert first_columns["sushi.customers.status"]["line_start"] == 17
-    assert first_columns["sushi.customers.status"]["line_end"] == 17
-    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["line_start"] == 8
-    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["line_end"] == 8
-    assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["line_start"] == 9
-    assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["line_end"] == 9
-    assert first_columns["sushi.customers.cte.raw.customers.status"]["line_start"] == 10
-    assert first_columns["sushi.customers.cte.raw.customers.status"]["line_end"] == 10
+    assert first_columns["sushi.customers.customer_id"]["line_start"] == 11
+    assert first_columns["sushi.customers.customer_id"]["line_end"] == 11
+    assert first_columns["sushi.customers.amount"]["line_start"] == 11
+    assert first_columns["sushi.customers.amount"]["line_end"] == 14
+    assert first_columns["sushi.customers.status"]["line_start"] == 15
+    assert first_columns["sushi.customers.status"]["line_end"] == 15
+    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["line_start"] == 3
+    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["line_end"] == 3
+    assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["line_start"] == 4
+    assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["line_end"] == 4
+    assert first_columns["sushi.customers.cte.raw.customers.status"]["line_start"] == 5
+    assert first_columns["sushi.customers.cte.raw.customers.status"]["line_end"] == 5
     assert first_columns["raw.customers.customer_id"]["from_table"] is None
     assert first_columns["raw.customers.customer_id"]["query_name"] == "raw.customers"
     assert (
@@ -126,6 +142,12 @@ def test_processor_indexes_files_and_directories() -> None:
         == first_models[RAW_CUSTOMERS_FQN]["id"]
     )
     assert second_columns == first_columns
+    assert first_macros == {"cents_to_dollars": first_macros["cents_to_dollars"]}
+    assert first_macros["cents_to_dollars"]["kind"] == "jinja"
+    assert "star" not in first_macros
+    assert second_macros == first_macros
+    assert first_model_macros == {("cents_to_dollars", first_models[CUSTOMERS_FQN]["id"])}
+    assert second_model_macros == first_model_macros
 
 
 def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:
@@ -140,13 +162,28 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         before_columns = {
             str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM columns")
         }
+        before_macros = {str(row["name"]) for row in db.fetch("SELECT name FROM macros")}
+        before_model_macros = {
+            (str(row["macro_name"]), int(row["model_id"]))
+            for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+        }
+        customers_model_id = db.fetch(
+            "SELECT id FROM models WHERE qualified_name = ?",
+            (CUSTOMERS_FQN,),
+        )[0]["id"]
         (root / "models" / "customers.sql").unlink()
+        (root / "macros" / "cents_to_dollars.sql").unlink()
         ProjectProcessor(db, root).process()
         after = {
             str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM models")
         }
         after_columns = {
             str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM columns")
+        }
+        after_macros = {str(row["name"]) for row in db.fetch("SELECT name FROM macros")}
+        after_model_macros = {
+            (str(row["macro_name"]), int(row["model_id"]))
+            for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
     finally:
         db.close()
@@ -163,6 +200,10 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
     assert "sushi.customers.customer_id" not in after_columns
     assert "sushi.customers.cte.raw.customers.customer_id" not in after_columns
     assert "raw.customers.customer_id" in after_columns
+    assert "cents_to_dollars" in before_macros
+    assert "cents_to_dollars" not in after_macros
+    assert ("cents_to_dollars", customers_model_id) in before_model_macros
+    assert after_model_macros == set()
 
 
 def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) -> None:
