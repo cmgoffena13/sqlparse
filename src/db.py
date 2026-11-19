@@ -10,6 +10,8 @@ BATCH_TABLES = {
     "models",
     "macros",
     "model_macros",
+    "audits",
+    "model_audits",
     "columns",
     "column_lineage",
     "tests",
@@ -21,6 +23,7 @@ ASSIGNER_TABLES = {
     "files",
     "models",
     "macros",
+    "audits",
     "columns",
     "column_lineage",
     "tests",
@@ -64,6 +67,17 @@ class MacroSnapshot(TypedDict):
 
 class ModelMacroSnapshot(TypedDict):
     macro_name: str
+    model_id: int
+    seen: bool
+
+
+class AuditSnapshot(TypedDict):
+    id: int
+    seen: bool
+
+
+class ModelAuditSnapshot(TypedDict):
+    audit_name: str
     model_id: int
     seen: bool
 
@@ -245,6 +259,31 @@ class ProjectDB:
                 rows,
             )
 
+    def get_audits_snapshot(self) -> dict[str, AuditSnapshot]:
+        cursor = self.connection.execute("SELECT id, name FROM audits")
+        return {str(row["name"]): self._audit_snapshot(row) for row in cursor}
+
+    def delete_audits(self, audits: dict[str, AuditSnapshot]) -> None:
+        audit_ids = [row["id"] for row in audits.values() if not row["seen"]]
+        self.delete_ids("audits", audit_ids)
+
+    def get_model_audits_snapshot(self) -> dict[str, ModelAuditSnapshot]:
+        cursor = self.connection.execute("SELECT audit_name, model_id FROM model_audits")
+        return {
+            f"{row['audit_name']}:{row['model_id']}": self._model_audit_snapshot(row)
+            for row in cursor
+        }
+
+    def delete_model_audits(self, model_audits: dict[str, ModelAuditSnapshot]) -> None:
+        rows = [
+            (row["audit_name"], row["model_id"]) for row in model_audits.values() if not row["seen"]
+        ]
+        with self.connection:
+            self.connection.executemany(
+                "DELETE FROM model_audits WHERE audit_name = ? AND model_id = ?",
+                rows,
+            )
+
     def get_column_lineage_snapshot(self) -> dict[str, ColumnLineageSnapshot]:
         cursor = self.connection.execute(
             "SELECT id, ref_column_id, ref_column_qualified_name, source_column_id, "
@@ -344,6 +383,19 @@ class ProjectDB:
             "seen": False,
         }
 
+    def _audit_snapshot(self, row: sqlite3.Row) -> AuditSnapshot:
+        return {
+            "id": int(row["id"]),
+            "seen": False,
+        }
+
+    def _model_audit_snapshot(self, row: sqlite3.Row) -> ModelAuditSnapshot:
+        return {
+            "audit_name": str(row["audit_name"]),
+            "model_id": int(row["model_id"]),
+            "seen": False,
+        }
+
     def _column_lineage_snapshot(self, row: sqlite3.Row) -> ColumnLineageSnapshot:
         return {
             "id": int(row["id"]),
@@ -417,6 +469,26 @@ class ProjectDB:
                 )
                 """,
                 batches["model_macros"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR IGNORE INTO audits (
+                    id, name
+                ) VALUES (
+                    :id, :name
+                )
+                """,
+                batches["audits"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR IGNORE INTO model_audits (
+                    audit_name, model_id
+                ) VALUES (
+                    :audit_name, :model_id
+                )
+                """,
+                batches["model_audits"],
             )
             self.connection.executemany(
                 """

@@ -1,6 +1,7 @@
 MODEL (
   name sushi.customers,
-  kind FULL
+  kind FULL,
+  audits [not_null_customer_id]
 );
 
 JINJA_QUERY_BEGIN;

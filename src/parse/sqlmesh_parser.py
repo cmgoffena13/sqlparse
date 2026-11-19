@@ -6,10 +6,12 @@ from sqlmesh.core.model import Model
 from src.assigner import GlobalIDAssigner
 from src.db import (
     BATCH_TABLES,
+    AuditSnapshot,
     ColumnLineageSnapshot,
     ColumnSnapshot,
     FileSnapshot,
     MacroSnapshot,
+    ModelAuditSnapshot,
     ModelMacroSnapshot,
     ModelSnapshot,
     ProjectDB,
@@ -52,18 +54,24 @@ class SQLMeshParser:
     def sync(self, files_snapshot: dict[str, FileSnapshot]) -> None:
         macros_snapshot = self.db.get_macros_snapshot()
         self._sync_macros(macros_snapshot)
+        audits_snapshot = self.db.get_audits_snapshot()
+        self._sync_audits(audits_snapshot)
         self._flush()
 
         models_snapshot = self.db.get_models_snapshot()
         model_macros_snapshot = self.db.get_model_macros_snapshot()
+        model_audits_snapshot = self.db.get_model_audits_snapshot()
         columns_snapshot = self.db.get_columns_snapshot()
         for model in self.context.models.values():
             self._sync_model(model, files_snapshot, models_snapshot)
             self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
+            self._sync_model_audits(model, models_snapshot, audits_snapshot, model_audits_snapshot)
             self._sync_columns(model, models_snapshot, columns_snapshot)
             self._flush()
         self.db.delete_model_macros(model_macros_snapshot)
         self.db.delete_macros(macros_snapshot)
+        self.db.delete_model_audits(model_audits_snapshot)
+        self.db.delete_audits(audits_snapshot)
 
         tests_snapshot = self.db.get_tests_snapshot()
         test_references_snapshot = self.db.get_test_references_snapshot()
@@ -106,6 +114,16 @@ class SQLMeshParser:
             if prior["kind"] != kind:
                 self.batches["macros"].append({"id": macro_id, "name": name, "kind": kind})
             macros_snapshot[name] = {"id": macro_id, "kind": kind, "seen": True}
+
+    def _sync_audits(self, audits_snapshot: dict[str, AuditSnapshot]) -> None:
+        for name in list(self.context._audits) + list(self.context.standalone_audits):
+            prior = audits_snapshot.get(name)
+            if prior is None:
+                audit_id = self.assigner.reserve("audits", 1)[0]
+                self.batches["audits"].append({"id": audit_id, "name": name})
+                audits_snapshot[name] = {"id": audit_id, "seen": True}
+                continue
+            audits_snapshot[name] = {"id": prior["id"], "seen": True}
 
     def _sync_model(
         self,
@@ -172,6 +190,37 @@ class SQLMeshParser:
                 continue
             model_macros_snapshot[key] = {
                 "macro_name": macro_name,
+                "model_id": model_id,
+                "seen": True,
+            }
+
+    def _sync_model_audits(
+        self,
+        model: Model,
+        models_snapshot: dict[str, ModelSnapshot],
+        audits_snapshot: dict[str, AuditSnapshot],
+        model_audits_snapshot: dict[str, ModelAuditSnapshot],
+    ) -> None:
+        model_id = models_snapshot[model.fqn]["id"]
+        audit_names = {audit_name for audit_name, _ in model.audits}
+        audit_names |= set(model.audit_definitions)
+        for audit_name in audit_names:
+            if audit_name not in audits_snapshot:
+                continue
+            key = f"{audit_name}:{model_id}"
+            prior = model_audits_snapshot.get(key)
+            if prior is None:
+                self.batches["model_audits"].append(
+                    {"audit_name": audit_name, "model_id": model_id}
+                )
+                model_audits_snapshot[key] = {
+                    "audit_name": audit_name,
+                    "model_id": model_id,
+                    "seen": True,
+                }
+                continue
+            model_audits_snapshot[key] = {
+                "audit_name": audit_name,
                 "model_id": model_id,
                 "seen": True,
             }

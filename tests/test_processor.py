@@ -37,6 +37,13 @@ def test_processor_indexes_files_and_directories() -> None:
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
+        first_audits = {
+            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name FROM audits")
+        }
+        first_model_audits = {
+            (str(row["audit_name"]), int(row["model_id"]))
+            for row in db.fetch("SELECT audit_name, model_id FROM model_audits")
+        }
         first_references = {
             (
                 str(row["ref_column_qualified_name"]),
@@ -80,6 +87,13 @@ def test_processor_indexes_files_and_directories() -> None:
         second_model_macros = {
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+        }
+        second_audits = {
+            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name FROM audits")
+        }
+        second_model_audits = {
+            (str(row["audit_name"]), int(row["model_id"]))
+            for row in db.fetch("SELECT audit_name, model_id FROM model_audits")
         }
         second_references = {
             (
@@ -222,6 +236,10 @@ def test_processor_indexes_files_and_directories() -> None:
     assert second_macros == first_macros
     assert first_model_macros == {("cents_to_dollars", first_models[CUSTOMERS_FQN]["id"])}
     assert second_model_macros == first_model_macros
+    assert set(first_audits) == {"not_null_customer_id"}
+    assert second_audits == first_audits
+    assert first_model_audits == {("not_null_customer_id", first_models[CUSTOMERS_FQN]["id"])}
+    assert second_model_audits == first_model_audits
     assert set(first_tests) == {"test_orders_exist"}
     assert first_tests["test_orders_exist"]["file_id"] == test_orders["id"]
     assert first_tests["test_orders_exist"]["model_id"] == first_models[ORDERS_FQN]["id"]
@@ -329,6 +347,10 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
+        before_model_audits = {
+            (str(row["audit_name"]), int(row["model_id"]))
+            for row in db.fetch("SELECT audit_name, model_id FROM model_audits")
+        }
         before_references = {
             str(row["ref_column_qualified_name"])
             for row in db.fetch("SELECT ref_column_qualified_name FROM column_lineage")
@@ -350,6 +372,10 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         after_model_macros = {
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+        }
+        after_model_audits = {
+            (str(row["audit_name"]), int(row["model_id"]))
+            for row in db.fetch("SELECT audit_name, model_id FROM model_audits")
         }
         after_references = {
             str(row["ref_column_qualified_name"])
@@ -376,6 +402,8 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
     assert "cents_to_dollars" not in after_macros
     assert ("cents_to_dollars", customers_model_id) in before_model_macros
     assert after_model_macros == set()
+    assert ("not_null_customer_id", customers_model_id) in before_model_audits
+    assert after_model_audits == set()
     assert "sushi.customers.customer_id" in before_references
     assert "sushi.customers.cte.raw.orders.customer_id" in before_references
     assert "sushi.customers.customer_id" not in after_references

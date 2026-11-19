@@ -52,8 +52,7 @@ CREATE INDEX IF NOT EXISTS model_macros_model_id_index ON model_macros (model_id
 
 CREATE TABLE IF NOT EXISTS audits (
     id                  INTEGER NOT NULL PRIMARY KEY,
-    name                TEXT NOT NULL,
-    kind                TEXT NOT NULL
+    name                TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS audits_name_index ON audits (name);
 
