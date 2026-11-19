@@ -12,7 +12,8 @@ from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
 from src.utils import get_sqlparse_config_dir
 
 _INSTRUCTIONS = """\
-sqlparse tools read an indexed SQLMesh project.
+sqlparse tools read an up-to-date view of a SQLMesh project.
+Utilize the ``sqlparse`` skill for guided exploration workflows.
 Use the ``skill://sqlparse/SKILL.md`` resource if the skill is not found.
 """
 
@@ -57,13 +58,12 @@ def sqlparse_skill() -> str:
 
 
 @mcp.tool()
-def example(ctx: Context, name: str) -> str:
-    """Example tool."""
-    root = _db(ctx).root
-    return f"example: {name}\n{root}\n"
-
-
-@mcp.tool()
 def search(ctx: Context, query: str, limit: int = 20) -> str:
-    """Search model, query, and column names in the indexed project."""
+    """
+    FTS model, query, and column names. Results are ordered #1, #2, #3... by relevance.
+
+    Narrow with one distinctive word; Widen with extra space-separated words (OR).
+
+    "$" is the default query name for the final output query.
+    """
     return run_search(_db(ctx), query, limit)

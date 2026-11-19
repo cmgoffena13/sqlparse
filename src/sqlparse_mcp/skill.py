@@ -4,16 +4,16 @@ from pathlib import Path
 import xxhash
 import yaml
 
-DESCRIPTION = "Use when navigating a SQLMesh project: models, kinds, audits, macros, and lineage."
+DESCRIPTION = "Use when navigating a SQLMesh project: models, queries, columns, and lineage."
 
 _SKILL_BODY = """\
 # IMPORTANT RULES
  - ALWAYS use sqlparse tools to read models, lineage, and indexed project files.
- - NEVER use ``read`` or ``grep`` on a model file when a sqlparse tool can answer.
+ - NEVER use ``read`` or ``grep .`` on a model file when a sqlparse tool can answer.
 
 # INSTRUCTIONS
 
-1. Use ``example`` to confirm the sqlparse server is connected.
+1. Use ``search`` to find models, queries, and columns by name.
 
 # CAVEATS
  - A macro is expanded away, so column lineage does not show which macro produced a column.
