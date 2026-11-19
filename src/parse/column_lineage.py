@@ -2,6 +2,7 @@ from typing import TypedDict, cast
 
 from sqlglot import exp
 from sqlglot.lineage import Node, lineage
+from sqlglot.optimizer.annotate_types import annotate_types
 from sqlglot.optimizer.qualify import qualify
 from sqlglot.optimizer.scope import Scope, traverse_scope
 from sqlmesh.core.model import Model
@@ -12,6 +13,7 @@ class ExtractedColumn(TypedDict):
     from_table: str | None
     name: str
     qualified_name: str
+    data_type: str
     line_start: int
     line_end: int
     context: str
@@ -82,15 +84,17 @@ def _columns_from_types(model: Model) -> list[ExtractedColumn]:
     dialect = model.dialect
     columns: list[ExtractedColumn] = []
     for name, dtype in (model.columns_to_types or {}).items():
+        type_sql = dtype.sql(dialect=dialect)
         columns.append(
             {
                 "query_name": model_name,
                 "from_table": None,
                 "name": name,
                 "qualified_name": _qualified_name(model_name, None, name),
+                "data_type": type_sql,
                 "line_start": 0,
                 "line_end": 0,
-                "context": dtype.sql(dialect=dialect),
+                "context": type_sql,
             }
         )
     return columns
@@ -101,6 +105,7 @@ def _columns_from_query(
 ) -> list[ExtractedColumn]:
     columns: list[ExtractedColumn] = []
     qualified = qualify(query, dialect=dialect, schema=schema, validate_qualify_columns=False)
+    annotate_types(qualified, schema=schema, dialect=dialect)
     for scope in traverse_scope(qualified):
         if not (scope.is_cte or scope.is_root):
             continue
@@ -122,11 +127,13 @@ def _columns_from_query(
                     "from_table": from_table,
                     "name": name,
                     "qualified_name": _qualified_name(query_name, from_table, name),
+                    "data_type": cast(exp.DataType, expression.type).sql(dialect=dialect),
                     "line_start": line_start,
                     "line_end": line_end,
                     "context": expression.sql(dialect=dialect),
                 }
             )
+        columns.extend(_columns_from_clauses(query_name, scope, dialect))
     return columns
 
 
@@ -184,6 +191,69 @@ def _table_column_qn(scope: Scope, column: exp.Column) -> tuple[str, str] | None
         query_name = _table_source_name(source)
         resolved = (query_name, f"{query_name}.{column.name}")
     return resolved
+
+
+def _clause_nodes(select: exp.Select) -> list[tuple[str, exp.Expression]]:
+    nodes: list[tuple[str, exp.Expression]] = []
+    for join in select.args.get("joins") or []:
+        on = join.args.get("on")
+        if on is not None:
+            nodes.append(("join", on))
+    for kind in ("where", "group", "having", "order"):
+        node = select.args.get(kind)
+        if node is not None:
+            nodes.append((kind, node))
+    return nodes
+
+
+def _columns_from_clauses(query_base: str, scope: Scope, dialect: str) -> list[ExtractedColumn]:
+    columns: list[ExtractedColumn] = []
+    for kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
+        query_name = f"{query_base}.{kind}"
+        for column in node.find_all(exp.Column):
+            source = _table_column_qn(scope, column)
+            if source is not None:
+                from_table, _source_qn = source
+                line_start, line_end = _line_span(column)
+                columns.append(
+                    {
+                        "query_name": query_name,
+                        "from_table": from_table,
+                        "name": column.name,
+                        "qualified_name": _qualified_name(query_name, from_table, column.name),
+                        "data_type": cast(exp.DataType, column.type).sql(dialect=dialect),
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "context": column.sql(dialect=dialect),
+                    }
+                )
+    return columns
+
+
+def _emit_clause_refs(
+    refs: list[ExtractedColumnReference],
+    *,
+    query_base: str,
+    scope: Scope,
+    dialect: str,
+) -> None:
+    for kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
+        ref_query_name = f"{query_base}.{kind}"
+        for column in node.find_all(exp.Column):
+            source = _table_column_qn(scope, column)
+            if source is not None:
+                source_query_name, source_qn = source
+                _append_reference(
+                    refs,
+                    ref_query_name=ref_query_name,
+                    ref_qn=_qualified_name(ref_query_name, source_query_name, column.name),
+                    source_query_name=source_query_name,
+                    source_qn=source_qn,
+                    ref_expression=node,
+                    source_expression=column,
+                    dialect=dialect,
+                    ref_kind=kind,
+                )
 
 
 def _emit_cte_projection_refs(
@@ -296,14 +366,28 @@ def extract_model_column_references(model: Model) -> list[ExtractedColumnReferen
         schema = model.mapping_schema
         qualified = qualify(query, dialect=dialect, schema=schema, validate_qualify_columns=False)
         for scope in traverse_scope(qualified):
-            if scope.is_cte and scope.expression.parent is not None:
+            if not (scope.is_cte or scope.is_root):
+                continue
+            parent = scope.expression.parent
+            query_base = (
+                f"{model_name}.{parent.alias_or_name}"
+                if scope.is_cte and parent is not None
+                else model_name
+            )
+            if scope.is_cte and parent is not None:
                 _emit_cte_projection_refs(
                     refs,
                     model_name=model_name,
                     scope=scope,
-                    cte_name=scope.expression.parent.alias_or_name,
+                    cte_name=parent.alias_or_name,
                     dialect=dialect,
                 )
+            _emit_clause_refs(
+                refs,
+                query_base=query_base,
+                scope=scope,
+                dialect=dialect,
+            )
         _emit_root_lineage_refs(
             refs,
             model_name=model_name,

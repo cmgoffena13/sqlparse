@@ -1,7 +1,5 @@
 from pathlib import Path
-from typing import cast
 
-from sqlglot import exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
 
@@ -255,14 +253,7 @@ class SQLMeshParser:
             line_end = column["line_end"]
             context = column["context"]
             description = column_descriptions.get(name) if query_name == model.name else None
-            typed_model = (
-                model
-                if query_name == model.name
-                else self.context.get_model(str(from_table), raise_if_missing=True)
-            )
-            data_type = cast(dict[str, exp.DataType], typed_model.columns_to_types)[name].sql(
-                dialect=typed_model.dialect
-            )
+            data_type = column["data_type"]
             digest = snapshot_hash(
                 [
                     model_id,

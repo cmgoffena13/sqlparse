@@ -363,6 +363,65 @@ def test_processor_indexes_files_and_directories() -> None:
         and row["ref_kind"] == "alias"
         for row in first_references.values()
     )
+    assert (
+        first_columns["sushi.customer_orders.join.sushi.customers.customer_id"]["query_name"]
+        == "sushi.customer_orders.join"
+    )
+    assert (
+        first_columns["sushi.customer_orders.join.sushi.customers.customer_id"]["from_table"]
+        == "sushi.customers"
+    )
+    assert (
+        first_columns["sushi.customer_orders.where.sushi.customers.status"]["query_name"]
+        == "sushi.customer_orders.where"
+    )
+    assert (
+        first_columns["sushi.customer_orders.group.sushi.orders.order_id"]["from_table"]
+        == "sushi.orders"
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customer_orders.join.sushi.customers.customer_id"
+        and row["source_column_qualified_name"] == "sushi.customers.customer_id"
+        and row["ref_kind"] == "join"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customer_orders.join.sushi.orders.customer_id"
+        and row["source_column_qualified_name"] == "sushi.orders.customer_id"
+        and row["ref_kind"] == "join"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customer_orders.where.sushi.customers.status"
+        and row["source_column_qualified_name"] == "sushi.customers.status"
+        and row["ref_kind"] == "where"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"]
+        == "sushi.customer_orders.group.sushi.customers.customer_id"
+        and row["source_column_qualified_name"] == "sushi.customers.customer_id"
+        and row["ref_kind"] == "group"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.orders.join.sushi.customers.customer_id"
+        and row["source_column_qualified_name"] == "sushi.customers.customer_id"
+        and row["ref_kind"] == "join"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customers.cte.join.raw.customers.customer_id"
+        and row["source_column_qualified_name"] == "raw.customers.customer_id"
+        and row["ref_kind"] == "join"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customers.cte.join.raw.orders.customer_id"
+        and row["source_column_qualified_name"] == "raw.orders.customer_id"
+        and row["ref_kind"] == "join"
+        for row in first_references.values()
+    )
 
 
 def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:
