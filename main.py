@@ -113,6 +113,11 @@ async def _print_tools() -> None:
             "EXAMPLE",
             _body(await client.call_tool("example", {"name": "sushi"})),
         )
+        for query in ("customers", "filtered", "amount_cents"):
+            _print_section(
+                f"SEARCH {query!r}",
+                _body(await client.call_tool("search", {"query": query, "limit": 20})),
+            )
 
 
 def main() -> None:

@@ -17,6 +17,7 @@ from src.db import (
     ProjectDB,
     ProjectGatewaySnapshot,
     ProjectSnapshot,
+    SearchDocSnapshot,
     TestReferenceSnapshot,
     TestSnapshot,
 )
@@ -62,11 +63,12 @@ class SQLMeshParser:
         model_macros_snapshot = self.db.get_model_macros_snapshot()
         model_audits_snapshot = self.db.get_model_audits_snapshot()
         columns_snapshot = self.db.get_columns_snapshot()
+        search_docs_snapshot = self.db.get_search_docs_snapshot()
         for model in self.context.models.values():
             self._sync_model(model, files_snapshot, models_snapshot)
             self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
             self._sync_model_audits(model, models_snapshot, audits_snapshot, model_audits_snapshot)
-            self._sync_columns(model, models_snapshot, columns_snapshot)
+            self._sync_columns(model, models_snapshot, columns_snapshot, search_docs_snapshot)
             self._flush()
 
         self.db.delete_model_macros(model_macros_snapshot)
@@ -96,6 +98,7 @@ class SQLMeshParser:
             self._flush()
 
         self.db.delete_column_lineage(column_lineage_snapshot)
+        self.db.delete_search_docs(search_docs_snapshot)
         self.db.delete_columns(columns_snapshot)
         self.db.delete_models(models_snapshot)
         self.db.delete_project_gateways(gateways_snapshot)
@@ -394,8 +397,10 @@ class SQLMeshParser:
         model: Model,
         models_snapshot: dict[str, ModelSnapshot],
         columns_snapshot: dict[str, ColumnSnapshot],
+        search_docs_snapshot: dict[str, SearchDocSnapshot],
     ) -> None:
         model_id = models_snapshot[model.name]["id"]
+        model_name = model.name
         column_descriptions = model.column_descriptions
         for column in extract_model_columns(model):
             query_name = column["query_name"]
@@ -405,7 +410,7 @@ class SQLMeshParser:
             line_start = column["line_start"]
             line_end = column["line_end"]
             context = column["context"]
-            description = column_descriptions.get(name) if query_name == model.name else None
+            description = column_descriptions.get(name) if query_name == model_name else None
             data_type = column["data_type"]
             digest = snapshot_hash(
                 [
@@ -440,33 +445,49 @@ class SQLMeshParser:
                         "snapshot_hash": digest,
                     }
                 )
-                columns_snapshot[qualified_name] = {
-                    "id": column_id,
-                    "snapshot_hash": digest,
-                    "seen": True,
-                }
-                continue
-            column_id = prior["id"]
-            if prior["snapshot_hash"] != digest:
-                self.batches["columns"].append(
-                    {
-                        "id": column_id,
-                        "model_id": model_id,
-                        "query_name": query_name,
-                        "from_table": from_table,
-                        "name": name,
-                        "qualified_name": qualified_name,
-                        "data_type": data_type,
-                        "line_start": line_start,
-                        "line_end": line_end,
-                        "context": context,
-                        "description": description,
-                        "snapshot_hash": digest,
-                    }
-                )
+            else:
+                column_id = prior["id"]
+                if prior["snapshot_hash"] != digest:
+                    self.batches["columns"].append(
+                        {
+                            "id": column_id,
+                            "model_id": model_id,
+                            "query_name": query_name,
+                            "from_table": from_table,
+                            "name": name,
+                            "qualified_name": qualified_name,
+                            "data_type": data_type,
+                            "line_start": line_start,
+                            "line_end": line_end,
+                            "context": context,
+                            "description": description,
+                            "snapshot_hash": digest,
+                        }
+                    )
             columns_snapshot[qualified_name] = {
                 "id": column_id,
                 "snapshot_hash": digest,
+                "seen": True,
+            }
+            relative = ""
+            if query_name != model_name and query_name.startswith(f"{model_name}."):
+                relative = query_name[len(model_name) + 1 :]
+            column_label = f"{from_table}.{name}" if from_table is not None else name
+            doc_digest = snapshot_hash([model_name, relative, column_label])
+            doc_prior = search_docs_snapshot.get(str(column_id))
+            if doc_prior is None or doc_prior["snapshot_hash"] != doc_digest:
+                self.batches["search_docs"].append(
+                    {
+                        "id": column_id,
+                        "model_name": model_name,
+                        "query_name": relative,
+                        "column_name": column_label,
+                        "snapshot_hash": doc_digest,
+                    }
+                )
+            search_docs_snapshot[str(column_id)] = {
+                "id": column_id,
+                "snapshot_hash": doc_digest,
                 "seen": True,
             }
 

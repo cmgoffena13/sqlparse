@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS search_fts;
+DROP TABLE IF EXISTS search_docs;
 DROP TABLE IF EXISTS test_references;
 DROP TABLE IF EXISTS tests;
 DROP TABLE IF EXISTS column_lineage;

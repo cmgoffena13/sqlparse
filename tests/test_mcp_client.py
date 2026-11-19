@@ -8,7 +8,7 @@ from fastmcp.client.client import CallToolResult
 from src.sqlparse_mcp.skill import SKILL_INSTRUCTIONS
 from tests.conftest import FIXTURE_PROJECT
 
-_TOOLS = {"example"}
+_TOOLS = {"example", "search"}
 
 
 def _text(result: CallToolResult) -> str:
@@ -38,5 +38,11 @@ def test_client_lists_tools_and_reads_the_project(
             assert skill == SKILL_INSTRUCTIONS
             result = _text(await mcp_client.call_tool("example", {"name": "sushi"}))
             assert result == f"example: sushi\n{FIXTURE_PROJECT.resolve()}\n"
+            search_out = _text(
+                await mcp_client.call_tool("search", {"query": "customers", "limit": 30})
+            )
+            assert "models" in search_out
+            assert "sushi.customers" in search_out
+            assert "columns" in search_out
 
     asyncio.run(run())

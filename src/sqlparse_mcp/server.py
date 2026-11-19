@@ -7,6 +7,7 @@ from fastmcp import Context, FastMCP
 
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
+from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
 from src.utils import get_sqlparse_config_dir
 
@@ -60,3 +61,9 @@ def example(ctx: Context, name: str) -> str:
     """Example tool."""
     root = _db(ctx).root
     return f"example: {name}\n{root}\n"
+
+
+@mcp.tool()
+def search(ctx: Context, query: str, limit: int = 20) -> str:
+    """Search model, query, and column names in the indexed project."""
+    return run_search(_db(ctx), query, limit)

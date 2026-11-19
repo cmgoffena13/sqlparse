@@ -18,6 +18,7 @@ BATCH_TABLES = {
     "column_lineage",
     "tests",
     "test_references",
+    "search_docs",
 }
 
 ASSIGNER_TABLES = {
@@ -113,6 +114,12 @@ class TestSnapshot(TypedDict):
 class TestReferenceSnapshot(TypedDict):
     test_id: int
     column_id: int
+    seen: bool
+
+
+class SearchDocSnapshot(TypedDict):
+    id: int
+    snapshot_hash: str
     seen: bool
 
 
@@ -266,6 +273,25 @@ class ProjectDB:
     def delete_columns(self, columns: dict[str, ColumnSnapshot]) -> None:
         column_ids = [row["id"] for row in columns.values() if not row["seen"]]
         self.delete_ids("columns", column_ids)
+
+    def get_search_docs_snapshot(self) -> dict[str, SearchDocSnapshot]:
+        cursor = self.connection.execute("SELECT id, snapshot_hash FROM search_docs")
+        return {str(row["id"]): self._search_doc_snapshot(row) for row in cursor}
+
+    def delete_search_docs(self, search_docs: dict[str, SearchDocSnapshot]) -> None:
+        doc_ids = [row["id"] for row in search_docs.values() if not row["seen"]]
+        if not doc_ids:
+            return
+        placeholders = ",".join(["?"] * len(doc_ids))
+        with self.connection:
+            self.connection.execute(
+                f"DELETE FROM search_fts WHERE rowid IN ({placeholders})",  # noqa: S608
+                doc_ids,
+            )
+            self.connection.execute(
+                f"DELETE FROM search_docs WHERE id IN ({placeholders})",  # noqa: S608
+                doc_ids,
+            )
 
     def get_macros_snapshot(self) -> dict[str, MacroSnapshot]:
         cursor = self.connection.execute("SELECT id, name, snapshot_hash FROM macros")
@@ -465,6 +491,13 @@ class ProjectDB:
             "seen": False,
         }
 
+    def _search_doc_snapshot(self, row: sqlite3.Row) -> SearchDocSnapshot:
+        return {
+            "id": int(row["id"]),
+            "snapshot_hash": str(row["snapshot_hash"]),
+            "seen": False,
+        }
+
     def bulk_insert(self, batches: dict[str, list[dict[str, object]]]) -> None:
         with self.connection:
             self.connection.executemany(
@@ -607,6 +640,26 @@ class ProjectDB:
                 )
                 """,
                 batches["test_references"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR REPLACE INTO search_docs (
+                    id, model_name, query_name, column_name, snapshot_hash
+                ) VALUES (
+                    :id, :model_name, :query_name, :column_name, :snapshot_hash
+                )
+                """,
+                batches["search_docs"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR REPLACE INTO search_fts (
+                    rowid, model_name, query_name, column_name
+                ) VALUES (
+                    :id, :model_name, :query_name, :column_name
+                )
+                """,
+                batches["search_docs"],
             )
 
     def close(self) -> None:
