@@ -12,8 +12,6 @@ class SQLMeshParser:
         self.assigner = assigner
         self.root = root
         self.context = Context(paths=self.root, load=False)
-
-    def load(self) -> None:
         self.context.load(update_schemas=False)
 
     def sync_models(

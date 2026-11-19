@@ -227,7 +227,6 @@ class ProjectProcessor:
             self._process_files(file_names, directory_path, dir_rel, full)
 
         self._insert_batch(final=True)
-        self.parser.load()
         self.parser.sync_models(
             self.files_snapshot,
             self.models_snapshot,
