@@ -46,7 +46,7 @@ class FileSnapshot(TypedDict):
 
 class ModelSnapshot(TypedDict):
     id: int
-    file_id: int | None
+    file_id: int
     kind: str
     config_start_line: int
     config_end_line: int
@@ -359,11 +359,10 @@ class ProjectDB:
         }
 
     def _model_snapshot(self, row: sqlite3.Row) -> ModelSnapshot:
-        file_id = row["file_id"]
         description = row["description"]
         return {
             "id": int(row["id"]),
-            "file_id": None if file_id is None else int(file_id),
+            "file_id": int(row["file_id"]),
             "kind": str(row["kind"]),
             "config_start_line": int(row["config_start_line"]),
             "config_end_line": int(row["config_end_line"]),

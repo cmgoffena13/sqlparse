@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS files (
 
 CREATE TABLE IF NOT EXISTS models (
     id                  INTEGER NOT NULL PRIMARY KEY,
-    file_id             INTEGER REFERENCES files(id),
+    file_id             INTEGER NOT NULL REFERENCES files(id),
     qualified_name      TEXT NOT NULL,
     kind                TEXT NOT NULL,
     config_start_line   INTEGER NOT NULL,

@@ -124,7 +124,7 @@ class SQLMeshParser:
     ) -> None:
         qualified_name = model.fqn
         kind = model.kind.name
-        file_id = self._file_id(model._path, files_snapshot)
+        file_id = self._file_id(Path(str(model._path)), files_snapshot)
         config_start_line, config_end_line = model_config_lines(model)
         description = model.description
         prior = models_snapshot.get(qualified_name)
@@ -402,9 +402,9 @@ class SQLMeshParser:
         test_references_snapshot: dict[str, TestReferenceSnapshot],
     ) -> None:
         for metadata in self.context._model_test_metadata:
-            file_id = self._file_id(metadata.path, files_snapshot)
+            file_id = self._file_id(Path(str(metadata.path)), files_snapshot)
             model = self.context.get_model(metadata.model_name)
-            if file_id is None or model is None or model.fqn not in models_snapshot:
+            if model is None or model.fqn not in models_snapshot:
                 continue
             model_id = models_snapshot[model.fqn]["id"]
             name = metadata.test_name
@@ -461,10 +461,6 @@ class SQLMeshParser:
                     "seen": True,
                 }
 
-    def _file_id(self, path: Path | None, files_snapshot: dict[str, FileSnapshot]) -> int | None:
-        file_id = None
-        if path is not None:
-            relative = path.resolve().relative_to(self.root).as_posix()
-            file_row = files_snapshot.get(relative)
-            file_id = None if file_row is None else file_row["id"]
-        return file_id
+    def _file_id(self, path: Path, files_snapshot: dict[str, FileSnapshot]) -> int:
+        relative = path.resolve().relative_to(self.root).as_posix()
+        return files_snapshot[relative]["id"]
