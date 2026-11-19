@@ -19,6 +19,7 @@ from src.db import (
     TestSnapshot,
 )
 from src.parse.column_lineage import extract_model_column_references, extract_model_columns
+from src.parse.macro_utils import macro_paths
 from src.parse.model_utils import model_config_lines
 from src.parse.test_utils import fixture_column_names
 from src.utils import snapshot_hash
@@ -42,9 +43,9 @@ class SQLMeshParser:
 
     def sync(self, files_snapshot: dict[str, FileSnapshot]) -> None:
         macros_snapshot = self.db.get_macros_snapshot()
-        self._sync_macros(macros_snapshot)
+        self._sync_macros(files_snapshot, macros_snapshot)
         audits_snapshot = self.db.get_audits_snapshot()
-        self._sync_audits(audits_snapshot)
+        self._sync_audits(files_snapshot, audits_snapshot)
         self._flush()
 
         models_snapshot = self.db.get_models_snapshot()
@@ -88,7 +89,12 @@ class SQLMeshParser:
         self.db.delete_columns(columns_snapshot)
         self.db.delete_models(models_snapshot)
 
-    def _sync_macros(self, macros_snapshot: dict[str, MacroSnapshot]) -> None:
+    def _sync_macros(
+        self,
+        files_snapshot: dict[str, FileSnapshot],
+        macros_snapshot: dict[str, MacroSnapshot],
+    ) -> None:
+        paths = macro_paths(self.context)
         macros: list[tuple[str, str]] = [
             (name, "jinja") for name in self.context._jinja_macros.root_macros
         ]
@@ -96,26 +102,53 @@ class SQLMeshParser:
             if not getattr(macro, "__sqlmesh__builtin__", False):
                 macros.append((name, "python"))
         for name, kind in macros:
+            file_id = self._file_id(paths[name], files_snapshot)
             prior = macros_snapshot.get(name)
             if prior is None:
                 macro_id = self.assigner.reserve("macros", 1)[0]
-                self.batches["macros"].append({"id": macro_id, "name": name, "kind": kind})
-                macros_snapshot[name] = {"id": macro_id, "kind": kind, "seen": True}
+                self.batches["macros"].append(
+                    {"id": macro_id, "file_id": file_id, "name": name, "kind": kind}
+                )
+                macros_snapshot[name] = {
+                    "id": macro_id,
+                    "file_id": file_id,
+                    "kind": kind,
+                    "seen": True,
+                }
                 continue
             macro_id = prior["id"]
-            if prior["kind"] != kind:
-                self.batches["macros"].append({"id": macro_id, "name": name, "kind": kind})
-            macros_snapshot[name] = {"id": macro_id, "kind": kind, "seen": True}
+            if prior["kind"] != kind or prior["file_id"] != file_id:
+                self.batches["macros"].append(
+                    {"id": macro_id, "file_id": file_id, "name": name, "kind": kind}
+                )
+            macros_snapshot[name] = {
+                "id": macro_id,
+                "file_id": file_id,
+                "kind": kind,
+                "seen": True,
+            }
 
-    def _sync_audits(self, audits_snapshot: dict[str, AuditSnapshot]) -> None:
-        for name in list(self.context._audits) + list(self.context.standalone_audits):
+    def _sync_audits(
+        self,
+        files_snapshot: dict[str, FileSnapshot],
+        audits_snapshot: dict[str, AuditSnapshot],
+    ) -> None:
+        audits = {
+            **dict(self.context._audits.items()),
+            **dict(self.context.standalone_audits.items()),
+        }
+        for name, audit in audits.items():
+            file_id = self._file_id(Path(str(audit._path)), files_snapshot)
             prior = audits_snapshot.get(name)
             if prior is None:
                 audit_id = self.assigner.reserve("audits", 1)[0]
-                self.batches["audits"].append({"id": audit_id, "name": name})
-                audits_snapshot[name] = {"id": audit_id, "seen": True}
+                self.batches["audits"].append({"id": audit_id, "file_id": file_id, "name": name})
+                audits_snapshot[name] = {"id": audit_id, "file_id": file_id, "seen": True}
                 continue
-            audits_snapshot[name] = {"id": prior["id"], "seen": True}
+            audit_id = prior["id"]
+            if prior["file_id"] != file_id:
+                self.batches["audits"].append({"id": audit_id, "file_id": file_id, "name": name})
+            audits_snapshot[name] = {"id": audit_id, "file_id": file_id, "seen": True}
 
     def _sync_model(
         self,

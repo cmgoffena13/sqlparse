@@ -35,14 +35,15 @@ def test_processor_indexes_files_and_directories() -> None:
             )
         }
         first_macros = {
-            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name, kind FROM macros")
+            str(row["name"]): dict(row)
+            for row in db.fetch("SELECT id, file_id, name, kind FROM macros")
         }
         first_model_macros = {
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
         first_audits = {
-            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name FROM audits")
+            str(row["name"]): dict(row) for row in db.fetch("SELECT id, file_id, name FROM audits")
         }
         first_model_audits = {
             (str(row["audit_name"]), int(row["model_id"]))
@@ -90,14 +91,15 @@ def test_processor_indexes_files_and_directories() -> None:
             )
         }
         second_macros = {
-            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name, kind FROM macros")
+            str(row["name"]): dict(row)
+            for row in db.fetch("SELECT id, file_id, name, kind FROM macros")
         }
         second_model_macros = {
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
         second_audits = {
-            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name FROM audits")
+            str(row["name"]): dict(row) for row in db.fetch("SELECT id, file_id, name FROM audits")
         }
         second_model_audits = {
             (str(row["audit_name"]), int(row["model_id"]))
@@ -157,6 +159,18 @@ def test_processor_indexes_files_and_directories() -> None:
             "SELECT id, is_test FROM files WHERE path = ?",
             ("tests/test_orders.yaml",),
         )[0]
+        jinja_macro_file = db.fetch(
+            "SELECT id FROM files WHERE path = ?",
+            ("macros/cents_to_dollars.sql",),
+        )[0]
+        python_macro_file = db.fetch(
+            "SELECT id FROM files WHERE path = ?",
+            ("macros/identity.py",),
+        )[0]
+        audit_file = db.fetch(
+            "SELECT id FROM files WHERE path = ?",
+            ("audits/not_null_customer_id.sql",),
+        )[0]
         file_count = db.fetch("SELECT COUNT(*) AS file_count FROM files")[0]["file_count"]
     finally:
         db.close()
@@ -173,7 +187,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert customer["is_test"] == 0
     assert external["is_test"] == 0
     assert test_orders["is_test"] == 1
-    assert file_count == 11
+    assert file_count == 12
     assert set(first_models) == {
         CUSTOMERS_FQN,
         CUSTOMER_ORDERS_FQN,
@@ -265,13 +279,17 @@ def test_processor_indexes_files_and_directories() -> None:
         == first_models[RAW_CUSTOMERS_FQN]["id"]
     )
     assert second_columns == first_columns
-    assert first_macros == {"cents_to_dollars": first_macros["cents_to_dollars"]}
+    assert set(first_macros) == {"cents_to_dollars", "identity"}
     assert first_macros["cents_to_dollars"]["kind"] == "jinja"
+    assert first_macros["cents_to_dollars"]["file_id"] == jinja_macro_file["id"]
+    assert first_macros["identity"]["kind"] == "python"
+    assert first_macros["identity"]["file_id"] == python_macro_file["id"]
     assert "star" not in first_macros
     assert second_macros == first_macros
     assert first_model_macros == {("cents_to_dollars", first_models[CUSTOMERS_FQN]["id"])}
     assert second_model_macros == first_model_macros
     assert set(first_audits) == {"not_null_customer_id"}
+    assert first_audits["not_null_customer_id"]["file_id"] == audit_file["id"]
     assert second_audits == first_audits
     assert first_model_audits == {("not_null_customer_id", first_models[CUSTOMERS_FQN]["id"])}
     assert second_model_audits == first_model_audits

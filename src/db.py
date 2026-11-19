@@ -58,6 +58,7 @@ class ColumnSnapshot(TypedDict):
 
 class MacroSnapshot(TypedDict):
     id: int
+    file_id: int
     kind: str
     seen: bool
 
@@ -70,6 +71,7 @@ class ModelMacroSnapshot(TypedDict):
 
 class AuditSnapshot(TypedDict):
     id: int
+    file_id: int
     seen: bool
 
 
@@ -229,7 +231,7 @@ class ProjectDB:
         self.delete_ids("columns", column_ids)
 
     def get_macros_snapshot(self) -> dict[str, MacroSnapshot]:
-        cursor = self.connection.execute("SELECT id, name, kind FROM macros")
+        cursor = self.connection.execute("SELECT id, file_id, name, kind FROM macros")
         return {str(row["name"]): self._macro_snapshot(row) for row in cursor}
 
     def delete_macros(self, macros: dict[str, MacroSnapshot]) -> None:
@@ -254,7 +256,7 @@ class ProjectDB:
             )
 
     def get_audits_snapshot(self) -> dict[str, AuditSnapshot]:
-        cursor = self.connection.execute("SELECT id, name FROM audits")
+        cursor = self.connection.execute("SELECT id, file_id, name FROM audits")
         return {str(row["name"]): self._audit_snapshot(row) for row in cursor}
 
     def delete_audits(self, audits: dict[str, AuditSnapshot]) -> None:
@@ -361,6 +363,7 @@ class ProjectDB:
     def _macro_snapshot(self, row: sqlite3.Row) -> MacroSnapshot:
         return {
             "id": int(row["id"]),
+            "file_id": int(row["file_id"]),
             "kind": str(row["kind"]),
             "seen": False,
         }
@@ -375,6 +378,7 @@ class ProjectDB:
     def _audit_snapshot(self, row: sqlite3.Row) -> AuditSnapshot:
         return {
             "id": int(row["id"]),
+            "file_id": int(row["file_id"]),
             "seen": False,
         }
 
@@ -443,9 +447,9 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO macros (
-                    id, name, kind
+                    id, file_id, name, kind
                 ) VALUES (
-                    :id, :name, :kind
+                    :id, :file_id, :name, :kind
                 )
                 """,
                 batches["macros"],
@@ -462,10 +466,10 @@ class ProjectDB:
             )
             self.connection.executemany(
                 """
-                INSERT OR IGNORE INTO audits (
-                    id, name
+                INSERT OR REPLACE INTO audits (
+                    id, file_id, name
                 ) VALUES (
-                    :id, :name
+                    :id, :file_id, :name
                 )
                 """,
                 batches["audits"],
