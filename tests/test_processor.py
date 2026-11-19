@@ -21,7 +21,10 @@ def test_processor_indexes_files_and_directories() -> None:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
         first_models = {
             str(row["qualified_name"]): dict(row)
-            for row in db.fetch("SELECT id, file_id, qualified_name, kind FROM models")
+            for row in db.fetch(
+                "SELECT id, file_id, qualified_name, kind, config_start_line, "
+                "config_end_line FROM models"
+            )
         }
         first_columns = {
             str(row["qualified_name"]): dict(row)
@@ -72,7 +75,10 @@ def test_processor_indexes_files_and_directories() -> None:
         ProjectProcessor(db, FIXTURE_PROJECT).process()
         second_models = {
             str(row["qualified_name"]): dict(row)
-            for row in db.fetch("SELECT id, file_id, qualified_name, kind FROM models")
+            for row in db.fetch(
+                "SELECT id, file_id, qualified_name, kind, config_start_line, "
+                "config_end_line FROM models"
+            )
         }
         second_columns = {
             str(row["qualified_name"]): dict(row)
@@ -177,16 +183,30 @@ def test_processor_indexes_files_and_directories() -> None:
     }
     assert first_models[CUSTOMERS_FQN]["kind"] == "FULL"
     assert first_models[CUSTOMERS_FQN]["file_id"] == customer["id"]
+    assert first_models[CUSTOMERS_FQN]["config_start_line"] == 1
+    assert first_models[CUSTOMERS_FQN]["config_end_line"] == 5
     assert first_models[ORDERS_FQN]["kind"] == "INCREMENTAL_BY_TIME_RANGE"
     assert first_models[ORDERS_FQN]["file_id"] == orders["id"]
+    assert first_models[ORDERS_FQN]["config_start_line"] == 1
+    assert first_models[ORDERS_FQN]["config_end_line"] == 7
     assert first_models[WAITERS_FQN]["kind"] == "FULL"
     assert first_models[WAITERS_FQN]["file_id"] == waiter["id"]
+    assert first_models[WAITERS_FQN]["config_start_line"] == 4
+    assert first_models[WAITERS_FQN]["config_end_line"] == 10
     assert first_models[RAW_SEED_FQN]["kind"] == "SEED"
     assert first_models[RAW_SEED_FQN]["file_id"] == raw_seed["id"]
+    assert first_models[RAW_SEED_FQN]["config_start_line"] == 1
+    assert first_models[RAW_SEED_FQN]["config_end_line"] == 6
     assert first_models[RAW_CUSTOMERS_FQN]["kind"] == "EXTERNAL"
     assert first_models[RAW_CUSTOMERS_FQN]["file_id"] == external["id"]
+    assert first_models[RAW_CUSTOMERS_FQN]["config_start_line"] == 1
+    assert first_models[RAW_CUSTOMERS_FQN]["config_end_line"] == 4
     assert first_models[RAW_ORDERS_FQN]["kind"] == "EXTERNAL"
     assert first_models[RAW_ORDERS_FQN]["file_id"] == external["id"]
+    assert first_models[RAW_ORDERS_FQN]["config_start_line"] == 5
+    assert first_models[RAW_ORDERS_FQN]["config_end_line"] == 9
+    assert first_models[CUSTOMER_ORDERS_FQN]["config_start_line"] == 1
+    assert first_models[CUSTOMER_ORDERS_FQN]["config_end_line"] == 4
     assert second_models == first_models
     assert first_columns["sushi.customers.customer_id"]["query_name"] == "sushi.customers"
     assert first_columns["sushi.customers.customer_id"]["name"] == "customer_id"

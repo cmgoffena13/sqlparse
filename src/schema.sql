@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS models (
     id                  INTEGER NOT NULL PRIMARY KEY,
     file_id             INTEGER REFERENCES files(id),
     qualified_name      TEXT NOT NULL,
-    kind                TEXT NOT NULL
+    kind                TEXT NOT NULL,
+    config_start_line   INTEGER NOT NULL,
+    config_end_line     INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS models_qualified_name_index ON models (qualified_name);
 

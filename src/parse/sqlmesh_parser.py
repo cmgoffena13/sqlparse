@@ -19,20 +19,8 @@ from src.db import (
     TestSnapshot,
 )
 from src.parse.column_lineage import extract_model_column_references, extract_model_columns
-
-
-def _fixture_column_names(values: object) -> list[str]:
-    names: list[str] = []
-    if isinstance(values, dict):
-        columns = values.get("columns")
-        rows = values.get("rows")
-        names = list(columns) if isinstance(columns, dict) else names
-        names = (
-            list(rows[0])
-            if not names and isinstance(rows, list) and rows and isinstance(rows[0], dict)
-            else names
-        )
-    return names
+from src.parse.model_utils import model_config_lines
+from src.parse.test_utils import fixture_column_names
 
 
 class SQLMeshParser:
@@ -134,6 +122,7 @@ class SQLMeshParser:
         qualified_name = model.fqn
         kind = model.kind.name
         file_id = self._file_id(model._path, files_snapshot)
+        config_start_line, config_end_line = model_config_lines(model)
         prior = models_snapshot.get(qualified_name)
         if prior is None:
             model_id = self.assigner.reserve("models", 1)[0]
@@ -143,23 +132,34 @@ class SQLMeshParser:
                     "file_id": file_id,
                     "qualified_name": qualified_name,
                     "kind": kind,
+                    "config_start_line": config_start_line,
+                    "config_end_line": config_end_line,
                 }
             )
         else:
             model_id = prior["id"]
-            if prior["kind"] != kind or prior["file_id"] != file_id:
+            if (
+                prior["kind"] != kind
+                or prior["file_id"] != file_id
+                or prior["config_start_line"] != config_start_line
+                or prior["config_end_line"] != config_end_line
+            ):
                 self.batches["models"].append(
                     {
                         "id": model_id,
                         "file_id": file_id,
                         "qualified_name": qualified_name,
                         "kind": kind,
+                        "config_start_line": config_start_line,
+                        "config_end_line": config_end_line,
                     }
                 )
         models_snapshot[qualified_name] = {
             "id": model_id,
             "file_id": file_id,
             "kind": kind,
+            "config_start_line": config_start_line,
+            "config_end_line": config_end_line,
             "seen": True,
         }
 
@@ -413,13 +413,13 @@ class SQLMeshParser:
                 input_model = self.context.get_model(input_name)
                 if input_model is None:
                     continue
-                for column_name in _fixture_column_names(values):
+                for column_name in fixture_column_names(values):
                     column_qns.append(f"{input_model.name}.{column_name}")
             outputs = body.get("outputs") or {}
-            for column_name in _fixture_column_names(outputs.get("query")):
+            for column_name in fixture_column_names(outputs.get("query")):
                 column_qns.append(f"{model.name}.{column_name}")
             for cte_name, values in (outputs.get("ctes") or {}).items():
-                for column_name in _fixture_column_names(values):
+                for column_name in fixture_column_names(values):
                     column_qns.append(f"{model.name}.{cte_name}.{column_name}")
             for column_qn in column_qns:
                 if column_qn not in columns_snapshot:

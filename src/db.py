@@ -48,6 +48,8 @@ class ModelSnapshot(TypedDict):
     id: int
     file_id: int | None
     kind: str
+    config_start_line: int
+    config_end_line: int
     seen: bool
 
 
@@ -217,7 +219,10 @@ class ProjectDB:
         self.delete_ids("files", file_ids)
 
     def get_models_snapshot(self) -> dict[str, ModelSnapshot]:
-        cursor = self.connection.execute("SELECT id, file_id, qualified_name, kind FROM models")
+        cursor = self.connection.execute(
+            "SELECT id, file_id, qualified_name, kind, config_start_line, "
+            "config_end_line FROM models"
+        )
         return {str(row["qualified_name"]): self._model_snapshot(row) for row in cursor}
 
     def delete_models(self, models: dict[str, ModelSnapshot]) -> None:
@@ -357,6 +362,8 @@ class ProjectDB:
             "id": int(row["id"]),
             "file_id": None if file_id is None else int(file_id),
             "kind": str(row["kind"]),
+            "config_start_line": int(row["config_start_line"]),
+            "config_end_line": int(row["config_end_line"]),
             "seen": False,
         }
 
@@ -443,9 +450,11 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO models (
-                    id, file_id, qualified_name, kind
+                    id, file_id, qualified_name, kind,
+                    config_start_line, config_end_line
                 ) VALUES (
-                    :id, :file_id, :qualified_name, :kind
+                    :id, :file_id, :qualified_name, :kind,
+                    :config_start_line, :config_end_line
                 )
                 """,
                 batches["models"],
