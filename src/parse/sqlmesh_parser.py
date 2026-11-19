@@ -15,6 +15,8 @@ from src.db import (
     ModelMacroSnapshot,
     ModelSnapshot,
     ProjectDB,
+    ProjectGatewaySnapshot,
+    ProjectSnapshot,
     TestReferenceSnapshot,
     TestSnapshot,
 )
@@ -33,6 +35,8 @@ class SQLMeshParser:
         self.context = Context(paths=self.root, load=False)
         self.context.load(update_schemas=True)
         self.batches = self._new_batches()
+        self._gateway_ids: dict[tuple[str, str], int] = {}
+        self._project_defaults: dict[str, str] = {}
 
     def _new_batches(self) -> dict[str, list[dict[str, object]]]:
         return {table: [] for table in BATCH_TABLES}
@@ -42,6 +46,11 @@ class SQLMeshParser:
         self.batches = self._new_batches()
 
     def sync(self, files_snapshot: dict[str, FileSnapshot]) -> None:
+        projects_snapshot = self.db.get_projects_snapshot()
+        gateways_snapshot = self.db.get_project_gateways_snapshot()
+        self._sync_projects(projects_snapshot, gateways_snapshot)
+        self._flush()
+
         macros_snapshot = self.db.get_macros_snapshot()
         self._sync_macros(files_snapshot, macros_snapshot)
         audits_snapshot = self.db.get_audits_snapshot()
@@ -88,6 +97,8 @@ class SQLMeshParser:
         self.db.delete_column_lineage(column_lineage_snapshot)
         self.db.delete_columns(columns_snapshot)
         self.db.delete_models(models_snapshot)
+        self.db.delete_project_gateways(gateways_snapshot)
+        self.db.delete_projects(projects_snapshot)
 
     def _sync_macros(
         self,
@@ -150,6 +161,80 @@ class SQLMeshParser:
                 self.batches["audits"].append({"id": audit_id, "file_id": file_id, "name": name})
             audits_snapshot[name] = {"id": audit_id, "file_id": file_id, "seen": True}
 
+    def _sync_projects(
+        self,
+        projects_snapshot: dict[str, ProjectSnapshot],
+        gateways_snapshot: dict[str, ProjectGatewaySnapshot],
+    ) -> None:
+        self._gateway_ids = {}
+        self._project_defaults = {}
+        for config_path, config in self.context.configs.items():
+            project_name = config.project or Path(config_path).name
+            self._project_defaults[project_name] = config.default_gateway
+            prior_project = projects_snapshot.get(project_name)
+            if prior_project is None:
+                project_id = self.assigner.reserve("projects", 1)[0]
+                self.batches["projects"].append({"id": project_id, "name": project_name})
+            else:
+                project_id = prior_project["id"]
+                if prior_project["name"] != project_name:
+                    self.batches["projects"].append({"id": project_id, "name": project_name})
+            projects_snapshot[project_name] = {
+                "id": project_id,
+                "name": project_name,
+                "seen": True,
+            }
+            for gateway_name, gateway in config.gateways.items():
+                gateway_dialect = None
+                if gateway.model_defaults is not None and gateway.model_defaults.dialect:
+                    gateway_dialect = gateway.model_defaults.dialect
+                key = f"{project_id}:{gateway_name}"
+                prior_gateway = gateways_snapshot.get(key)
+                if prior_gateway is None:
+                    gateway_id = self.assigner.reserve("project_gateways", 1)[0]
+                    self.batches["project_gateways"].append(
+                        {
+                            "id": gateway_id,
+                            "project_id": project_id,
+                            "name": gateway_name,
+                            "dialect": gateway_dialect,
+                        }
+                    )
+                else:
+                    gateway_id = prior_gateway["id"]
+                    if (
+                        prior_gateway["project_id"] != project_id
+                        or prior_gateway["name"] != gateway_name
+                        or prior_gateway["dialect"] != gateway_dialect
+                    ):
+                        self.batches["project_gateways"].append(
+                            {
+                                "id": gateway_id,
+                                "project_id": project_id,
+                                "name": gateway_name,
+                                "dialect": gateway_dialect,
+                            }
+                        )
+                gateways_snapshot[key] = {
+                    "id": gateway_id,
+                    "project_id": project_id,
+                    "name": gateway_name,
+                    "dialect": gateway_dialect,
+                    "seen": True,
+                }
+                self._gateway_ids[(project_name, gateway_name)] = gateway_id
+
+    def _project_name_for_model(self, model: Model) -> str:
+        project_name = model.project
+        if not project_name:
+            model_path = Path(str(model._path)).resolve()
+            project_name = next(
+                config.project or Path(config_path).name
+                for config_path, config in self.context.configs.items()
+                if model_path.is_relative_to(Path(config_path).resolve())
+            )
+        return project_name
+
     def _sync_model(
         self,
         model: Model,
@@ -159,11 +244,17 @@ class SQLMeshParser:
         qualified_name = model.fqn
         kind = model.kind.name
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
+        project_name = self._project_name_for_model(model)
+        gateway_name = model.gateway or self._project_defaults[project_name]
+        gateway_id = self._gateway_ids[(project_name, gateway_name)]
+        dialect = model.dialect
         config_start_line, config_end_line = model_config_lines(model)
         description = model.description
         digest = snapshot_hash(
             [
                 file_id,
+                gateway_id,
+                dialect,
                 qualified_name,
                 kind,
                 config_start_line,
@@ -178,6 +269,8 @@ class SQLMeshParser:
                 {
                     "id": model_id,
                     "file_id": file_id,
+                    "gateway_id": gateway_id,
+                    "dialect": dialect,
                     "qualified_name": qualified_name,
                     "kind": kind,
                     "config_start_line": config_start_line,
@@ -193,6 +286,8 @@ class SQLMeshParser:
                     {
                         "id": model_id,
                         "file_id": file_id,
+                        "gateway_id": gateway_id,
+                        "dialect": dialect,
                         "qualified_name": qualified_name,
                         "kind": kind,
                         "config_start_line": config_start_line,

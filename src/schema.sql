@@ -6,6 +6,21 @@ CREATE TABLE IF NOT EXISTS index_root (
     path    TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS projects (
+    id                  INTEGER NOT NULL PRIMARY KEY,
+    name                TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS projects_name_index ON projects (name);
+
+CREATE TABLE IF NOT EXISTS project_gateways (
+    id                  INTEGER NOT NULL PRIMARY KEY,
+    project_id          INTEGER NOT NULL REFERENCES projects(id),
+    name                TEXT NOT NULL,
+    dialect             TEXT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS project_gateways_project_id_name_index
+    ON project_gateways (project_id, name);
+
 CREATE TABLE IF NOT EXISTS directories (
     id              INTEGER NOT NULL PRIMARY KEY,
     parent_id       INTEGER REFERENCES directories(id),
@@ -31,6 +46,8 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE TABLE IF NOT EXISTS models (
     id                  INTEGER NOT NULL PRIMARY KEY,
     file_id             INTEGER NOT NULL REFERENCES files(id),
+    gateway_id          INTEGER NOT NULL REFERENCES project_gateways(id),
+    dialect             TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
     kind                TEXT NOT NULL,
     config_start_line   INTEGER NOT NULL,

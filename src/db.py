@@ -7,6 +7,8 @@ from src.utils import db_path_for_index_root, get_sqlparse_config_dir
 BATCH_TABLES = {
     "directories",
     "files",
+    "projects",
+    "project_gateways",
     "models",
     "macros",
     "model_macros",
@@ -21,6 +23,8 @@ BATCH_TABLES = {
 ASSIGNER_TABLES = {
     "directories",
     "files",
+    "projects",
+    "project_gateways",
     "models",
     "macros",
     "audits",
@@ -42,6 +46,20 @@ class FileSnapshot(TypedDict):
     content_hash: str
     mtime_ns: int
     size_bytes: int
+
+
+class ProjectSnapshot(TypedDict):
+    id: int
+    name: str
+    seen: bool
+
+
+class ProjectGatewaySnapshot(TypedDict):
+    id: int
+    project_id: int
+    name: str
+    dialect: str | None
+    seen: bool
 
 
 class ModelSnapshot(TypedDict):
@@ -214,6 +232,27 @@ class ProjectDB:
         file_ids = [row["id"] for row in files.values() if not row["seen"]]
         self.delete_ids("files", file_ids)
 
+    def get_projects_snapshot(self) -> dict[str, ProjectSnapshot]:
+        cursor = self.connection.execute("SELECT id, name FROM projects")
+        return {str(row["name"]): self._project_snapshot(row) for row in cursor}
+
+    def delete_projects(self, projects: dict[str, ProjectSnapshot]) -> None:
+        project_ids = [row["id"] for row in projects.values() if not row["seen"]]
+        self.delete_ids("projects", project_ids)
+
+    def get_project_gateways_snapshot(self) -> dict[str, ProjectGatewaySnapshot]:
+        cursor = self.connection.execute(
+            "SELECT id, project_id, name, dialect FROM project_gateways"
+        )
+        return {
+            f"{row['project_id']}:{row['name']}": self._project_gateway_snapshot(row)
+            for row in cursor
+        }
+
+    def delete_project_gateways(self, gateways: dict[str, ProjectGatewaySnapshot]) -> None:
+        gateway_ids = [row["id"] for row in gateways.values() if not row["seen"]]
+        self.delete_ids("project_gateways", gateway_ids)
+
     def get_models_snapshot(self) -> dict[str, ModelSnapshot]:
         cursor = self.connection.execute("SELECT id, qualified_name, snapshot_hash FROM models")
         return {str(row["qualified_name"]): self._model_snapshot(row) for row in cursor}
@@ -346,6 +385,23 @@ class ProjectDB:
             "size_bytes": int(row["size_bytes"]),
         }
 
+    def _project_snapshot(self, row: sqlite3.Row) -> ProjectSnapshot:
+        return {
+            "id": int(row["id"]),
+            "name": str(row["name"]),
+            "seen": False,
+        }
+
+    def _project_gateway_snapshot(self, row: sqlite3.Row) -> ProjectGatewaySnapshot:
+        dialect = row["dialect"]
+        return {
+            "id": int(row["id"]),
+            "project_id": int(row["project_id"]),
+            "name": str(row["name"]),
+            "dialect": str(dialect) if dialect is not None else None,
+            "seen": False,
+        }
+
     def _model_snapshot(self, row: sqlite3.Row) -> ModelSnapshot:
         return {
             "id": int(row["id"]),
@@ -434,11 +490,31 @@ class ProjectDB:
             )
             self.connection.executemany(
                 """
+                INSERT OR REPLACE INTO projects (
+                    id, name
+                ) VALUES (
+                    :id, :name
+                )
+                """,
+                batches["projects"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR REPLACE INTO project_gateways (
+                    id, project_id, name, dialect
+                ) VALUES (
+                    :id, :project_id, :name, :dialect
+                )
+                """,
+                batches["project_gateways"],
+            )
+            self.connection.executemany(
+                """
                 INSERT OR REPLACE INTO models (
-                    id, file_id, qualified_name, kind,
+                    id, file_id, gateway_id, dialect, qualified_name, kind,
                     config_start_line, config_end_line, description, snapshot_hash
                 ) VALUES (
-                    :id, :file_id, :qualified_name, :kind,
+                    :id, :file_id, :gateway_id, :dialect, :qualified_name, :kind,
                     :config_start_line, :config_end_line, :description, :snapshot_hash
                 )
                 """,

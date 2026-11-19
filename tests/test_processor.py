@@ -19,11 +19,19 @@ def test_processor_indexes_files_and_directories() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        first_projects = {
+            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name FROM projects")
+        }
+        first_gateways = {
+            str(row["name"]): dict(row)
+            for row in db.fetch("SELECT id, project_id, name, dialect FROM project_gateways")
+        }
         first_models = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
-                "SELECT id, file_id, qualified_name, kind, config_start_line, "
-                "config_end_line, description, snapshot_hash FROM models"
+                "SELECT id, file_id, gateway_id, dialect, qualified_name, kind, "
+                "config_start_line, config_end_line, description, snapshot_hash "
+                "FROM models"
             )
         }
         first_columns = {
@@ -75,11 +83,19 @@ def test_processor_indexes_files_and_directories() -> None:
             )
         }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
+        second_projects = {
+            str(row["name"]): dict(row) for row in db.fetch("SELECT id, name FROM projects")
+        }
+        second_gateways = {
+            str(row["name"]): dict(row)
+            for row in db.fetch("SELECT id, project_id, name, dialect FROM project_gateways")
+        }
         second_models = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
-                "SELECT id, file_id, qualified_name, kind, config_start_line, "
-                "config_end_line, description, snapshot_hash FROM models"
+                "SELECT id, file_id, gateway_id, dialect, qualified_name, kind, "
+                "config_start_line, config_end_line, description, snapshot_hash "
+                "FROM models"
             )
         }
         second_columns = {
@@ -188,6 +204,12 @@ def test_processor_indexes_files_and_directories() -> None:
     assert external["is_test"] == 0
     assert test_orders["is_test"] == 1
     assert file_count == 12
+    assert set(first_projects) == {"sushi"}
+    assert set(first_gateways) == {"local"}
+    assert first_gateways["local"]["project_id"] == first_projects["sushi"]["id"]
+    assert first_gateways["local"]["dialect"] is None
+    assert second_projects == first_projects
+    assert second_gateways == first_gateways
     assert set(first_models) == {
         CUSTOMERS_FQN,
         CUSTOMER_ORDERS_FQN,
@@ -199,6 +221,8 @@ def test_processor_indexes_files_and_directories() -> None:
     }
     assert first_models[CUSTOMERS_FQN]["kind"] == "FULL"
     assert first_models[CUSTOMERS_FQN]["file_id"] == customer["id"]
+    assert first_models[CUSTOMERS_FQN]["gateway_id"] == first_gateways["local"]["id"]
+    assert first_models[CUSTOMERS_FQN]["dialect"] == "duckdb"
     assert first_models[CUSTOMERS_FQN]["config_start_line"] == 1
     assert first_models[CUSTOMERS_FQN]["config_end_line"] == 6
     assert first_models[CUSTOMERS_FQN]["description"] == "Customer grain with order amounts"
@@ -206,10 +230,14 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[ORDERS_FQN]["kind"] == "INCREMENTAL_BY_TIME_RANGE"
     assert first_models[ORDERS_FQN]["description"] is None
     assert first_models[ORDERS_FQN]["file_id"] == orders["id"]
+    assert first_models[ORDERS_FQN]["gateway_id"] == first_gateways["local"]["id"]
+    assert first_models[ORDERS_FQN]["dialect"] == "duckdb"
     assert first_models[ORDERS_FQN]["config_start_line"] == 1
     assert first_models[ORDERS_FQN]["config_end_line"] == 7
     assert first_models[WAITERS_FQN]["kind"] == "FULL"
     assert first_models[WAITERS_FQN]["file_id"] == waiter["id"]
+    assert first_models[WAITERS_FQN]["gateway_id"] == first_gateways["local"]["id"]
+    assert first_models[WAITERS_FQN]["dialect"] == "duckdb"
     assert first_models[WAITERS_FQN]["config_start_line"] == 4
     assert first_models[WAITERS_FQN]["config_end_line"] == 10
     assert first_models[RAW_SEED_FQN]["kind"] == "SEED"
@@ -226,6 +254,10 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[RAW_ORDERS_FQN]["config_end_line"] == 9
     assert first_models[CUSTOMER_ORDERS_FQN]["config_start_line"] == 1
     assert first_models[CUSTOMER_ORDERS_FQN]["config_end_line"] == 4
+    assert all(
+        row["gateway_id"] == first_gateways["local"]["id"] and row["dialect"] == "duckdb"
+        for row in first_models.values()
+    )
     assert second_models == first_models
     assert first_columns["sushi.customers.customer_id"]["query_name"] == "sushi.customers"
     assert first_columns["sushi.customers.customer_id"]["name"] == "customer_id"
