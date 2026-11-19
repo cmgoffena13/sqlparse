@@ -41,8 +41,8 @@ def test_client_lists_tools_and_reads_the_project(
             search_out = _text(
                 await mcp_client.call_tool("search", {"query": "customers", "limit": 30})
             )
-            assert "models" in search_out
+            assert "## Models" in search_out
             assert "sushi.customers" in search_out
-            assert "columns" in search_out
+            assert "## Columns" in search_out
 
     asyncio.run(run())

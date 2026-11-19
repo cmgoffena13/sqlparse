@@ -1,3 +1,5 @@
+import re
+
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.search import build_fts_query, search
@@ -22,12 +24,12 @@ def test_search_finds_models_queries_and_columns() -> None:
         out = search(db, "customers", limit=30)
     finally:
         db.close()
-    assert "models" in out
+    assert "## Models" in out
     assert "sushi.customers" in out
-    assert "queries" in out
+    assert "## Queries" in out
     assert "sushi.customers / cte" in out
     assert "sushi.customers / $" in out
-    assert "columns" in out
+    assert "## Columns" in out
     assert "sushi.customers / $ / customer_id" in out
     assert "raw.customers.customer_id" in out or "customer_id" in out
 
@@ -50,3 +52,16 @@ def test_search_column_prefers_smart_identifier() -> None:
     finally:
         db.close()
     assert "sushi.customers / cte / raw.orders.amount_cents" in out
+
+
+def test_search_ranks_globally_across_sections() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        out = search(db, "customers", limit=20)
+    finally:
+        db.close()
+    ranks = [int(match) for match in re.findall(r"#(\d+)\s+•", out)]
+    assert ranks
+    assert len(ranks) <= 20
+    assert sorted(ranks) == list(range(1, len(ranks) + 1))

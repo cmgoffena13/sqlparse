@@ -2,13 +2,14 @@ import sqlite3
 from collections import OrderedDict
 
 from src.db import ProjectDB
+from src.sqlparse_mcp.format_utils import bullet, gutter_width
 
 _SEARCH_SQL = """
 SELECT
     model_name,
     query_name,
     column_name,
-    bm25(search_fts, 10.0, 5.0, 10.0) AS rank
+    bm25(search_fts, 10.0, 10.0, 10.0) AS rank
 FROM search_fts
 WHERE search_fts MATCH ?
 ORDER BY rank
@@ -43,34 +44,51 @@ def search(db: ProjectDB, query: str, limit: int) -> str:
     if fts_query:
         try:
             rows = db.connection.execute(_SEARCH_SQL, (fts_query, limit)).fetchall()
-            models: OrderedDict[str, int] = OrderedDict()
-            queries: OrderedDict[str, int] = OrderedDict()
-            columns: list[tuple[int, str]] = []
-            for rank, row in enumerate(rows, start=1):
+            hits: OrderedDict[str, str] = OrderedDict()
+            for row in rows:
                 model_name = str(row["model_name"])
                 query_name = str(row["query_name"])
                 column_name = str(row["column_name"])
                 query_label = query_name if query_name else "$"
-                models.setdefault(model_name, rank)
-                queries.setdefault(f"{model_name} / {query_label}", rank)
-                columns.append((rank, f"{model_name} / {query_label} / {column_name}"))
+                for section, label in (
+                    ("models", model_name),
+                    ("queries", f"{model_name} / {query_label}"),
+                    ("columns", f"{model_name} / {query_label} / {column_name}"),
+                ):
+                    if label not in hits:
+                        hits[label] = section
+                    if len(hits) >= limit:
+                        break
+                if len(hits) >= limit:
+                    break
+            models: OrderedDict[str, int] = OrderedDict()
+            queries: OrderedDict[str, int] = OrderedDict()
+            columns: OrderedDict[str, int] = OrderedDict()
+            for rank, (label, section) in enumerate(hits.items(), start=1):
+                if section == "models":
+                    models[label] = rank
+                elif section == "queries":
+                    queries[label] = rank
+                else:
+                    columns[label] = rank
+            width = gutter_width([*models.values(), *queries.values(), *columns.values()])
             lines: list[str] = []
             if models:
-                lines.append("models")
+                lines.append("## Models")
                 for label, rank in models.items():
-                    lines.append(f"  #{rank} {label}")
+                    lines.append(bullet(label, f"#{rank:<{width}} "))
             if queries:
                 if lines:
                     lines.append("")
-                lines.append("queries")
+                lines.append("## Queries")
                 for label, rank in queries.items():
-                    lines.append(f"  #{rank} {label}")
+                    lines.append(bullet(label, f"#{rank:<{width}} "))
             if columns:
                 if lines:
                     lines.append("")
-                lines.append("columns")
-                for rank, label in columns:
-                    lines.append(f"  #{rank} {label}")
+                lines.append("## Columns")
+                for label, rank in columns.items():
+                    lines.append(bullet(label, f"#{rank:<{width}} "))
             result = "No matches."
             if lines:
                 result = "\n".join(lines)
