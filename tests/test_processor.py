@@ -221,7 +221,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert customer["is_test"] == 0
     assert external["is_test"] == 0
     assert test_orders["is_test"] == 1
-    assert file_count == 12
+    assert file_count == 13
     assert set(first_projects) == {"sushi"}
     assert set(first_gateways) == {"local"}
     assert first_gateways["local"]["project_id"] == first_projects["sushi"]["id"]
@@ -352,19 +352,45 @@ def test_processor_indexes_files_and_directories() -> None:
     assert second_audits == first_audits
     assert first_model_audits == {("not_null_customer_id", first_models[CUSTOMERS_FQN]["id"])}
     assert second_model_audits == first_model_audits
-    assert set(first_tests) == {"test_orders_exist"}
+    assert set(first_tests) == {
+        "test_orders_exist",
+        "test_orders_csv",
+        "test_orders_query",
+    }
     assert first_tests["test_orders_exist"]["file_id"] == test_orders["id"]
     assert first_tests["test_orders_exist"]["model_id"] == first_models[ORDERS_FQN]["id"]
     assert first_tests["test_orders_exist"]["line_start"] == 1
-    assert first_tests["test_orders_exist"]["line_end"] == 12
+    assert first_tests["test_orders_exist"]["line_end"] == 13
     assert first_tests["test_orders_exist"]["snapshot_hash"]
+    assert first_tests["test_orders_csv"]["file_id"] == test_orders["id"]
+    assert first_tests["test_orders_csv"]["model_id"] == first_models[ORDERS_FQN]["id"]
+    assert first_tests["test_orders_csv"]["line_start"] == 14
+    assert first_tests["test_orders_csv"]["line_end"] == 31
+    assert first_tests["test_orders_query"]["file_id"] == test_orders["id"]
+    assert first_tests["test_orders_query"]["model_id"] == first_models[ORDERS_FQN]["id"]
+    assert first_tests["test_orders_query"]["line_start"] == 32
+    assert first_tests["test_orders_query"]["line_end"] == 41
     assert second_tests == first_tests
     test_orders_id = first_tests["test_orders_exist"]["id"]
+    test_orders_csv_id = first_tests["test_orders_csv"]["id"]
+    test_orders_query_id = first_tests["test_orders_query"]["id"]
     assert first_test_references == {
         (test_orders_id, "sushi.customers.customer_id"),
         (test_orders_id, "sushi.customers.status"),
         (test_orders_id, "sushi.orders.order_id"),
         (test_orders_id, "sushi.orders.customer_id"),
+        (test_orders_csv_id, "raw.orders.order_id"),
+        (test_orders_csv_id, "raw.orders.customer_id"),
+        (test_orders_csv_id, "sushi.customers.customer_id"),
+        (test_orders_csv_id, "sushi.customers.status"),
+        (test_orders_csv_id, "sushi.orders.order_id"),
+        (test_orders_csv_id, "sushi.orders.customer_id"),
+        (test_orders_query_id, "raw.orders.order_id"),
+        (test_orders_query_id, "raw.orders.customer_id"),
+        (test_orders_query_id, "sushi.customers.customer_id"),
+        (test_orders_query_id, "sushi.customers.status"),
+        (test_orders_query_id, "sushi.orders.order_id"),
+        (test_orders_query_id, "sushi.orders.customer_id"),
     }
     assert second_test_references == first_test_references
     customer_id_ref = first_references[

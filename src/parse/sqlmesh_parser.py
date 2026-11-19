@@ -624,17 +624,30 @@ class SQLMeshParser:
             tests_snapshot[key] = {"id": test_id, "snapshot_hash": digest, "seen": True}
             body = metadata.body if isinstance(metadata.body, dict) else {}
             column_qns: list[str] = []
+            fixture_base = path.parent
             for input_name, values in (body.get("inputs") or {}).items():
                 input_model = self.context.get_model(input_name)
                 if input_model is None:
                     continue
-                for column_name in fixture_column_names(values):
+                for column_name in fixture_column_names(
+                    values,
+                    dialect=input_model.dialect,
+                    base_path=fixture_base,
+                ):
                     column_qns.append(f"{input_model.name}.{column_name}")
             outputs = body.get("outputs") or {}
-            for column_name in fixture_column_names(outputs.get("query")):
+            for column_name in fixture_column_names(
+                outputs.get("query"),
+                dialect=model.dialect,
+                base_path=fixture_base,
+            ):
                 column_qns.append(f"{model.name}.{column_name}")
             for cte_name, values in (outputs.get("ctes") or {}).items():
-                for column_name in fixture_column_names(values):
+                for column_name in fixture_column_names(
+                    values,
+                    dialect=model.dialect,
+                    base_path=fixture_base,
+                ):
                     column_qns.append(f"{model.name}.{cte_name}.{column_name}")
             for column_qn in column_qns:
                 if column_qn not in columns_snapshot:

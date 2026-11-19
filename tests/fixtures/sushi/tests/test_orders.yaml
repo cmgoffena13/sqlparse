@@ -10,3 +10,32 @@ test_orders_exist:
       rows:
         - order_id: 1
           customer_id: 1
+
+test_orders_csv:
+  model: sushi.orders
+  inputs:
+    raw.orders:
+      format: csv
+      path: raw_orders.csv
+    sushi.customers:
+      format: csv
+      rows: |
+        customer_id,status
+        1,active
+  outputs:
+    query:
+      format: csv
+      rows: |
+        order_id,customer_id
+        1,1
+
+test_orders_query:
+  model: sushi.orders
+  inputs:
+    raw.orders:
+      query: SELECT 1 AS order_id, 1 AS customer_id
+    sushi.customers:
+      query: SELECT 1 AS customer_id, 'active' AS status
+  outputs:
+    query:
+      query: SELECT 1 AS order_id, 1 AS customer_id
