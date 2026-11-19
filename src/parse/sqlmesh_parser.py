@@ -489,8 +489,9 @@ class SQLMeshParser:
             source_query_name = reference["source_query_name"]
             source_qn = reference["source_column_qualified_name"]
             source_line = reference["source_line"]
+            ref_line = reference["ref_line"]
             ref_kind = reference["ref_kind"]
-            context = reference["context"]
+            ref_context = reference["ref_context"]
             if source_qn not in columns_snapshot:
                 continue
             ref_column_id = columns_snapshot[ref_qn]["id"]
@@ -514,11 +515,12 @@ class SQLMeshParser:
                     source_query_name,
                     source_qn,
                     source_line,
+                    ref_line,
                     ref_kind,
-                    context,
+                    ref_context,
                 ]
             )
-            key = self.db._column_lineage_key(ref_qn, source_qn, source_line, ref_kind)
+            key = self.db._column_lineage_key(ref_qn, source_qn, source_line, ref_line, ref_kind)
             prior = column_lineage_snapshot.get(key)
             if prior is None:
                 lineage_id = self.assigner.reserve("column_lineage", 1)[0]
@@ -534,8 +536,9 @@ class SQLMeshParser:
                         "source_query_name": source_query_name,
                         "source_column_qualified_name": source_qn,
                         "source_line": source_line,
+                        "ref_line": ref_line,
                         "ref_kind": ref_kind,
-                        "context": context,
+                        "ref_context": ref_context,
                         "snapshot_hash": digest,
                     }
                 )
@@ -559,8 +562,9 @@ class SQLMeshParser:
                         "source_query_name": source_query_name,
                         "source_column_qualified_name": source_qn,
                         "source_line": source_line,
+                        "ref_line": ref_line,
                         "ref_kind": ref_kind,
-                        "context": context,
+                        "ref_context": ref_context,
                         "snapshot_hash": digest,
                     }
                 )

@@ -25,8 +25,9 @@ class ExtractedColumnReference(TypedDict):
     source_query_name: str
     source_column_qualified_name: str
     source_line: int
+    ref_line: int
     ref_kind: str
-    context: str
+    ref_context: str
 
 
 def _line_span(expression: exp.Expression) -> tuple[int, int]:
@@ -170,8 +171,9 @@ def _append_reference(
             "source_query_name": source_query_name,
             "source_column_qualified_name": source_qn,
             "source_line": _source_line(source_expression),
+            "ref_line": _source_line(ref_expression),
             "ref_kind": ref_kind,
-            "context": ref_expression.sql(dialect=dialect),
+            "ref_context": ref_expression.sql(dialect=dialect),
         }
     )
 

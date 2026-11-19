@@ -67,13 +67,15 @@ def test_processor_indexes_files_and_directories() -> None:
                 str(row["ref_column_qualified_name"]),
                 str(row["source_column_qualified_name"]),
                 int(row["source_line"]),
+                int(row["ref_line"]),
                 str(row["ref_kind"]),
             ): dict(row)
             for row in db.fetch(
                 "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
                 "ref_column_qualified_name, source_column_id, source_models_id, "
                 "source_query_name, source_column_qualified_name, "
-                "source_line, ref_kind, context, snapshot_hash FROM column_lineage"
+                "source_line, ref_line, ref_kind, ref_context, snapshot_hash "
+                "FROM column_lineage"
             )
         }
         first_tests = {
@@ -138,13 +140,15 @@ def test_processor_indexes_files_and_directories() -> None:
                 str(row["ref_column_qualified_name"]),
                 str(row["source_column_qualified_name"]),
                 int(row["source_line"]),
+                int(row["ref_line"]),
                 str(row["ref_kind"]),
             ): dict(row)
             for row in db.fetch(
                 "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
                 "ref_column_qualified_name, source_column_id, source_models_id, "
                 "source_query_name, source_column_qualified_name, "
-                "source_line, ref_kind, context, snapshot_hash FROM column_lineage"
+                "source_line, ref_line, ref_kind, ref_context, snapshot_hash "
+                "FROM column_lineage"
             )
         }
         second_tests = {
@@ -363,53 +367,62 @@ def test_processor_indexes_files_and_directories() -> None:
         (test_orders_id, "sushi.orders.customer_id"),
     }
     assert second_test_references == first_test_references
-    customer_id_refs = [
-        row
-        for row in first_references.values()
-        if row["ref_column_qualified_name"] == "sushi.customers.customer_id"
+    customer_id_ref = first_references[
+        (
+            "sushi.customers.customer_id",
+            "sushi.customers.cte.raw.customers.customer_id",
+            3,
+            12,
+            "alias",
+        )
     ]
-    assert any(
-        row["ref_column_query_name"] == "sushi.customers"
-        and row["source_query_name"] == "sushi.customers.cte"
-        and row["source_column_qualified_name"] == "sushi.customers.cte.raw.customers.customer_id"
-        and row["ref_kind"] == "alias"
-        for row in customer_id_refs
-    )
-    amount_refs = [
-        row
-        for row in first_references.values()
-        if row["ref_column_qualified_name"] == "sushi.customers.amount"
+    assert customer_id_ref["ref_column_query_name"] == "sushi.customers"
+    assert customer_id_ref["source_query_name"] == "sushi.customers.cte"
+    amount_ref = first_references[
+        (
+            "sushi.customers.amount",
+            "sushi.customers.cte.raw.orders.amount_cents",
+            6,
+            15,
+            "expression",
+        )
     ]
-    assert any(
-        row["ref_column_query_name"] == "sushi.customers"
-        and row["source_query_name"] == "sushi.customers.cte"
-        and row["source_column_qualified_name"] == "sushi.customers.cte.raw.orders.amount_cents"
-        and row["ref_kind"] == "expression"
-        and "/ 100" in str(row["context"])
-        for row in amount_refs
-    )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customers.cte.raw.orders.amount_cents"
-        and row["source_column_qualified_name"] == "raw.orders.amount_cents"
-        and row["ref_kind"] == "alias"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_query_name"] == "sushi.customers.cte"
-        and row["ref_column_qualified_name"] == "sushi.customers.cte.raw.customers.customer_id"
-        and row["source_query_name"] == "raw.customers"
-        and row["source_column_qualified_name"] == "raw.customers.customer_id"
-        and row["ref_kind"] == "alias"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_query_name"] == "sushi.customers.cte"
-        and row["ref_column_qualified_name"] == "sushi.customers.cte.raw.orders.customer_id"
-        and row["source_query_name"] == "raw.orders"
-        and row["source_column_qualified_name"] == "raw.orders.customer_id"
-        and row["ref_kind"] == "alias"
-        for row in first_references.values()
-    )
+    assert amount_ref["ref_column_query_name"] == "sushi.customers"
+    assert amount_ref["source_query_name"] == "sushi.customers.cte"
+    assert "/ 100" in str(amount_ref["ref_context"])
+    cte_amount_ref = first_references[
+        (
+            "sushi.customers.cte.raw.orders.amount_cents",
+            "raw.orders.amount_cents",
+            6,
+            6,
+            "alias",
+        )
+    ]
+    assert cte_amount_ref["ref_column_query_name"] == "sushi.customers.cte"
+    assert cte_amount_ref["source_query_name"] == "raw.orders"
+    cte_customer_ref = first_references[
+        (
+            "sushi.customers.cte.raw.customers.customer_id",
+            "raw.customers.customer_id",
+            3,
+            3,
+            "alias",
+        )
+    ]
+    assert cte_customer_ref["ref_column_query_name"] == "sushi.customers.cte"
+    assert cte_customer_ref["source_query_name"] == "raw.customers"
+    cte_orders_customer_ref = first_references[
+        (
+            "sushi.customers.cte.raw.orders.customer_id",
+            "raw.orders.customer_id",
+            4,
+            4,
+            "alias",
+        )
+    ]
+    assert cte_orders_customer_ref["ref_column_query_name"] == "sushi.customers.cte"
+    assert cte_orders_customer_ref["source_query_name"] == "raw.orders"
     assert second_references == first_references
     assert all(
         row["ref_column_model_id"] == first_models[CUSTOMERS_FQN]["id"]
@@ -417,28 +430,40 @@ def test_processor_indexes_files_and_directories() -> None:
         if str(row["ref_column_qualified_name"]).startswith("sushi.customers.")
     )
     assert all(row["source_column_id"] is not None for row in first_references.values())
-    assert all("?" not in str(row["context"]) for row in first_references.values())
+    assert all("?" not in str(row["ref_context"]) for row in first_references.values())
     assert all(
         "?" not in str(row["source_column_qualified_name"]) for row in first_references.values()
     )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customer_orders.customer_id"
-        and row["source_column_qualified_name"] == "sushi.customers.customer_id"
-        and row["ref_kind"] == "alias"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customer_orders.status"
-        and row["source_column_qualified_name"] == "sushi.customers.status"
-        and row["ref_kind"] == "alias"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customer_orders.order_id"
-        and row["source_column_qualified_name"] == "sushi.orders.order_id"
-        and row["ref_kind"] == "alias"
-        for row in first_references.values()
-    )
+    customer_orders_customer_ref = first_references[
+        (
+            "sushi.customer_orders.customer_id",
+            "sushi.customers.customer_id",
+            10,
+            7,
+            "alias",
+        )
+    ]
+    assert customer_orders_customer_ref["ref_column_query_name"] == "sushi.customer_orders"
+    customer_orders_status_ref = first_references[
+        (
+            "sushi.customer_orders.status",
+            "sushi.customers.status",
+            10,
+            8,
+            "alias",
+        )
+    ]
+    assert customer_orders_status_ref["ref_column_query_name"] == "sushi.customer_orders"
+    customer_orders_order_ref = first_references[
+        (
+            "sushi.customer_orders.order_id",
+            "sushi.orders.order_id",
+            11,
+            9,
+            "alias",
+        )
+    ]
+    assert customer_orders_order_ref["ref_column_query_name"] == "sushi.customer_orders"
     assert (
         first_columns["sushi.customer_orders.join.sushi.customers.customer_id"]["query_name"]
         == "sushi.customer_orders.join"
@@ -455,49 +480,76 @@ def test_processor_indexes_files_and_directories() -> None:
         first_columns["sushi.customer_orders.group.sushi.orders.order_id"]["from_table"]
         == "sushi.orders"
     )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customer_orders.join.sushi.customers.customer_id"
-        and row["source_column_qualified_name"] == "sushi.customers.customer_id"
-        and row["ref_kind"] == "join"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customer_orders.join.sushi.orders.customer_id"
-        and row["source_column_qualified_name"] == "sushi.orders.customer_id"
-        and row["ref_kind"] == "join"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customer_orders.where.sushi.customers.status"
-        and row["source_column_qualified_name"] == "sushi.customers.status"
-        and row["ref_kind"] == "where"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_qualified_name"]
-        == "sushi.customer_orders.group.sushi.customers.customer_id"
-        and row["source_column_qualified_name"] == "sushi.customers.customer_id"
-        and row["ref_kind"] == "group"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.orders.join.sushi.customers.customer_id"
-        and row["source_column_qualified_name"] == "sushi.customers.customer_id"
-        and row["ref_kind"] == "join"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customers.cte.join.raw.customers.customer_id"
-        and row["source_column_qualified_name"] == "raw.customers.customer_id"
-        and row["ref_kind"] == "join"
-        for row in first_references.values()
-    )
-    assert any(
-        row["ref_column_qualified_name"] == "sushi.customers.cte.join.raw.orders.customer_id"
-        and row["source_column_qualified_name"] == "raw.orders.customer_id"
-        and row["ref_kind"] == "join"
-        for row in first_references.values()
-    )
+    join_customers_ref = first_references[
+        (
+            "sushi.customer_orders.join.sushi.customers.customer_id",
+            "sushi.customers.customer_id",
+            12,
+            12,
+            "join",
+        )
+    ]
+    assert join_customers_ref["ref_column_query_name"] == "sushi.customer_orders.join"
+    join_orders_ref = first_references[
+        (
+            "sushi.customer_orders.join.sushi.orders.customer_id",
+            "sushi.orders.customer_id",
+            12,
+            12,
+            "join",
+        )
+    ]
+    assert join_orders_ref["ref_column_query_name"] == "sushi.customer_orders.join"
+    where_status_ref = first_references[
+        (
+            "sushi.customer_orders.where.sushi.customers.status",
+            "sushi.customers.status",
+            13,
+            13,
+            "where",
+        )
+    ]
+    assert where_status_ref["ref_column_query_name"] == "sushi.customer_orders.where"
+    group_customer_ref = first_references[
+        (
+            "sushi.customer_orders.group.sushi.customers.customer_id",
+            "sushi.customers.customer_id",
+            15,
+            15,
+            "group",
+        )
+    ]
+    assert group_customer_ref["ref_column_query_name"] == "sushi.customer_orders.group"
+    orders_join_ref = first_references[
+        (
+            "sushi.orders.join.sushi.customers.customer_id",
+            "sushi.customers.customer_id",
+            14,
+            14,
+            "join",
+        )
+    ]
+    assert orders_join_ref["ref_column_query_name"] == "sushi.orders.join"
+    cte_join_customers_ref = first_references[
+        (
+            "sushi.customers.cte.join.raw.customers.customer_id",
+            "raw.customers.customer_id",
+            9,
+            9,
+            "join",
+        )
+    ]
+    assert cte_join_customers_ref["ref_column_query_name"] == "sushi.customers.cte.join"
+    cte_join_orders_ref = first_references[
+        (
+            "sushi.customers.cte.join.raw.orders.customer_id",
+            "raw.orders.customer_id",
+            9,
+            9,
+            "join",
+        )
+    ]
+    assert cte_join_orders_ref["ref_column_query_name"] == "sushi.customers.cte.join"
 
 
 def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:

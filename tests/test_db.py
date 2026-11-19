@@ -28,8 +28,9 @@ def test_recreate_schema_keeps_column_lineage_shape(tmp_path: Path) -> None:
         "source_query_name",
         "source_column_qualified_name",
         "source_line",
+        "ref_line",
         "ref_kind",
-        "context",
+        "ref_context",
         "snapshot_hash",
     ]
 

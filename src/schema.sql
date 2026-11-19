@@ -119,8 +119,9 @@ CREATE TABLE IF NOT EXISTS column_lineage (
     source_query_name               TEXT NOT NULL,
     source_column_qualified_name    TEXT NOT NULL,
     source_line                     INTEGER NOT NULL,
+    ref_line                        INTEGER NOT NULL,
     ref_kind                        TEXT NOT NULL,
-    context                         TEXT NOT NULL,
+    ref_context                     TEXT NOT NULL,
     snapshot_hash                   TEXT NOT NULL
 );
 

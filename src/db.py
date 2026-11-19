@@ -320,13 +320,14 @@ class ProjectDB:
     def get_column_lineage_snapshot(self) -> dict[str, ColumnLineageSnapshot]:
         cursor = self.connection.execute(
             "SELECT id, ref_column_qualified_name, source_column_qualified_name, "
-            "source_line, ref_kind, snapshot_hash FROM column_lineage"
+            "source_line, ref_line, ref_kind, snapshot_hash FROM column_lineage"
         )
         return {
             self._column_lineage_key(
                 str(row["ref_column_qualified_name"]),
                 str(row["source_column_qualified_name"]),
                 int(row["source_line"]),
+                int(row["ref_line"]),
                 str(row["ref_kind"]),
             ): self._column_lineage_snapshot(row)
             for row in cursor
@@ -368,9 +369,10 @@ class ProjectDB:
         ref_qn: str,
         source_qn: str,
         source_line: int,
+        ref_line: int,
         ref_kind: str,
     ) -> str:
-        return f"{ref_qn}\0{source_qn}\0{source_line}\0{ref_kind}"
+        return f"{ref_qn}\0{source_qn}\0{source_line}\0{ref_line}\0{ref_kind}"
 
     def _file_snapshot(self, row: sqlite3.Row) -> FileSnapshot:
         directory_id = row["directory_id"]
@@ -576,12 +578,12 @@ class ProjectDB:
                     id, ref_column_id, ref_column_model_id, ref_column_query_name,
                     ref_column_qualified_name, source_column_id, source_models_id,
                     source_query_name, source_column_qualified_name,
-                    source_line, ref_kind, context, snapshot_hash
+                    source_line, ref_line, ref_kind, ref_context, snapshot_hash
                 ) VALUES (
                     :id, :ref_column_id, :ref_column_model_id, :ref_column_query_name,
                     :ref_column_qualified_name, :source_column_id, :source_models_id,
                     :source_query_name, :source_column_qualified_name,
-                    :source_line, :ref_kind, :context, :snapshot_hash
+                    :source_line, :ref_line, :ref_kind, :ref_context, :snapshot_hash
                 )
                 """,
                 batches["column_lineage"],
