@@ -47,7 +47,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
                 "ref_column_qualified_name, source_column_id, source_models_id, "
                 "source_query_name, source_column_qualified_name, "
-                "source_line, source_column, ref_kind, context FROM column_references"
+                "source_line, ref_kind, context FROM column_references"
             )
         }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
@@ -80,7 +80,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
                 "ref_column_qualified_name, source_column_id, source_models_id, "
                 "source_query_name, source_column_qualified_name, "
-                "source_line, source_column, ref_kind, context FROM column_references"
+                "source_line, ref_kind, context FROM column_references"
             )
         }
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))
@@ -205,6 +205,7 @@ def test_processor_indexes_files_and_directories() -> None:
         and row["source_query_name"] == "sushi.customers.cte"
         and row["source_column_qualified_name"] == "sushi.customers.cte.raw.orders.amount_cents"
         and row["ref_kind"] == "expression"
+        and "/ 100" in str(row["context"])
         for row in amount_refs
     )
     assert any(

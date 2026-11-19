@@ -30,7 +30,6 @@ def test_recreate_schema_keeps_column_references_shape(tmp_path: Path) -> None:
         "source_query_name",
         "source_column_qualified_name",
         "source_line",
-        "source_column",
         "ref_kind",
         "context",
     ]

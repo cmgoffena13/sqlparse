@@ -230,7 +230,6 @@ class SQLMeshParser:
             source_query_name = reference["source_query_name"]
             source_qn = reference["source_column_qualified_name"]
             source_line = reference["source_line"]
-            source_column = reference["source_column"]
             ref_kind = reference["ref_kind"]
             context = reference["context"]
             if source_qn not in columns_snapshot:
@@ -261,7 +260,6 @@ class SQLMeshParser:
                         "source_query_name": source_query_name,
                         "source_column_qualified_name": source_qn,
                         "source_line": source_line,
-                        "source_column": source_column,
                         "ref_kind": ref_kind,
                         "context": context,
                     }
@@ -290,7 +288,6 @@ class SQLMeshParser:
                         "source_query_name": source_query_name,
                         "source_column_qualified_name": source_qn,
                         "source_line": source_line,
-                        "source_column": source_column,
                         "ref_kind": ref_kind,
                         "context": context,
                     }

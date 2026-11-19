@@ -73,7 +73,6 @@ CREATE TABLE IF NOT EXISTS column_references (
     source_query_name               TEXT NOT NULL,
     source_column_qualified_name    TEXT NOT NULL,
     source_line                     INTEGER NOT NULL,
-    source_column                   INTEGER NOT NULL,
     ref_kind                        TEXT NOT NULL,
     context                         TEXT NOT NULL
 );

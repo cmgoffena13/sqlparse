@@ -383,12 +383,12 @@ class ProjectDB:
                     id, ref_column_id, ref_column_model_id, ref_column_query_name,
                     ref_column_qualified_name, source_column_id, source_models_id,
                     source_query_name, source_column_qualified_name,
-                    source_line, source_column, ref_kind, context
+                    source_line, ref_kind, context
                 ) VALUES (
                     :id, :ref_column_id, :ref_column_model_id, :ref_column_query_name,
                     :ref_column_qualified_name, :source_column_id, :source_models_id,
                     :source_query_name, :source_column_qualified_name,
-                    :source_line, :source_column, :ref_kind, :context
+                    :source_line, :ref_kind, :context
                 )
                 """,
                 batches["column_references"],

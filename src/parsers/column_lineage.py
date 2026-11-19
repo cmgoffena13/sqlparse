@@ -23,7 +23,6 @@ class ExtractedColumnReference(TypedDict):
     source_query_name: str
     source_column_qualified_name: str
     source_line: int
-    source_column: int
     ref_kind: str
     context: str
 
@@ -40,15 +39,13 @@ def _line_span(expression: exp.Expression) -> tuple[int, int]:
     return line_start, line_end
 
 
-def _source_location(expression: exp.Expression) -> tuple[int, int]:
+def _source_line(expression: exp.Expression) -> int:
     source_line = 0
-    source_column = 0
     for node in expression.walk():
         if "line" in node.meta:
             source_line = int(node.meta["line"])
-            source_column = int(node.meta["col"]) if "col" in node.meta else 0
             break
-    return source_line, source_column
+    return source_line
 
 
 def _column_table_alias(expression: exp.Expression) -> str | None:
@@ -154,21 +151,20 @@ def _append_reference(
     ref_qn: str,
     source_query_name: str,
     source_qn: str,
-    expression: exp.Expression,
+    ref_expression: exp.Expression,
+    source_expression: exp.Expression,
     dialect: str,
     ref_kind: str,
 ) -> None:
-    source_line, source_column = _source_location(expression)
     refs.append(
         {
             "ref_column_query_name": ref_query_name,
             "ref_column_qualified_name": ref_qn,
             "source_query_name": source_query_name,
             "source_column_qualified_name": source_qn,
-            "source_line": source_line,
-            "source_column": source_column,
+            "source_line": _source_line(source_expression),
             "ref_kind": ref_kind,
-            "context": expression.sql(dialect=dialect),
+            "context": ref_expression.sql(dialect=dialect),
         }
     )
 
@@ -212,7 +208,8 @@ def _emit_cte_projection_refs(
                     ref_qn=ref_qn,
                     source_query_name=source_query_name,
                     source_qn=source_qn,
-                    expression=expression,
+                    ref_expression=expression,
+                    source_expression=expression,
                     dialect=dialect,
                     ref_kind="alias",
                 )
@@ -227,7 +224,8 @@ def _emit_cte_projection_refs(
                     ref_qn=ref_qn,
                     source_query_name=source_query_name,
                     source_qn=source_qn,
-                    expression=column,
+                    ref_expression=expression,
+                    source_expression=column,
                     dialect=dialect,
                     ref_kind="expression",
                 )
@@ -278,7 +276,8 @@ def _emit_root_lineage_refs(
                     ref_qn=ref_qn,
                     source_query_name=source_query_name,
                     source_qn=source_qn,
-                    expression=cast(exp.Expression, child.expression),
+                    ref_expression=cast(exp.Expression, node.expression),
+                    source_expression=cast(exp.Expression, child.expression),
                     dialect=dialect,
                     ref_kind=kind,
                 )
