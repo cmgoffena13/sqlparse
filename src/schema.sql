@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS columns (
     query_name          TEXT NOT NULL,
     name                TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
-    file_line          INTEGER NOT NULL,
+    file_line           INTEGER NOT NULL,
     context             TEXT NOT NULL
 );
 
