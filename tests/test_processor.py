@@ -493,91 +493,90 @@ def test_processor_indexes_files_and_directories() -> None:
     ]
     assert customer_orders_order_ref["ref_column_query_name"] == "sushi.customer_orders"
     assert (
-        first_columns["sushi.customer_orders.join.sushi.customers.customer_id"]["query_name"]
-        == "sushi.customer_orders.join"
+        first_columns["sushi.customer_orders.sushi.customers.customer_id"]["query_name"]
+        == "sushi.customer_orders"
     )
     assert (
-        first_columns["sushi.customer_orders.join.sushi.customers.customer_id"]["from_table"]
+        first_columns["sushi.customer_orders.sushi.customers.customer_id"]["from_table"]
         == "sushi.customers"
     )
     assert (
-        first_columns["sushi.customer_orders.where.sushi.customers.status"]["query_name"]
-        == "sushi.customer_orders.where"
+        first_columns["sushi.customer_orders.sushi.customers.status"]["query_name"]
+        == "sushi.customer_orders"
     )
     assert (
-        first_columns["sushi.customer_orders.group.sushi.orders.order_id"]["from_table"]
-        == "sushi.orders"
+        first_columns["sushi.customer_orders.sushi.orders.order_id"]["from_table"] == "sushi.orders"
     )
     join_customers_ref = first_references[
         (
-            "sushi.customer_orders.join.sushi.customers.customer_id",
+            "sushi.customer_orders.sushi.customers.customer_id",
             "sushi.customers.customer_id",
             12,
             12,
             "join",
         )
     ]
-    assert join_customers_ref["ref_column_query_name"] == "sushi.customer_orders.join"
+    assert join_customers_ref["ref_column_query_name"] == "sushi.customer_orders"
     join_orders_ref = first_references[
         (
-            "sushi.customer_orders.join.sushi.orders.customer_id",
+            "sushi.customer_orders.sushi.orders.customer_id",
             "sushi.orders.customer_id",
             12,
             12,
             "join",
         )
     ]
-    assert join_orders_ref["ref_column_query_name"] == "sushi.customer_orders.join"
+    assert join_orders_ref["ref_column_query_name"] == "sushi.customer_orders"
     where_status_ref = first_references[
         (
-            "sushi.customer_orders.where.sushi.customers.status",
+            "sushi.customer_orders.sushi.customers.status",
             "sushi.customers.status",
             13,
             13,
             "where",
         )
     ]
-    assert where_status_ref["ref_column_query_name"] == "sushi.customer_orders.where"
+    assert where_status_ref["ref_column_query_name"] == "sushi.customer_orders"
     group_customer_ref = first_references[
         (
-            "sushi.customer_orders.group.sushi.customers.customer_id",
+            "sushi.customer_orders.sushi.customers.customer_id",
             "sushi.customers.customer_id",
             15,
             15,
             "group",
         )
     ]
-    assert group_customer_ref["ref_column_query_name"] == "sushi.customer_orders.group"
+    assert group_customer_ref["ref_column_query_name"] == "sushi.customer_orders"
     orders_join_ref = first_references[
         (
-            "sushi.orders.join.sushi.customers.customer_id",
+            "sushi.orders.sushi.customers.customer_id",
             "sushi.customers.customer_id",
             14,
             14,
             "join",
         )
     ]
-    assert orders_join_ref["ref_column_query_name"] == "sushi.orders.join"
+    assert orders_join_ref["ref_column_query_name"] == "sushi.orders"
     cte_join_customers_ref = first_references[
         (
-            "sushi.customers.cte.join.raw.customers.customer_id",
+            "sushi.customers.cte.raw.customers.customer_id",
             "raw.customers.customer_id",
             9,
             9,
             "join",
         )
     ]
-    assert cte_join_customers_ref["ref_column_query_name"] == "sushi.customers.cte.join"
+    assert cte_join_customers_ref["ref_column_query_name"] == "sushi.customers.cte"
     cte_join_orders_ref = first_references[
         (
-            "sushi.customers.cte.join.raw.orders.customer_id",
+            "sushi.customers.cte.raw.orders.customer_id",
             "raw.orders.customer_id",
             9,
             9,
             "join",
         )
     ]
-    assert cte_join_orders_ref["ref_column_query_name"] == "sushi.customers.cte.join"
+    assert cte_join_orders_ref["ref_column_query_name"] == "sushi.customers.cte"
     assert first_models[CUSTOMER_STATUS_FQN]["kind"] == "FULL"
     assert first_models[CUSTOMER_STATUS_FQN]["description"] == (
         "Nested CTE chain over raw customers"
@@ -596,10 +595,10 @@ def test_processor_indexes_files_and_directories() -> None:
         "sushi.customer_status"
     )
     assert (
-        first_columns["sushi.customer_status.filtered.where.sushi.customer_status.base.status"][
+        first_columns["sushi.customer_status.filtered.sushi.customer_status.base.status"][
             "query_name"
         ]
-        == "sushi.customer_status.filtered.where"
+        == "sushi.customer_status.filtered"
     )
     nested_base_customer_ref = first_references[
         (
@@ -637,14 +636,14 @@ def test_processor_indexes_files_and_directories() -> None:
     assert nested_outer_customer_ref["source_query_name"] == "sushi.customer_status.filtered"
     nested_where_ref = first_references[
         (
-            "sushi.customer_status.filtered.where.sushi.customer_status.base.status",
+            "sushi.customer_status.filtered.sushi.customer_status.base.status",
             "sushi.customer_status.base.raw.customers.status",
             18,
             18,
             "where",
         )
     ]
-    assert nested_where_ref["ref_column_query_name"] == "sushi.customer_status.filtered.where"
+    assert nested_where_ref["ref_column_query_name"] == "sushi.customer_status.filtered"
 
 
 def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:

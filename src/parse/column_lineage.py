@@ -134,7 +134,13 @@ def _columns_from_query(
                     "context": expression.sql(dialect=dialect),
                 }
             )
-        columns.extend(_columns_from_clauses(query_name, scope, dialect, model_name=model_name))
+        seen = {column["qualified_name"] for column in columns}
+        for clause_column in _columns_from_clauses(
+            query_name, scope, dialect, model_name=model_name
+        ):
+            if clause_column["qualified_name"] not in seen:
+                columns.append(clause_column)
+                seen.add(clause_column["qualified_name"])
     return columns
 
 
@@ -221,8 +227,7 @@ def _columns_from_clauses(
     query_base: str, scope: Scope, dialect: str, *, model_name: str
 ) -> list[ExtractedColumn]:
     columns: list[ExtractedColumn] = []
-    for kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
-        query_name = f"{query_base}.{kind}"
+    for _kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
         for column in node.find_all(exp.Column):
             source = _table_column_qn(scope, column, model_name=model_name)
             if source is not None:
@@ -230,10 +235,10 @@ def _columns_from_clauses(
                 line_start, line_end = _line_span(column)
                 columns.append(
                     {
-                        "query_name": query_name,
+                        "query_name": query_base,
                         "from_table": from_table,
                         "name": column.name,
-                        "qualified_name": _qualified_name(query_name, from_table, column.name),
+                        "qualified_name": _qualified_name(query_base, from_table, column.name),
                         "data_type": cast(exp.DataType, column.type).sql(dialect=dialect),
                         "line_start": line_start,
                         "line_end": line_end,
@@ -252,15 +257,14 @@ def _emit_clause_refs(
     model_name: str,
 ) -> None:
     for kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
-        ref_query_name = f"{query_base}.{kind}"
         for column in node.find_all(exp.Column):
             source = _table_column_qn(scope, column, model_name=model_name)
             if source is not None:
                 source_query_name, source_qn = source
                 _append_reference(
                     refs,
-                    ref_query_name=ref_query_name,
-                    ref_qn=_qualified_name(ref_query_name, source_query_name, column.name),
+                    ref_query_name=query_base,
+                    ref_qn=_qualified_name(query_base, source_query_name, column.name),
                     source_query_name=source_query_name,
                     source_qn=source_qn,
                     ref_expression=node,
