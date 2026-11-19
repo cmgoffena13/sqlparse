@@ -10,6 +10,7 @@ CUSTOMERS_FQN = '"memory"."sushi"."customers"'
 CUSTOMER_ORDERS_FQN = '"memory"."sushi"."customer_orders"'
 ORDERS_FQN = '"memory"."sushi"."orders"'
 WAITERS_FQN = '"memory"."sushi"."waiters"'
+RAW_SEED_FQN = '"memory"."sushi"."raw_seed"'
 RAW_CUSTOMERS_FQN = '"memory"."raw"."customers"'
 RAW_ORDERS_FQN = '"memory"."raw"."orders"'
 
@@ -100,6 +101,10 @@ def test_processor_indexes_files_and_directories() -> None:
             "SELECT id FROM files WHERE path = ?",
             ("models/orders.sql",),
         )[0]
+        raw_seed = db.fetch(
+            "SELECT id FROM files WHERE path = ?",
+            ("models/raw_seed.sql",),
+        )[0]
         external = db.fetch(
             "SELECT id FROM files WHERE path = ?",
             ("external_models.yaml",),
@@ -115,12 +120,13 @@ def test_processor_indexes_files_and_directories() -> None:
     assert waiter["normalized_path"] == "models.waiters"
     assert customer["language"] == "sql"
     assert customer["normalized_path"] == "models/customers"
-    assert file_count == 10
+    assert file_count == 11
     assert set(first_models) == {
         CUSTOMERS_FQN,
         CUSTOMER_ORDERS_FQN,
         ORDERS_FQN,
         WAITERS_FQN,
+        RAW_SEED_FQN,
         RAW_CUSTOMERS_FQN,
         RAW_ORDERS_FQN,
     }
@@ -130,6 +136,8 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[ORDERS_FQN]["file_id"] == orders["id"]
     assert first_models[WAITERS_FQN]["kind"] == "FULL"
     assert first_models[WAITERS_FQN]["file_id"] == waiter["id"]
+    assert first_models[RAW_SEED_FQN]["kind"] == "SEED"
+    assert first_models[RAW_SEED_FQN]["file_id"] == raw_seed["id"]
     assert first_models[RAW_CUSTOMERS_FQN]["kind"] == "EXTERNAL"
     assert first_models[RAW_CUSTOMERS_FQN]["file_id"] == external["id"]
     assert first_models[RAW_ORDERS_FQN]["kind"] == "EXTERNAL"
@@ -311,6 +319,7 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         CUSTOMER_ORDERS_FQN,
         ORDERS_FQN,
         WAITERS_FQN,
+        RAW_SEED_FQN,
         RAW_CUSTOMERS_FQN,
         RAW_ORDERS_FQN,
     }
