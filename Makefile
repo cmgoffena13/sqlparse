@@ -47,6 +47,7 @@ compile:
 		--output-filename=sqlparse \
 		--python-flag=no_warnings \
 		--include-package=src \
+		--include-package=sqlglot \
 		--include-package=certifi \
 		--include-package-data=certifi \
 		--include-distribution-metadata=caio \
