@@ -50,6 +50,7 @@ class ModelSnapshot(TypedDict):
     kind: str
     config_start_line: int
     config_end_line: int
+    description: str | None
     seen: bool
 
 
@@ -58,6 +59,7 @@ class ColumnSnapshot(TypedDict):
     qualified_name: str
     line_start: int
     line_end: int
+    description: str | None
     seen: bool
 
 
@@ -221,7 +223,7 @@ class ProjectDB:
     def get_models_snapshot(self) -> dict[str, ModelSnapshot]:
         cursor = self.connection.execute(
             "SELECT id, file_id, qualified_name, kind, config_start_line, "
-            "config_end_line FROM models"
+            "config_end_line, description FROM models"
         )
         return {str(row["qualified_name"]): self._model_snapshot(row) for row in cursor}
 
@@ -231,7 +233,7 @@ class ProjectDB:
 
     def get_columns_snapshot(self) -> dict[str, ColumnSnapshot]:
         cursor = self.connection.execute(
-            "SELECT id, qualified_name, line_start, line_end FROM columns"
+            "SELECT id, qualified_name, line_start, line_end, description FROM columns"
         )
         return {str(row["qualified_name"]): self._column_snapshot(row) for row in cursor}
 
@@ -358,21 +360,25 @@ class ProjectDB:
 
     def _model_snapshot(self, row: sqlite3.Row) -> ModelSnapshot:
         file_id = row["file_id"]
+        description = row["description"]
         return {
             "id": int(row["id"]),
             "file_id": None if file_id is None else int(file_id),
             "kind": str(row["kind"]),
             "config_start_line": int(row["config_start_line"]),
             "config_end_line": int(row["config_end_line"]),
+            "description": None if description is None else str(description),
             "seen": False,
         }
 
     def _column_snapshot(self, row: sqlite3.Row) -> ColumnSnapshot:
+        description = row["description"]
         return {
             "id": int(row["id"]),
             "qualified_name": str(row["qualified_name"]),
             "line_start": int(row["line_start"]),
             "line_end": int(row["line_end"]),
+            "description": None if description is None else str(description),
             "seen": False,
         }
 
@@ -451,10 +457,10 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO models (
                     id, file_id, qualified_name, kind,
-                    config_start_line, config_end_line
+                    config_start_line, config_end_line, description
                 ) VALUES (
                     :id, :file_id, :qualified_name, :kind,
-                    :config_start_line, :config_end_line
+                    :config_start_line, :config_end_line, :description
                 )
                 """,
                 batches["models"],
@@ -503,10 +509,10 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO columns (
                     id, model_id, query_name, from_table, name,
-                    qualified_name, line_start, line_end, context
+                    qualified_name, line_start, line_end, context, description
                 ) VALUES (
                     :id, :model_id, :query_name, :from_table, :name,
-                    :qualified_name, :line_start, :line_end, :context
+                    :qualified_name, :line_start, :line_end, :context, :description
                 )
                 """,
                 batches["columns"],

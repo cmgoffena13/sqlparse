@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS models (
     qualified_name      TEXT NOT NULL,
     kind                TEXT NOT NULL,
     config_start_line   INTEGER NOT NULL,
-    config_end_line     INTEGER NOT NULL
+    config_end_line     INTEGER NOT NULL,
+    description         TEXT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS models_qualified_name_index ON models (qualified_name);
 
@@ -74,7 +75,8 @@ CREATE TABLE IF NOT EXISTS columns (
     qualified_name      TEXT NOT NULL,
     line_start          INTEGER NOT NULL,
     line_end            INTEGER NOT NULL,
-    context             TEXT NOT NULL
+    context             TEXT NOT NULL,
+    description         TEXT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS columns_qualified_name_index ON columns (qualified_name);
 

@@ -1,7 +1,8 @@
 MODEL (
   name sushi.customers,
   kind FULL,
-  audits [not_null_customer_id]
+  audits [not_null_customer_id],
+  description 'Customer grain with order amounts'
 );
 
 JINJA_QUERY_BEGIN;
@@ -16,8 +17,8 @@ WITH CTE AS (
     ON s.customer_id = o.customer_id
 )
 SELECT
-  customer_id,
-  {{ cents_to_dollars('amount_cents') }} AS amount,
-  status
+  customer_id, -- Customer identifier
+  {{ cents_to_dollars('amount_cents') }} AS amount, /* Order amount in dollars */
+  status -- Customer status
 FROM CTE
 JINJA_END;

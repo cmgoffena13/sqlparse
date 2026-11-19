@@ -23,14 +23,14 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, file_id, qualified_name, kind, config_start_line, "
-                "config_end_line FROM models"
+                "config_end_line, description FROM models"
             )
         }
         first_columns = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, model_id, query_name, from_table, name, qualified_name, "
-                "line_start, line_end, context FROM columns"
+                "line_start, line_end, context, description FROM columns"
             )
         }
         first_macros = {
@@ -77,14 +77,14 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, file_id, qualified_name, kind, config_start_line, "
-                "config_end_line FROM models"
+                "config_end_line, description FROM models"
             )
         }
         second_columns = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, model_id, query_name, from_table, name, qualified_name, "
-                "line_start, line_end, context FROM columns"
+                "line_start, line_end, context, description FROM columns"
             )
         }
         second_macros = {
@@ -184,8 +184,10 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[CUSTOMERS_FQN]["kind"] == "FULL"
     assert first_models[CUSTOMERS_FQN]["file_id"] == customer["id"]
     assert first_models[CUSTOMERS_FQN]["config_start_line"] == 1
-    assert first_models[CUSTOMERS_FQN]["config_end_line"] == 5
+    assert first_models[CUSTOMERS_FQN]["config_end_line"] == 6
+    assert first_models[CUSTOMERS_FQN]["description"] == "Customer grain with order amounts"
     assert first_models[ORDERS_FQN]["kind"] == "INCREMENTAL_BY_TIME_RANGE"
+    assert first_models[ORDERS_FQN]["description"] is None
     assert first_models[ORDERS_FQN]["file_id"] == orders["id"]
     assert first_models[ORDERS_FQN]["config_start_line"] == 1
     assert first_models[ORDERS_FQN]["config_end_line"] == 7
@@ -210,6 +212,10 @@ def test_processor_indexes_files_and_directories() -> None:
     assert second_models == first_models
     assert first_columns["sushi.customers.customer_id"]["query_name"] == "sushi.customers"
     assert first_columns["sushi.customers.customer_id"]["name"] == "customer_id"
+    assert first_columns["sushi.customers.customer_id"]["description"] == "Customer identifier"
+    assert first_columns["sushi.customers.amount"]["description"] == "Order amount in dollars"
+    assert first_columns["sushi.customers.status"]["description"] == "Customer status"
+    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["description"] is None
     assert (
         first_columns["sushi.customers.customer_id"]["model_id"]
         == first_models[CUSTOMERS_FQN]["id"]

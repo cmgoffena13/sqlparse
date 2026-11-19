@@ -126,6 +126,7 @@ class SQLMeshParser:
         kind = model.kind.name
         file_id = self._file_id(model._path, files_snapshot)
         config_start_line, config_end_line = model_config_lines(model)
+        description = model.description
         prior = models_snapshot.get(qualified_name)
         if prior is None:
             model_id = self.assigner.reserve("models", 1)[0]
@@ -137,6 +138,7 @@ class SQLMeshParser:
                     "kind": kind,
                     "config_start_line": config_start_line,
                     "config_end_line": config_end_line,
+                    "description": description,
                 }
             )
         else:
@@ -146,6 +148,7 @@ class SQLMeshParser:
                 or prior["file_id"] != file_id
                 or prior["config_start_line"] != config_start_line
                 or prior["config_end_line"] != config_end_line
+                or prior["description"] != description
             ):
                 self.batches["models"].append(
                     {
@@ -155,6 +158,7 @@ class SQLMeshParser:
                         "kind": kind,
                         "config_start_line": config_start_line,
                         "config_end_line": config_end_line,
+                        "description": description,
                     }
                 )
         models_snapshot[qualified_name] = {
@@ -163,6 +167,7 @@ class SQLMeshParser:
             "kind": kind,
             "config_start_line": config_start_line,
             "config_end_line": config_end_line,
+            "description": description,
             "seen": True,
         }
 
@@ -235,6 +240,7 @@ class SQLMeshParser:
         columns_snapshot: dict[str, ColumnSnapshot],
     ) -> None:
         model_id = models_snapshot[model.fqn]["id"]
+        column_descriptions = model.column_descriptions
         for column in extract_model_columns(model):
             query_name = column["query_name"]
             from_table = column["from_table"]
@@ -243,6 +249,7 @@ class SQLMeshParser:
             line_start = column["line_start"]
             line_end = column["line_end"]
             context = column["context"]
+            description = column_descriptions.get(name) if query_name == model.name else None
             prior = columns_snapshot.get(qualified_name)
             if prior is None:
                 column_id = self.assigner.reserve("columns", 1)[0]
@@ -257,6 +264,7 @@ class SQLMeshParser:
                         "line_start": line_start,
                         "line_end": line_end,
                         "context": context,
+                        "description": description,
                     }
                 )
                 columns_snapshot[qualified_name] = {
@@ -264,11 +272,16 @@ class SQLMeshParser:
                     "qualified_name": qualified_name,
                     "line_start": line_start,
                     "line_end": line_end,
+                    "description": description,
                     "seen": True,
                 }
                 continue
             column_id = prior["id"]
-            if prior["line_start"] != line_start or prior["line_end"] != line_end:
+            if (
+                prior["line_start"] != line_start
+                or prior["line_end"] != line_end
+                or prior["description"] != description
+            ):
                 self.batches["columns"].append(
                     {
                         "id": column_id,
@@ -280,6 +293,7 @@ class SQLMeshParser:
                         "line_start": line_start,
                         "line_end": line_end,
                         "context": context,
+                        "description": description,
                     }
                 )
             columns_snapshot[qualified_name] = {
@@ -287,6 +301,7 @@ class SQLMeshParser:
                 "qualified_name": qualified_name,
                 "line_start": line_start,
                 "line_end": line_end,
+                "description": description,
                 "seen": True,
             }
 
