@@ -18,6 +18,9 @@ _SKILL_BODY = """\
 # CAVEATS
  - A macro is expanded away, so column lineage does not show which macro produced a column.
  - A macro change affects columns only after rendering before and after the change.
+ - ``data_type`` is ``UNKNOWN`` when a select column is ambiguous. Alias the
+   column correctly and enable SQLMesh's ``AmbiguousOrInvalidColumn`` linter
+   rule to avoid it in the future.
 """
 
 

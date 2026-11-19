@@ -484,12 +484,12 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO columns (
                     id, model_id, query_name, from_table, name,
-                    qualified_name, line_start, line_end, context, description,
-                    snapshot_hash
+                    qualified_name, data_type, line_start, line_end, context,
+                    description, snapshot_hash
                 ) VALUES (
                     :id, :model_id, :query_name, :from_table, :name,
-                    :qualified_name, :line_start, :line_end, :context, :description,
-                    :snapshot_hash
+                    :qualified_name, :data_type, :line_start, :line_end, :context,
+                    :description, :snapshot_hash
                 )
                 """,
                 batches["columns"],

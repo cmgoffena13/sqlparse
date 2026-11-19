@@ -30,7 +30,8 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, model_id, query_name, from_table, name, qualified_name, "
-                "line_start, line_end, context, description, snapshot_hash FROM columns"
+                "data_type, line_start, line_end, context, description, snapshot_hash "
+                "FROM columns"
             )
         }
         first_macros = {
@@ -84,7 +85,8 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, model_id, query_name, from_table, name, qualified_name, "
-                "line_start, line_end, context, description, snapshot_hash FROM columns"
+                "data_type, line_start, line_end, context, description, snapshot_hash "
+                "FROM columns"
             )
         }
         second_macros = {
@@ -214,10 +216,15 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_columns["sushi.customers.customer_id"]["query_name"] == "sushi.customers"
     assert first_columns["sushi.customers.customer_id"]["name"] == "customer_id"
     assert first_columns["sushi.customers.customer_id"]["description"] == "Customer identifier"
+    assert first_columns["sushi.customers.customer_id"]["data_type"] == "INT"
     assert first_columns["sushi.customers.customer_id"]["snapshot_hash"]
     assert first_columns["sushi.customers.amount"]["description"] == "Order amount in dollars"
+    assert first_columns["sushi.customers.amount"]["data_type"] == "DOUBLE"
     assert first_columns["sushi.customers.status"]["description"] == "Customer status"
+    assert first_columns["sushi.customers.status"]["data_type"] == "TEXT"
     assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["description"] is None
+    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["data_type"] == "INT"
+    assert first_columns["sushi.customers.cte.raw.orders.amount_cents"]["data_type"] == "INT"
     assert (
         first_columns["sushi.customers.customer_id"]["model_id"]
         == first_models[CUSTOMERS_FQN]["id"]

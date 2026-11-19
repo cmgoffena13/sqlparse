@@ -1,5 +1,7 @@
 from pathlib import Path
+from typing import cast
 
+from sqlglot import exp
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
 
@@ -30,7 +32,7 @@ class SQLMeshParser:
         self.assigner = assigner
         self.root = root
         self.context = Context(paths=self.root, load=False)
-        self.context.load(update_schemas=False)
+        self.context.load(update_schemas=True)
         self.batches = self._new_batches()
 
     def _new_batches(self) -> dict[str, list[dict[str, object]]]:
@@ -253,6 +255,14 @@ class SQLMeshParser:
             line_end = column["line_end"]
             context = column["context"]
             description = column_descriptions.get(name) if query_name == model.name else None
+            typed_model = (
+                model
+                if query_name == model.name
+                else self.context.get_model(str(from_table), raise_if_missing=True)
+            )
+            data_type = cast(dict[str, exp.DataType], typed_model.columns_to_types)[name].sql(
+                dialect=typed_model.dialect
+            )
             digest = snapshot_hash(
                 [
                     model_id,
@@ -260,6 +270,7 @@ class SQLMeshParser:
                     from_table,
                     name,
                     qualified_name,
+                    data_type,
                     line_start,
                     line_end,
                     context,
@@ -277,6 +288,7 @@ class SQLMeshParser:
                         "from_table": from_table,
                         "name": name,
                         "qualified_name": qualified_name,
+                        "data_type": data_type,
                         "line_start": line_start,
                         "line_end": line_end,
                         "context": context,
@@ -300,6 +312,7 @@ class SQLMeshParser:
                         "from_table": from_table,
                         "name": name,
                         "qualified_name": qualified_name,
+                        "data_type": data_type,
                         "line_start": line_start,
                         "line_end": line_end,
                         "context": context,
