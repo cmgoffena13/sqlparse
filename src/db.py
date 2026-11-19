@@ -8,6 +8,7 @@ TABLE_BATCH_MAP = {
     "directories",
     "files",
     "models",
+    "columns",
 }
 
 
@@ -30,6 +31,14 @@ class ModelSnapshot(TypedDict):
     id: int
     file_id: int | None
     kind: str
+    seen: bool
+
+
+class ColumnSnapshot(TypedDict):
+    id: int
+    qualified_name: str
+    line_start: int
+    line_end: int
     seen: bool
 
 
@@ -174,6 +183,16 @@ class ProjectDB:
         model_ids = [row["id"] for row in models.values() if not row["seen"]]
         self.delete_ids("models", model_ids)
 
+    def get_columns_snapshot(self) -> dict[str, ColumnSnapshot]:
+        cursor = self.connection.execute(
+            "SELECT id, qualified_name, line_start, line_end FROM columns"
+        )
+        return {str(row["qualified_name"]): self._column_snapshot(row) for row in cursor}
+
+    def delete_columns(self, columns: dict[str, ColumnSnapshot]) -> None:
+        column_ids = [row["id"] for row in columns.values() if not row["seen"]]
+        self.delete_ids("columns", column_ids)
+
     def _file_snapshot(self, row: sqlite3.Row) -> FileSnapshot:
         directory_id = row["directory_id"]
         return {
@@ -192,6 +211,15 @@ class ProjectDB:
             "id": int(row["id"]),
             "file_id": None if file_id is None else int(file_id),
             "kind": str(row["kind"]),
+            "seen": False,
+        }
+
+    def _column_snapshot(self, row: sqlite3.Row) -> ColumnSnapshot:
+        return {
+            "id": int(row["id"]),
+            "qualified_name": str(row["qualified_name"]),
+            "line_start": int(row["line_start"]),
+            "line_end": int(row["line_end"]),
             "seen": False,
         }
 
@@ -225,6 +253,18 @@ class ProjectDB:
                 )
                 """,
                 batches["models"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR REPLACE INTO columns (
+                    id, model_id, query_name, from_table, name,
+                    qualified_name, line_start, line_end, context
+                ) VALUES (
+                    :id, :model_id, :query_name, :from_table, :name,
+                    :qualified_name, :line_start, :line_end, :context
+                )
+                """,
+                batches["columns"],
             )
 
     def close(self) -> None:

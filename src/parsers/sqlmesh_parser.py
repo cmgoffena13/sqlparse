@@ -3,7 +3,8 @@ from pathlib import Path
 from sqlmesh.core.context import Context
 
 from src.assigner import GlobalIDAssigner
-from src.db import FileSnapshot, ModelSnapshot, ProjectDB
+from src.db import ColumnSnapshot, FileSnapshot, ModelSnapshot, ProjectDB
+from src.parsers.column_lineage import extract_model_columns
 
 
 class SQLMeshParser:
@@ -59,6 +60,69 @@ class SQLMeshParser:
                 "kind": kind,
                 "seen": True,
             }
+
+    def sync_columns(
+        self,
+        models_snapshot: dict[str, ModelSnapshot],
+        columns_snapshot: dict[str, ColumnSnapshot],
+        column_batch: list[dict[str, object]],
+    ) -> None:
+        for model in self.context.models.values():
+            model_id = models_snapshot[model.fqn]["id"]
+            for column in extract_model_columns(model):
+                query_name = column["query_name"]
+                from_table = column["from_table"]
+                name = column["name"]
+                qualified_name = column["qualified_name"]
+                line_start = column["line_start"]
+                line_end = column["line_end"]
+                context = column["context"]
+                prior = columns_snapshot.get(qualified_name)
+                if prior is None:
+                    column_id = self.assigner.reserve("columns", 1)[0]
+                    column_batch.append(
+                        {
+                            "id": column_id,
+                            "model_id": model_id,
+                            "query_name": query_name,
+                            "from_table": from_table,
+                            "name": name,
+                            "qualified_name": qualified_name,
+                            "line_start": line_start,
+                            "line_end": line_end,
+                            "context": context,
+                        }
+                    )
+                    columns_snapshot[qualified_name] = {
+                        "id": column_id,
+                        "qualified_name": qualified_name,
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "seen": True,
+                    }
+                    continue
+                column_id = prior["id"]
+                if prior["line_start"] != line_start or prior["line_end"] != line_end:
+                    column_batch.append(
+                        {
+                            "id": column_id,
+                            "model_id": model_id,
+                            "query_name": query_name,
+                            "from_table": from_table,
+                            "name": name,
+                            "qualified_name": qualified_name,
+                            "line_start": line_start,
+                            "line_end": line_end,
+                            "context": context,
+                        }
+                    )
+                columns_snapshot[qualified_name] = {
+                    "id": column_id,
+                    "qualified_name": qualified_name,
+                    "line_start": line_start,
+                    "line_end": line_end,
+                    "seen": True,
+                }
 
     def _file_id(self, path: Path | None, files_snapshot: dict[str, FileSnapshot]) -> int | None:
         file_id = None

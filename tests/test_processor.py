@@ -21,10 +21,24 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch("SELECT id, file_id, qualified_name, kind FROM models")
         }
+        first_columns = {
+            str(row["qualified_name"]): dict(row)
+            for row in db.fetch(
+                "SELECT id, model_id, query_name, from_table, name, qualified_name, "
+                "line_start, line_end, context FROM columns"
+            )
+        }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
         second_models = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch("SELECT id, file_id, qualified_name, kind FROM models")
+        }
+        second_columns = {
+            str(row["qualified_name"]): dict(row)
+            for row in db.fetch(
+                "SELECT id, model_id, query_name, from_table, name, qualified_name, "
+                "line_start, line_end, context FROM columns"
+            )
         }
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))
         config = db.fetch(
@@ -77,6 +91,41 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[RAW_ORDERS_FQN]["kind"] == "EXTERNAL"
     assert first_models[RAW_ORDERS_FQN]["file_id"] == external["id"]
     assert second_models == first_models
+    assert first_columns["sushi.customers.customer_id"]["query_name"] == "sushi.customers"
+    assert first_columns["sushi.customers.customer_id"]["name"] == "customer_id"
+    assert (
+        first_columns["sushi.customers.customer_id"]["model_id"]
+        == first_models[CUSTOMERS_FQN]["id"]
+    )
+    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["query_name"] == (
+        "sushi.customers.cte"
+    )
+    assert (
+        first_columns["sushi.customers.cte.raw.customers.customer_id"]["from_table"]
+        == "raw.customers"
+    )
+    assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["from_table"] == (
+        "raw.orders"
+    )
+    assert first_columns["sushi.customers.cte.raw.customers.status"]["name"] == "status"
+    assert first_columns["sushi.customers.customer_id"]["from_table"] is None
+    assert first_columns["sushi.customers.customer_id"]["line_start"] == 16
+    assert first_columns["sushi.customers.customer_id"]["line_end"] == 16
+    assert first_columns["sushi.customers.status"]["line_start"] == 17
+    assert first_columns["sushi.customers.status"]["line_end"] == 17
+    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["line_start"] == 8
+    assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["line_end"] == 8
+    assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["line_start"] == 9
+    assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["line_end"] == 9
+    assert first_columns["sushi.customers.cte.raw.customers.status"]["line_start"] == 10
+    assert first_columns["sushi.customers.cte.raw.customers.status"]["line_end"] == 10
+    assert first_columns["raw.customers.customer_id"]["from_table"] is None
+    assert first_columns["raw.customers.customer_id"]["query_name"] == "raw.customers"
+    assert (
+        first_columns["raw.customers.customer_id"]["model_id"]
+        == first_models[RAW_CUSTOMERS_FQN]["id"]
+    )
+    assert second_columns == first_columns
 
 
 def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:
@@ -88,10 +137,16 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         before = {
             str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM models")
         }
+        before_columns = {
+            str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM columns")
+        }
         (root / "models" / "customers.sql").unlink()
         ProjectProcessor(db, root).process()
         after = {
             str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM models")
+        }
+        after_columns = {
+            str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM columns")
         }
     finally:
         db.close()
@@ -102,6 +157,12 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         RAW_CUSTOMERS_FQN,
         RAW_ORDERS_FQN,
     }
+    assert "sushi.customers.customer_id" in before_columns
+    assert "sushi.customers.cte.raw.customers.customer_id" in before_columns
+    assert "sushi.customers.cte.raw.orders.customer_id" in before_columns
+    assert "sushi.customers.customer_id" not in after_columns
+    assert "sushi.customers.cte.raw.customers.customer_id" not in after_columns
+    assert "raw.customers.customer_id" in after_columns
 
 
 def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) -> None:

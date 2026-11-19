@@ -41,6 +41,7 @@ class ProjectProcessor:
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
         self.models_snapshot = self.db.get_models_snapshot()
+        self.columns_snapshot = self.db.get_columns_snapshot()
         self.parser = SQLMeshParser(self.db, self.assigner, self.root)
 
     def _process_directories(self, directory_names: list[str], dir_rel: str) -> None:
@@ -233,6 +234,13 @@ class ProjectProcessor:
             self.db_batches["models"],
         )
         self._insert_batch(final=True)
+        self.parser.sync_columns(
+            self.models_snapshot,
+            self.columns_snapshot,
+            self.db_batches["columns"],
+        )
+        self._insert_batch(final=True)
+        self.db.delete_columns(self.columns_snapshot)
         self.db.delete_models(self.models_snapshot)
         self.db.delete_files(self.files_snapshot)
         self.db.delete_directories(self.directories_snapshot)

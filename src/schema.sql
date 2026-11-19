@@ -59,11 +59,14 @@ CREATE TABLE IF NOT EXISTS columns (
     id                  INTEGER NOT NULL PRIMARY KEY,
     model_id            INTEGER NOT NULL REFERENCES models(id),
     query_name          TEXT NOT NULL,
+    from_table          TEXT NULL,
     name                TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
-    file_line           INTEGER NOT NULL,
+    line_start          INTEGER NOT NULL,
+    line_end            INTEGER NOT NULL,
     context             TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS columns_qualified_name_index ON columns (qualified_name);
 
 CREATE TABLE IF NOT EXISTS column_references_staging (
     id                              INTEGER NOT NULL,
