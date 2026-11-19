@@ -160,24 +160,6 @@ class ProjectDB:
         row = self.connection.execute(query).fetchone()
         return 0 if row is None else int(row["max_id"])
 
-    def get_watermark(self) -> tuple[int, int]:
-        row = self.connection.execute(
-            "SELECT last_full_parse, last_incremental FROM watermarks WHERE id = 1"
-        ).fetchone()
-        if row is None:
-            raise RuntimeError("watermarks row is missing")
-        last_incremental = 0 if row["last_incremental"] is None else int(row["last_incremental"])
-        return int(row["last_full_parse"]), last_incremental
-
-    def set_watermark(self, last_full_parse: int | None, last_incremental: int) -> None:
-        if last_full_parse is not None:
-            query = "UPDATE watermarks SET last_full_parse = ?, last_incremental = ? WHERE id = 1"
-            params = (last_full_parse, last_incremental)
-        else:
-            query = "UPDATE watermarks SET last_incremental = ? WHERE id = 1"
-            params = (last_incremental,)
-        self.exec_tran(query, params)
-
     def delete_ids(self, table: str, ids: list[int]) -> None:
         if not ids:
             return

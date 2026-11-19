@@ -32,7 +32,6 @@ class ProjectProcessor:
         self.assigner = GlobalIDAssigner(db)
         self.root = root.resolve()
         self._index_ignore_spec = path_spec_for_indexing(self.root)
-        self.last_full_parse, self.last_incremental = self.db.get_watermark()
         self.db_batch_size = 1000
         self.db_batches = self._new_batches()
         self.files_skipped: int = 0
@@ -231,53 +230,17 @@ class ProjectProcessor:
             self._process_files(file_names, directory_path, dir_rel, full)
 
         self._insert_batch(final=True)
-        self.parser.sync_models(
-            self.files_snapshot,
-            self.models_snapshot,
-            self.db_batches["models"],
-        )
-        self._insert_batch(final=True)
-        self.parser.sync_macros(
-            self.macros_snapshot,
-            self.db_batches["macros"],
-        )
-        self._insert_batch(final=True)
-        self.parser.sync_model_macros(
-            self.models_snapshot,
-            self.macros_snapshot,
-            self.model_macros_snapshot,
-            self.db_batches["model_macros"],
-        )
-        self._insert_batch(final=True)
-        self.parser.sync_columns(
-            self.models_snapshot,
-            self.columns_snapshot,
-            self.db_batches["columns"],
-        )
-        self._insert_batch(final=True)
-        self.parser.sync_column_references(
-            self.models_snapshot,
-            self.columns_snapshot,
-            self.column_references_snapshot,
-            self.db_batches["column_references"],
-        )
-        self._insert_batch(final=True)
-        self.db.delete_column_references(self.column_references_snapshot)
-        self.db.delete_model_macros(self.model_macros_snapshot)
-        self.db.delete_macros(self.macros_snapshot)
-        self.db.delete_columns(self.columns_snapshot)
-        self.db.delete_models(self.models_snapshot)
         self.db.delete_files(self.files_snapshot)
         self.db.delete_directories(self.directories_snapshot)
 
-        end_epoch = int(time.time())
-        if full:
-            self.last_full_parse = end_epoch
-            self.last_incremental = end_epoch
-        else:
-            self.last_full_parse = None
-            self.last_incremental = end_epoch
-        self.db.set_watermark(self.last_full_parse, self.last_incremental)
+        self.parser.sync(
+            self.files_snapshot,
+            self.models_snapshot,
+            self.macros_snapshot,
+            self.model_macros_snapshot,
+            self.columns_snapshot,
+            self.column_references_snapshot,
+        )
 
         duration_ms = round((time.perf_counter() - start_time) * 1000)
         indexed = (

@@ -1,13 +1,6 @@
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 
-CREATE TABLE IF NOT EXISTS watermarks (
-    id                  INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
-    last_full_parse     INTEGER NOT NULL DEFAULT 0,
-    last_incremental    INTEGER DEFAULT 0
-);
-INSERT OR IGNORE INTO watermarks (id, last_full_parse, last_incremental) VALUES (1, 0, 0);
-
 CREATE TABLE IF NOT EXISTS index_root (
     id      INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
     path    TEXT NOT NULL

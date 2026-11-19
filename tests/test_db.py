@@ -8,12 +8,10 @@ from src.git_utils import relative_path_is_ignored
 from src.utils import line_count
 
 
-def test_recreate_schema_resets_the_watermark(tmp_path: Path) -> None:
+def test_recreate_schema_keeps_column_references_shape(tmp_path: Path) -> None:
     db = ProjectDB(tmp_path)
     try:
-        db.set_watermark(5, 6)
         db.recreate_schema()
-        watermark = db.get_watermark()
         reference_columns = [
             row["name"] for row in db.fetch("PRAGMA table_info(column_references)")
         ]
@@ -21,7 +19,6 @@ def test_recreate_schema_resets_the_watermark(tmp_path: Path) -> None:
             db.table_max_id("not_a_table")
     finally:
         db.close()
-    assert watermark == (0, 0)
     assert reference_columns == [
         "id",
         "ref_column_id",
