@@ -89,7 +89,7 @@ def test_processor_indexes_files_and_directories() -> None:
             (int(row["test_id"]), str(row["qualified_name"]))
             for row in db.fetch(
                 "SELECT tr.test_id, c.qualified_name FROM test_references tr "
-                "JOIN columns c ON c.id = tr.column_id"
+                "INNER JOIN columns c ON c.id = tr.column_id"
             )
         }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
@@ -162,7 +162,7 @@ def test_processor_indexes_files_and_directories() -> None:
             (int(row["test_id"]), str(row["qualified_name"]))
             for row in db.fetch(
                 "SELECT tr.test_id, c.qualified_name FROM test_references tr "
-                "JOIN columns c ON c.id = tr.column_id"
+                "INNER JOIN columns c ON c.id = tr.column_id"
             )
         }
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))

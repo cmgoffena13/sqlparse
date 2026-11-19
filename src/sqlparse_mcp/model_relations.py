@@ -10,9 +10,9 @@ SELECT DISTINCT
     ref_models.qualified_name AS dependent_name,
     source_models.qualified_name AS dependency_name
 FROM column_lineage AS lineage
-JOIN models AS ref_models
+INNER JOIN models AS ref_models
     ON ref_models.id = lineage.ref_column_model_id
-JOIN models AS source_models
+INNER JOIN models AS source_models
     ON source_models.id = lineage.source_models_id
 WHERE lineage.ref_column_model_id != lineage.source_models_id
 """

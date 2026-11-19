@@ -8,6 +8,7 @@ from fastmcp import Context, FastMCP
 
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
+from src.sqlparse_mcp.column_relations import get_column_relations as run_column_relations
 from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_tree
 from src.sqlparse_mcp.model_relations import get_model_relations as run_model_relations
 from src.sqlparse_mcp.search import search as run_search
@@ -95,3 +96,31 @@ def get_model_relations(
     ``dependents`` lists downstream models that read it.
     """
     return run_model_relations(_db(ctx), model_name, relation)
+
+
+@mcp.tool()
+def get_column_relations(
+    ctx: Context,
+    model_name: str,
+    column_name: str,
+    query_name: str | None = None,
+    relation: Literal["dependents", "dependencies"] = "dependents",
+    include_tests: bool = False,
+) -> str:
+    """
+    Return column relations for ``model_name`` / ``query_name`` / ``column_name``.
+
+    ``dependencies`` lists upstream columns this column reads.
+    ``dependents`` lists downstream columns that read it.
+
+    ``query_name`` defaults to ``$`` (final output query). Use a CTE name for CTE columns.
+    Excludes test files from dependents by default; set ``include_tests`` to include them.
+    """
+    return run_column_relations(
+        _db(ctx),
+        model_name,
+        query_name,
+        column_name,
+        relation,
+        include_tests=include_tests,
+    )

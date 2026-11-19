@@ -19,6 +19,7 @@
 ## SQL Standards
  - NEVER alias a column name as the exact same name.
  - NEVER check the existence of a record before querying.
+ - NEVER use `JOIN`, use `INNER JOIN` instead.
 
 ## Testing Standards
  - Scan before test creation to determine if a new test needs written or a test can be modified.

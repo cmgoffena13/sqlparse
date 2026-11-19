@@ -64,6 +64,33 @@ async def _print_tools() -> None:
                 )
             ),
         )
+        _print_section(
+            "COLUMN DEPENDENCIES",
+            _body(
+                await client.call_tool(
+                    "get_column_relations",
+                    {
+                        "model_name": "sushi.customers",
+                        "column_name": "customer_id",
+                        "relation": "dependencies",
+                    },
+                )
+            ),
+        )
+        _print_section(
+            "COLUMN DEPENDENTS",
+            _body(
+                await client.call_tool(
+                    "get_column_relations",
+                    {
+                        "model_name": "sushi.customers",
+                        "column_name": "customer_id",
+                        "relation": "dependents",
+                        "include_tests": True,
+                    },
+                )
+            ),
+        )
 
 
 def main() -> None:
