@@ -12,6 +12,8 @@ BATCH_TABLES = {
     "model_macros",
     "columns",
     "column_lineage",
+    "tests",
+    "test_references",
 }
 
 ASSIGNER_TABLES = {
@@ -21,6 +23,7 @@ ASSIGNER_TABLES = {
     "macros",
     "columns",
     "column_lineage",
+    "tests",
 }
 
 
@@ -36,7 +39,6 @@ class FileSnapshot(TypedDict):
     content_hash: str
     mtime_ns: int
     size_bytes: int
-    line_count: int
 
 
 class ModelSnapshot(TypedDict):
@@ -70,6 +72,19 @@ class ColumnLineageSnapshot(TypedDict):
     id: int
     ref_column_id: int
     source_column_id: int
+    seen: bool
+
+
+class TestSnapshot(TypedDict):
+    id: int
+    file_id: int
+    name: str
+    seen: bool
+
+
+class TestReferenceSnapshot(TypedDict):
+    test_id: int
+    column_id: int
     seen: bool
 
 
@@ -179,8 +194,7 @@ class ProjectDB:
 
     def get_files_snapshot(self) -> dict[str, FileSnapshot]:
         cursor = self.connection.execute(
-            "SELECT id, directory_id, path, content_hash, mtime_ns, size_bytes, "
-            "line_count FROM files"
+            "SELECT id, directory_id, path, content_hash, mtime_ns, size_bytes FROM files"
         )
         return {str(row["path"]): self._file_snapshot(row) for row in cursor}
 
@@ -251,6 +265,33 @@ class ProjectDB:
         reference_ids = [row["id"] for row in column_lineage.values() if not row["seen"]]
         self.delete_ids("column_lineage", reference_ids)
 
+    def get_tests_snapshot(self) -> dict[str, TestSnapshot]:
+        cursor = self.connection.execute("SELECT id, file_id, model_id, name FROM tests")
+        return {f"{row['file_id']}:{row['name']}": self._test_snapshot(row) for row in cursor}
+
+    def delete_tests(self, tests: dict[str, TestSnapshot]) -> None:
+        test_ids = [row["id"] for row in tests.values() if not row["seen"]]
+        self.delete_ids("tests", test_ids)
+
+    def get_test_references_snapshot(self) -> dict[str, TestReferenceSnapshot]:
+        cursor = self.connection.execute("SELECT test_id, column_id FROM test_references")
+        return {
+            f"{row['test_id']}:{row['column_id']}": self._test_reference_snapshot(row)
+            for row in cursor
+        }
+
+    def delete_test_references(self, test_references: dict[str, TestReferenceSnapshot]) -> None:
+        rows = [
+            (row["test_id"], row["column_id"])
+            for row in test_references.values()
+            if not row["seen"]
+        ]
+        with self.connection:
+            self.connection.executemany(
+                "DELETE FROM test_references WHERE test_id = ? AND column_id = ?",
+                rows,
+            )
+
     def _column_lineage_key(
         self,
         ref_qn: str,
@@ -269,7 +310,6 @@ class ProjectDB:
             "content_hash": str(row["content_hash"]),
             "mtime_ns": int(row["mtime_ns"]),
             "size_bytes": int(row["size_bytes"]),
-            "line_count": int(row["line_count"]),
         }
 
     def _model_snapshot(self, row: sqlite3.Row) -> ModelSnapshot:
@@ -312,6 +352,21 @@ class ProjectDB:
             "seen": False,
         }
 
+    def _test_snapshot(self, row: sqlite3.Row) -> TestSnapshot:
+        return {
+            "id": int(row["id"]),
+            "file_id": int(row["file_id"]),
+            "name": str(row["name"]),
+            "seen": False,
+        }
+
+    def _test_reference_snapshot(self, row: sqlite3.Row) -> TestReferenceSnapshot:
+        return {
+            "test_id": int(row["test_id"]),
+            "column_id": int(row["column_id"]),
+            "seen": False,
+        }
+
     def bulk_insert(self, batches: dict[str, list[dict[str, object]]]) -> None:
         with self.connection:
             self.connection.executemany(
@@ -325,10 +380,10 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO files (
                     id, directory_id, name, path, normalized_path, language,
-                    content_hash, mtime_ns, size_bytes, line_count
+                    content_hash, mtime_ns, size_bytes, line_count, is_test
                 ) VALUES (
                     :id, :directory_id, :name, :path, :normalized_path, :language,
-                    :content_hash, :mtime_ns, :size_bytes, :line_count
+                    :content_hash, :mtime_ns, :size_bytes, :line_count, :is_test
                 )
                 """,
                 batches["files"],
@@ -390,6 +445,26 @@ class ProjectDB:
                 )
                 """,
                 batches["column_lineage"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR REPLACE INTO tests (
+                    id, file_id, model_id, name
+                ) VALUES (
+                    :id, :file_id, :model_id, :name
+                )
+                """,
+                batches["tests"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR IGNORE INTO test_references (
+                    test_id, column_id
+                ) VALUES (
+                    :test_id, :column_id
+                )
+                """,
+                batches["test_references"],
             )
 
     def close(self) -> None:

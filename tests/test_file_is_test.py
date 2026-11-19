@@ -1,0 +1,11 @@
+from src.processor import file_path_is_test
+
+
+def test_file_path_is_test_rules() -> None:
+    assert file_path_is_test("tests/test_orders.yaml")
+    assert file_path_is_test("tests/helpers.yaml")
+    assert file_path_is_test("test_orders.yaml")
+    assert file_path_is_test("pkg/orders_test.yml")
+    assert not file_path_is_test("models/orders.sql")
+    assert not file_path_is_test("sqlmesh/core/test/definition.py")
+    assert not file_path_is_test("config.yaml")

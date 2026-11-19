@@ -22,6 +22,16 @@ def _language(file_extension: str) -> str | None:
     return languages.get(file_extension)
 
 
+def file_path_is_test(relative_path: str) -> bool:
+    parts = relative_path.split("/")
+    name = parts[-1]
+    return (
+        "tests" in parts
+        or (name.startswith("test_") and name.endswith((".yaml", ".yml")))
+        or name.endswith(("_test.yaml", "_test.yml"))
+    )
+
+
 def _join_rel(dir_rel: str, name: str) -> str:
     return name if not dir_rel else f"{dir_rel}/{name}"
 
@@ -121,7 +131,6 @@ class ProjectProcessor:
                     "content_hash": prior_hash,
                     "mtime_ns": mtime_ns,
                     "size_bytes": size_bytes,
-                    "line_count": prior["line_count"],
                 }
                 return
         else:
@@ -151,6 +160,7 @@ class ProjectProcessor:
             "mtime_ns": mtime_ns,
             "size_bytes": size_bytes,
             "line_count": line_count,
+            "is_test": file_path_is_test(file_relative_path),
         }
         if (
             not existed
@@ -166,7 +176,6 @@ class ProjectProcessor:
             "content_hash": file_hash,
             "mtime_ns": mtime_ns,
             "size_bytes": size_bytes,
-            "line_count": line_count,
         }
 
         if full or file_hash != prior_hash:

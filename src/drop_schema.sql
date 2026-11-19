@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS test_references;
+DROP TABLE IF EXISTS tests;
 DROP TABLE IF EXISTS column_lineage;
 DROP TABLE IF EXISTS columns;
 DROP TABLE IF EXISTS model_macros;

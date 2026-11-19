@@ -13,8 +13,24 @@ from src.db import (
     ModelMacroSnapshot,
     ModelSnapshot,
     ProjectDB,
+    TestReferenceSnapshot,
+    TestSnapshot,
 )
 from src.parse.column_lineage import extract_model_column_references, extract_model_columns
+
+
+def _fixture_column_names(values: object) -> list[str]:
+    names: list[str] = []
+    if isinstance(values, dict):
+        columns = values.get("columns")
+        rows = values.get("rows")
+        names = list(columns) if isinstance(columns, dict) else names
+        names = (
+            list(rows[0])
+            if not names and isinstance(rows, list) and rows and isinstance(rows[0], dict)
+            else names
+        )
+    return names
 
 
 class SQLMeshParser:
@@ -48,6 +64,19 @@ class SQLMeshParser:
             self._flush()
         self.db.delete_model_macros(model_macros_snapshot)
         self.db.delete_macros(macros_snapshot)
+
+        tests_snapshot = self.db.get_tests_snapshot()
+        test_references_snapshot = self.db.get_test_references_snapshot()
+        self._sync_tests(
+            files_snapshot,
+            models_snapshot,
+            columns_snapshot,
+            tests_snapshot,
+            test_references_snapshot,
+        )
+        self._flush()
+        self.db.delete_test_references(test_references_snapshot)
+        self.db.delete_tests(tests_snapshot)
 
         column_lineage_snapshot = self.db.get_column_lineage_snapshot()
         for model in self.context.models.values():
@@ -296,6 +325,74 @@ class SQLMeshParser:
                 "source_column_id": source_column_id,
                 "seen": True,
             }
+
+    def _sync_tests(
+        self,
+        files_snapshot: dict[str, FileSnapshot],
+        models_snapshot: dict[str, ModelSnapshot],
+        columns_snapshot: dict[str, ColumnSnapshot],
+        tests_snapshot: dict[str, TestSnapshot],
+        test_references_snapshot: dict[str, TestReferenceSnapshot],
+    ) -> None:
+        for metadata in self.context._model_test_metadata:
+            file_id = self._file_id(metadata.path, files_snapshot)
+            model = self.context.get_model(metadata.model_name)
+            if file_id is None or model is None or model.fqn not in models_snapshot:
+                continue
+            model_id = models_snapshot[model.fqn]["id"]
+            name = metadata.test_name
+            key = f"{file_id}:{name}"
+            prior = tests_snapshot.get(key)
+            test_id = self.assigner.reserve("tests", 1)[0] if prior is None else prior["id"]
+            self.batches["tests"].append(
+                {
+                    "id": test_id,
+                    "file_id": file_id,
+                    "model_id": model_id,
+                    "name": name,
+                }
+            )
+            tests_snapshot[key] = {
+                "id": test_id,
+                "file_id": file_id,
+                "name": name,
+                "seen": True,
+            }
+            body = metadata.body if isinstance(metadata.body, dict) else {}
+            column_qns: list[str] = []
+            for input_name, values in (body.get("inputs") or {}).items():
+                input_model = self.context.get_model(input_name)
+                if input_model is None:
+                    continue
+                for column_name in _fixture_column_names(values):
+                    column_qns.append(f"{input_model.name}.{column_name}")
+            outputs = body.get("outputs") or {}
+            for column_name in _fixture_column_names(outputs.get("query")):
+                column_qns.append(f"{model.name}.{column_name}")
+            for cte_name, values in (outputs.get("ctes") or {}).items():
+                for column_name in _fixture_column_names(values):
+                    column_qns.append(f"{model.name}.{cte_name}.{column_name}")
+            for column_qn in column_qns:
+                if column_qn not in columns_snapshot:
+                    continue
+                column_id = columns_snapshot[column_qn]["id"]
+                ref_key = f"{test_id}:{column_id}"
+                prior_ref = test_references_snapshot.get(ref_key)
+                if prior_ref is None:
+                    self.batches["test_references"].append(
+                        {"test_id": test_id, "column_id": column_id}
+                    )
+                    test_references_snapshot[ref_key] = {
+                        "test_id": test_id,
+                        "column_id": column_id,
+                        "seen": True,
+                    }
+                    continue
+                test_references_snapshot[ref_key] = {
+                    "test_id": test_id,
+                    "column_id": column_id,
+                    "seen": True,
+                }
 
     def _file_id(self, path: Path | None, files_snapshot: dict[str, FileSnapshot]) -> int | None:
         file_id = None

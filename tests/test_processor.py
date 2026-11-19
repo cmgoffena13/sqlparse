@@ -51,6 +51,17 @@ def test_processor_indexes_files_and_directories() -> None:
                 "source_line, ref_kind, context FROM column_lineage"
             )
         }
+        first_tests = {
+            str(row["name"]): dict(row)
+            for row in db.fetch("SELECT id, file_id, model_id, name FROM tests")
+        }
+        first_test_references = {
+            (int(row["test_id"]), str(row["qualified_name"]))
+            for row in db.fetch(
+                "SELECT tr.test_id, c.qualified_name FROM test_references tr "
+                "JOIN columns c ON c.id = tr.column_id"
+            )
+        }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
         second_models = {
             str(row["qualified_name"]): dict(row)
@@ -84,17 +95,28 @@ def test_processor_indexes_files_and_directories() -> None:
                 "source_line, ref_kind, context FROM column_lineage"
             )
         }
+        second_tests = {
+            str(row["name"]): dict(row)
+            for row in db.fetch("SELECT id, file_id, model_id, name FROM tests")
+        }
+        second_test_references = {
+            (int(row["test_id"]), str(row["qualified_name"]))
+            for row in db.fetch(
+                "SELECT tr.test_id, c.qualified_name FROM test_references tr "
+                "JOIN columns c ON c.id = tr.column_id"
+            )
+        }
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))
         config = db.fetch(
-            "SELECT directory_id, language, normalized_path FROM files WHERE path = ?",
+            "SELECT directory_id, language, normalized_path, is_test FROM files WHERE path = ?",
             ("config.yaml",),
         )[0]
         waiter = db.fetch(
-            "SELECT id, language, normalized_path FROM files WHERE path = ?",
+            "SELECT id, language, normalized_path, is_test FROM files WHERE path = ?",
             ("models/waiters.py",),
         )[0]
         customer = db.fetch(
-            "SELECT id, language, normalized_path FROM files WHERE path = ?",
+            "SELECT id, language, normalized_path, is_test FROM files WHERE path = ?",
             ("models/customers.sql",),
         )[0]
         orders = db.fetch(
@@ -106,8 +128,12 @@ def test_processor_indexes_files_and_directories() -> None:
             ("models/raw_seed.sql",),
         )[0]
         external = db.fetch(
-            "SELECT id FROM files WHERE path = ?",
+            "SELECT id, is_test FROM files WHERE path = ?",
             ("external_models.yaml",),
+        )[0]
+        test_orders = db.fetch(
+            "SELECT id, is_test FROM files WHERE path = ?",
+            ("tests/test_orders.yaml",),
         )[0]
         file_count = db.fetch("SELECT COUNT(*) AS file_count FROM files")[0]["file_count"]
     finally:
@@ -116,10 +142,15 @@ def test_processor_indexes_files_and_directories() -> None:
     assert config["directory_id"] is None
     assert config["language"] == "yaml"
     assert config["normalized_path"] == "config"
+    assert config["is_test"] == 0
     assert waiter["language"] == "python"
     assert waiter["normalized_path"] == "models.waiters"
+    assert waiter["is_test"] == 0
     assert customer["language"] == "sql"
     assert customer["normalized_path"] == "models/customers"
+    assert customer["is_test"] == 0
+    assert external["is_test"] == 0
+    assert test_orders["is_test"] == 1
     assert file_count == 11
     assert set(first_models) == {
         CUSTOMERS_FQN,
@@ -191,6 +222,18 @@ def test_processor_indexes_files_and_directories() -> None:
     assert second_macros == first_macros
     assert first_model_macros == {("cents_to_dollars", first_models[CUSTOMERS_FQN]["id"])}
     assert second_model_macros == first_model_macros
+    assert set(first_tests) == {"test_orders_exist"}
+    assert first_tests["test_orders_exist"]["file_id"] == test_orders["id"]
+    assert first_tests["test_orders_exist"]["model_id"] == first_models[ORDERS_FQN]["id"]
+    assert second_tests == first_tests
+    test_orders_id = first_tests["test_orders_exist"]["id"]
+    assert first_test_references == {
+        (test_orders_id, "sushi.customers.customer_id"),
+        (test_orders_id, "sushi.customers.status"),
+        (test_orders_id, "sushi.orders.order_id"),
+        (test_orders_id, "sushi.orders.customer_id"),
+    }
+    assert second_test_references == first_test_references
     customer_id_refs = [
         row
         for row in first_references.values()
