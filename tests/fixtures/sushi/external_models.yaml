@@ -2,3 +2,7 @@
   columns:
     customer_id: int
     status: text
+- name: raw.orders
+  columns:
+    order_id: int
+    customer_id: int

@@ -9,6 +9,7 @@ import xxhash
 from src.assigner import GlobalIDAssigner
 from src.db import TABLE_BATCH_MAP, ProjectDB
 from src.git_utils import path_spec_for_indexing, relative_path_is_ignored
+from src.parsers.sqlmesh_parser import SQLMeshParser
 
 
 def _language(file_extension: str) -> str | None:
@@ -39,6 +40,8 @@ class ProjectProcessor:
         self._lock = threading.RLock()
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
+        self.models_snapshot = self.db.get_models_snapshot()
+        self.parser = SQLMeshParser(self.db, self.assigner, self.root)
 
     def _process_directories(self, directory_names: list[str], dir_rel: str) -> None:
         for directory_name in directory_names:
@@ -139,7 +142,7 @@ class ProjectProcessor:
             return
 
         language = _language(file_extension)
-        file_row = {
+        file_row: dict[str, object] = {
             "id": file_id,
             "directory_id": directory_id,
             "name": file_name,
@@ -189,20 +192,11 @@ class ProjectProcessor:
         self.db.bulk_insert(self.db_batches)
         self.db_batches = self._new_batches()
 
-    def _reset_run_state(self) -> None:
-        self.files_skipped = 0
-        self.files_indexed = 0
-        for entry in self.directories_snapshot.values():
-            entry["seen"] = False
-        for entry in self.files_snapshot.values():
-            entry["seen"] = False
-
     def process(self, full: bool = False) -> None:
         with self._lock:
             self._process_unlocked(full)
 
     def _process_unlocked(self, full: bool = False) -> None:
-        self._reset_run_state()
         start_time = time.perf_counter()
         root_s = str(self.root)
         for directory_path, directory_names, file_names in os.walk(root_s):
@@ -232,15 +226,17 @@ class ProjectProcessor:
             self._process_directories(directory_names, dir_rel)
             self._process_files(file_names, directory_path, dir_rel, full)
 
+        self._insert_batch(final=True)
+        self.parser.load()
+        self.parser.sync_models(
+            self.files_snapshot,
+            self.models_snapshot,
+            self.db_batches["models"],
+        )
+        self._insert_batch(final=True)
+        self.db.delete_models(self.models_snapshot)
         self.db.delete_files(self.files_snapshot)
         self.db.delete_directories(self.directories_snapshot)
-        self.directories_snapshot = {
-            path: meta for path, meta in self.directories_snapshot.items() if meta["seen"]
-        }
-        self.files_snapshot = {
-            path: meta for path, meta in self.files_snapshot.items() if meta["seen"]
-        }
-        self._insert_batch(final=True)
 
         end_epoch = int(time.time())
         if full:

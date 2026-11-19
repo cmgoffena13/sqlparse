@@ -7,6 +7,7 @@ from src.utils import db_path_for_index_root, get_sqlparse_config_dir
 TABLE_BATCH_MAP = {
     "directories",
     "files",
+    "models",
 }
 
 
@@ -23,6 +24,13 @@ class FileSnapshot(TypedDict):
     mtime_ns: int
     size_bytes: int
     line_count: int
+
+
+class ModelSnapshot(TypedDict):
+    id: int
+    file_id: int | None
+    kind: str
+    seen: bool
 
 
 def index_workspace_paths() -> list[tuple[Path, Path]]:
@@ -158,6 +166,14 @@ class ProjectDB:
         file_ids = [row["id"] for row in files.values() if not row["seen"]]
         self.delete_ids("files", file_ids)
 
+    def get_models_snapshot(self) -> dict[str, ModelSnapshot]:
+        cursor = self.connection.execute("SELECT id, file_id, qualified_name, kind FROM models")
+        return {str(row["qualified_name"]): self._model_snapshot(row) for row in cursor}
+
+    def delete_models(self, models: dict[str, ModelSnapshot]) -> None:
+        model_ids = [row["id"] for row in models.values() if not row["seen"]]
+        self.delete_ids("models", model_ids)
+
     def _file_snapshot(self, row: sqlite3.Row) -> FileSnapshot:
         directory_id = row["directory_id"]
         return {
@@ -168,6 +184,15 @@ class ProjectDB:
             "mtime_ns": int(row["mtime_ns"]),
             "size_bytes": int(row["size_bytes"]),
             "line_count": int(row["line_count"]),
+        }
+
+    def _model_snapshot(self, row: sqlite3.Row) -> ModelSnapshot:
+        file_id = row["file_id"]
+        return {
+            "id": int(row["id"]),
+            "file_id": None if file_id is None else int(file_id),
+            "kind": str(row["kind"]),
+            "seen": False,
         }
 
     def bulk_insert(self, batches: dict[str, list[dict[str, object]]]) -> None:
@@ -190,6 +215,16 @@ class ProjectDB:
                 )
                 """,
                 batches["files"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR REPLACE INTO models (
+                    id, file_id, qualified_name, kind
+                ) VALUES (
+                    :id, :file_id, :qualified_name, :kind
+                )
+                """,
+                batches["models"],
             )
 
     def close(self) -> None:

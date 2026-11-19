@@ -1,9 +1,10 @@
 DROP TABLE IF EXISTS column_references;
-DROP TABLE IF EXISTS files;
-DROP TABLE IF EXISTS directories;
+DROP TABLE IF EXISTS column_references_staging;
+DROP TABLE IF EXISTS columns;
+DROP TABLE IF EXISTS model_macros;
 DROP TABLE IF EXISTS models;
 DROP TABLE IF EXISTS macros;
-DROP TABLE IF EXISTS model_macros;
-DROP TABLE IF EXISTS columns;
+DROP TABLE IF EXISTS files;
+DROP TABLE IF EXISTS directories;
 DROP TABLE IF EXISTS watermarks;
 DROP TABLE IF EXISTS index_root;

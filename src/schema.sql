@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS models (
     qualified_name      TEXT NOT NULL,
     kind                TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS models_qualified_name_index ON models (qualified_name);
 
 CREATE TABLE IF NOT EXISTS macros (
     id                  INTEGER NOT NULL PRIMARY KEY,

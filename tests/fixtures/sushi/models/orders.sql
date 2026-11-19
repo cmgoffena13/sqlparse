@@ -1,6 +1,8 @@
 MODEL (
   name sushi.orders,
-  kind INCREMENTAL_BY_TIME_RANGE,
+  kind INCREMENTAL_BY_TIME_RANGE (
+    time_column order_id
+  ),
   depends_on [raw.orders]
 );
 

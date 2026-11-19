@@ -1,28 +1,51 @@
 import os
+import shutil
 from pathlib import Path
 
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
 
+CUSTOMERS_FQN = '"memory"."sushi"."customers"'
+ORDERS_FQN = '"memory"."sushi"."orders"'
+WAITERS_FQN = '"memory"."sushi"."waiters"'
+RAW_CUSTOMERS_FQN = '"memory"."raw"."customers"'
+RAW_ORDERS_FQN = '"memory"."raw"."orders"'
+
 
 def test_processor_indexes_files_and_directories() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        first_models = {
+            str(row["qualified_name"]): dict(row)
+            for row in db.fetch("SELECT id, file_id, qualified_name, kind FROM models")
+        }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
+        second_models = {
+            str(row["qualified_name"]): dict(row)
+            for row in db.fetch("SELECT id, file_id, qualified_name, kind FROM models")
+        }
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))
         config = db.fetch(
             "SELECT directory_id, language, normalized_path FROM files WHERE path = ?",
             ("config.yaml",),
         )[0]
         waiter = db.fetch(
-            "SELECT language, normalized_path FROM files WHERE path = ?",
+            "SELECT id, language, normalized_path FROM files WHERE path = ?",
             ("models/waiters.py",),
         )[0]
         customer = db.fetch(
-            "SELECT language, normalized_path FROM files WHERE path = ?",
+            "SELECT id, language, normalized_path FROM files WHERE path = ?",
             ("models/customers.sql",),
+        )[0]
+        orders = db.fetch(
+            "SELECT id FROM files WHERE path = ?",
+            ("models/orders.sql",),
+        )[0]
+        external = db.fetch(
+            "SELECT id FROM files WHERE path = ?",
+            ("external_models.yaml",),
         )[0]
         file_count = db.fetch("SELECT COUNT(*) AS file_count FROM files")[0]["file_count"]
     finally:
@@ -36,11 +59,59 @@ def test_processor_indexes_files_and_directories() -> None:
     assert customer["language"] == "sql"
     assert customer["normalized_path"] == "models/customers"
     assert file_count == 9
+    assert set(first_models) == {
+        CUSTOMERS_FQN,
+        ORDERS_FQN,
+        WAITERS_FQN,
+        RAW_CUSTOMERS_FQN,
+        RAW_ORDERS_FQN,
+    }
+    assert first_models[CUSTOMERS_FQN]["kind"] == "FULL"
+    assert first_models[CUSTOMERS_FQN]["file_id"] == customer["id"]
+    assert first_models[ORDERS_FQN]["kind"] == "INCREMENTAL_BY_TIME_RANGE"
+    assert first_models[ORDERS_FQN]["file_id"] == orders["id"]
+    assert first_models[WAITERS_FQN]["kind"] == "FULL"
+    assert first_models[WAITERS_FQN]["file_id"] == waiter["id"]
+    assert first_models[RAW_CUSTOMERS_FQN]["kind"] == "EXTERNAL"
+    assert first_models[RAW_CUSTOMERS_FQN]["file_id"] == external["id"]
+    assert first_models[RAW_ORDERS_FQN]["kind"] == "EXTERNAL"
+    assert first_models[RAW_ORDERS_FQN]["file_id"] == external["id"]
+    assert second_models == first_models
+
+
+def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:
+    root = tmp_path / "sushi"
+    shutil.copytree(FIXTURE_PROJECT, root)
+    db = ProjectDB(root)
+    try:
+        ProjectProcessor(db, root).process(full=True)
+        before = {
+            str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM models")
+        }
+        (root / "models" / "customers.sql").unlink()
+        ProjectProcessor(db, root).process()
+        after = {
+            str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM models")
+        }
+    finally:
+        db.close()
+    assert CUSTOMERS_FQN in before
+    assert after == {
+        ORDERS_FQN,
+        WAITERS_FQN,
+        RAW_CUSTOMERS_FQN,
+        RAW_ORDERS_FQN,
+    }
 
 
 def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) -> None:
     root = tmp_path / "project"
     root.mkdir()
+    (root / "config.yaml").write_text(
+        "gateways:\n  local:\n    connection:\n      type: duckdb\n"
+        "default_gateway: local\nmodel_defaults:\n  dialect: duckdb\n",
+        encoding="utf-8",
+    )
     (root / "README.md").write_text("hello\n")
     (root / "settings.yml").write_text("enabled: true\n")
     (root / "LICENSE").write_text("mit\n")
@@ -72,6 +143,7 @@ def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) ->
             str(row["path"]): row["language"]
             for row in db.fetch("SELECT path, language FROM files")
         }
+        model_count = db.fetch("SELECT COUNT(*) AS model_count FROM models")[0]["model_count"]
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))
         lines = db.fetch("SELECT line_count FROM files WHERE path = ?", ("README.md",))[0]
         normalized = {
@@ -91,11 +163,13 @@ def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) ->
         db.close()
     assert directories == ["notes", "pkg", "src", "src/fundamentals"]
     assert paths["README.md"] is None
+    assert paths["config.yaml"] == "yaml"
     assert paths["settings.yml"] == "yaml"
     assert paths["LICENSE"] is None
     assert paths["notes/keep.txt"] is None
     assert paths["pkg/worker.py"] == "python"
     assert paths["pkg/__init__.py"] == "python"
+    assert model_count == 0
     assert normalized["pkg/worker.py"] == "pkg.worker"
     assert normalized["pkg/__init__.py"] == "pkg"
     assert normalized["src/app.py"] == "src.app"
@@ -108,6 +182,7 @@ def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) ->
     assert int(lines["line_count"]) == 2
     assert remaining == {
         "LICENSE",
+        "config.yaml",
         "pkg/__init__.py",
         "pkg/worker.py",
         "settings.yml",
