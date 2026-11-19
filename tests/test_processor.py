@@ -48,7 +48,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
                 "ref_column_qualified_name, source_column_id, source_models_id, "
                 "source_query_name, source_column_qualified_name, "
-                "source_line, ref_kind, context FROM column_references"
+                "source_line, ref_kind, context FROM column_lineage"
             )
         }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
@@ -81,7 +81,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
                 "ref_column_qualified_name, source_column_id, source_models_id, "
                 "source_query_name, source_column_qualified_name, "
-                "source_line, ref_kind, context FROM column_references"
+                "source_line, ref_kind, context FROM column_lineage"
             )
         }
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))
@@ -288,7 +288,7 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         }
         before_references = {
             str(row["ref_column_qualified_name"])
-            for row in db.fetch("SELECT ref_column_qualified_name FROM column_references")
+            for row in db.fetch("SELECT ref_column_qualified_name FROM column_lineage")
         }
         customers_model_id = db.fetch(
             "SELECT id FROM models WHERE qualified_name = ?",
@@ -310,7 +310,7 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         }
         after_references = {
             str(row["ref_column_qualified_name"])
-            for row in db.fetch("SELECT ref_column_qualified_name FROM column_references")
+            for row in db.fetch("SELECT ref_column_qualified_name FROM column_lineage")
         }
     finally:
         db.close()

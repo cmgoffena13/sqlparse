@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS column_references;
+DROP TABLE IF EXISTS column_lineage;
 DROP TABLE IF EXISTS columns;
 DROP TABLE IF EXISTS model_macros;
 DROP TABLE IF EXISTS models;

@@ -6,7 +6,7 @@ from sqlmesh.core.model import Model
 from src.assigner import GlobalIDAssigner
 from src.db import (
     BATCH_TABLES,
-    ColumnReferenceSnapshot,
+    ColumnLineageSnapshot,
     ColumnSnapshot,
     FileSnapshot,
     MacroSnapshot,
@@ -49,13 +49,13 @@ class SQLMeshParser:
         self.db.delete_model_macros(model_macros_snapshot)
         self.db.delete_macros(macros_snapshot)
 
-        column_references_snapshot = self.db.get_column_references_snapshot()
+        column_lineage_snapshot = self.db.get_column_lineage_snapshot()
         for model in self.context.models.values():
-            self._sync_column_references(
-                model, models_snapshot, columns_snapshot, column_references_snapshot
+            self._sync_column_lineage(
+                model, models_snapshot, columns_snapshot, column_lineage_snapshot
             )
             self._flush()
-        self.db.delete_column_references(column_references_snapshot)
+        self.db.delete_column_lineage(column_lineage_snapshot)
         self.db.delete_columns(columns_snapshot)
         self.db.delete_models(models_snapshot)
 
@@ -209,12 +209,12 @@ class SQLMeshParser:
                 "seen": True,
             }
 
-    def _sync_column_references(
+    def _sync_column_lineage(
         self,
         model: Model,
         models_snapshot: dict[str, ModelSnapshot],
         columns_snapshot: dict[str, ColumnSnapshot],
-        column_references_snapshot: dict[str, ColumnReferenceSnapshot],
+        column_lineage_snapshot: dict[str, ColumnLineageSnapshot],
     ) -> None:
         model_id = models_snapshot[model.fqn]["id"]
         model_name_to_id = {
@@ -242,13 +242,13 @@ class SQLMeshParser:
                 ):
                     matched_name = name
                     source_models_id = mid
-            key = self.db._column_reference_key(ref_qn, source_qn, source_line, ref_kind)
-            prior = column_references_snapshot.get(key)
+            key = self.db._column_lineage_key(ref_qn, source_qn, source_line, ref_kind)
+            prior = column_lineage_snapshot.get(key)
             if prior is None:
-                reference_id = self.assigner.reserve("column_references", 1)[0]
-                self.batches["column_references"].append(
+                lineage_id = self.assigner.reserve("column_lineage", 1)[0]
+                self.batches["column_lineage"].append(
                     {
-                        "id": reference_id,
+                        "id": lineage_id,
                         "ref_column_id": ref_column_id,
                         "ref_column_model_id": model_id,
                         "ref_column_query_name": ref_query_name,
@@ -262,21 +262,21 @@ class SQLMeshParser:
                         "context": context,
                     }
                 )
-                column_references_snapshot[key] = {
-                    "id": reference_id,
+                column_lineage_snapshot[key] = {
+                    "id": lineage_id,
                     "ref_column_id": ref_column_id,
                     "source_column_id": source_column_id,
                     "seen": True,
                 }
                 continue
-            reference_id = prior["id"]
+            lineage_id = prior["id"]
             if (
                 prior["ref_column_id"] != ref_column_id
                 or prior["source_column_id"] != source_column_id
             ):
-                self.batches["column_references"].append(
+                self.batches["column_lineage"].append(
                     {
-                        "id": reference_id,
+                        "id": lineage_id,
                         "ref_column_id": ref_column_id,
                         "ref_column_model_id": model_id,
                         "ref_column_query_name": ref_query_name,
@@ -290,8 +290,8 @@ class SQLMeshParser:
                         "context": context,
                     }
                 )
-            column_references_snapshot[key] = {
-                "id": reference_id,
+            column_lineage_snapshot[key] = {
+                "id": lineage_id,
                 "ref_column_id": ref_column_id,
                 "source_column_id": source_column_id,
                 "seen": True,

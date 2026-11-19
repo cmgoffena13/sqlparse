@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS columns (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS columns_qualified_name_index ON columns (qualified_name);
 
-CREATE TABLE IF NOT EXISTS column_references (
+CREATE TABLE IF NOT EXISTS column_lineage (
     id                              INTEGER NOT NULL PRIMARY KEY,
     ref_column_id                   INTEGER NOT NULL REFERENCES columns(id),
     ref_column_model_id             INTEGER NOT NULL REFERENCES models(id),

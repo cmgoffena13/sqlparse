@@ -11,7 +11,7 @@ BATCH_TABLES = {
     "macros",
     "model_macros",
     "columns",
-    "column_references",
+    "column_lineage",
 }
 
 ASSIGNER_TABLES = {
@@ -20,7 +20,7 @@ ASSIGNER_TABLES = {
     "models",
     "macros",
     "columns",
-    "column_references",
+    "column_lineage",
 }
 
 
@@ -66,7 +66,7 @@ class ModelMacroSnapshot(TypedDict):
     seen: bool
 
 
-class ColumnReferenceSnapshot(TypedDict):
+class ColumnLineageSnapshot(TypedDict):
     id: int
     ref_column_id: int
     source_column_id: int
@@ -231,29 +231,27 @@ class ProjectDB:
                 rows,
             )
 
-    def get_column_references_snapshot(self) -> dict[str, ColumnReferenceSnapshot]:
+    def get_column_lineage_snapshot(self) -> dict[str, ColumnLineageSnapshot]:
         cursor = self.connection.execute(
             "SELECT id, ref_column_id, ref_column_qualified_name, source_column_id, "
             "source_column_qualified_name, source_line, ref_kind "
-            "FROM column_references"
+            "FROM column_lineage"
         )
         return {
-            self._column_reference_key(
+            self._column_lineage_key(
                 str(row["ref_column_qualified_name"]),
                 str(row["source_column_qualified_name"]),
                 int(row["source_line"]),
                 str(row["ref_kind"]),
-            ): self._column_reference_snapshot(row)
+            ): self._column_lineage_snapshot(row)
             for row in cursor
         }
 
-    def delete_column_references(
-        self, column_references: dict[str, ColumnReferenceSnapshot]
-    ) -> None:
-        reference_ids = [row["id"] for row in column_references.values() if not row["seen"]]
-        self.delete_ids("column_references", reference_ids)
+    def delete_column_lineage(self, column_lineage: dict[str, ColumnLineageSnapshot]) -> None:
+        reference_ids = [row["id"] for row in column_lineage.values() if not row["seen"]]
+        self.delete_ids("column_lineage", reference_ids)
 
-    def _column_reference_key(
+    def _column_lineage_key(
         self,
         ref_qn: str,
         source_qn: str,
@@ -306,7 +304,7 @@ class ProjectDB:
             "seen": False,
         }
 
-    def _column_reference_snapshot(self, row: sqlite3.Row) -> ColumnReferenceSnapshot:
+    def _column_lineage_snapshot(self, row: sqlite3.Row) -> ColumnLineageSnapshot:
         return {
             "id": int(row["id"]),
             "ref_column_id": int(row["ref_column_id"]),
@@ -379,7 +377,7 @@ class ProjectDB:
             )
             self.connection.executemany(
                 """
-                INSERT OR REPLACE INTO column_references (
+                INSERT OR REPLACE INTO column_lineage (
                     id, ref_column_id, ref_column_model_id, ref_column_query_name,
                     ref_column_qualified_name, source_column_id, source_models_id,
                     source_query_name, source_column_qualified_name,
@@ -391,7 +389,7 @@ class ProjectDB:
                     :source_line, :ref_kind, :context
                 )
                 """,
-                batches["column_references"],
+                batches["column_lineage"],
             )
 
     def close(self) -> None:

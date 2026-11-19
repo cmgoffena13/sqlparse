@@ -8,13 +8,11 @@ from src.git_utils import relative_path_is_ignored
 from src.utils import line_count
 
 
-def test_recreate_schema_keeps_column_references_shape(tmp_path: Path) -> None:
+def test_recreate_schema_keeps_column_lineage_shape(tmp_path: Path) -> None:
     db = ProjectDB(tmp_path)
     try:
         db.recreate_schema()
-        reference_columns = [
-            row["name"] for row in db.fetch("PRAGMA table_info(column_references)")
-        ]
+        reference_columns = [row["name"] for row in db.fetch("PRAGMA table_info(column_lineage)")]
         with pytest.raises(ValueError, match="unsupported table"):
             db.table_max_id("not_a_table")
     finally:
