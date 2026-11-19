@@ -56,6 +56,7 @@ class SQLMeshParser:
             self._sync_model_audits(model, models_snapshot, audits_snapshot, model_audits_snapshot)
             self._sync_columns(model, models_snapshot, columns_snapshot)
             self._flush()
+
         self.db.delete_model_macros(model_macros_snapshot)
         self.db.delete_macros(macros_snapshot)
         self.db.delete_model_audits(model_audits_snapshot)
@@ -71,6 +72,7 @@ class SQLMeshParser:
             test_references_snapshot,
         )
         self._flush()
+
         self.db.delete_test_references(test_references_snapshot)
         self.db.delete_tests(tests_snapshot)
 
@@ -80,6 +82,7 @@ class SQLMeshParser:
                 model, models_snapshot, columns_snapshot, column_lineage_snapshot
             )
             self._flush()
+
         self.db.delete_column_lineage(column_lineage_snapshot)
         self.db.delete_columns(columns_snapshot)
         self.db.delete_models(models_snapshot)
