@@ -44,6 +44,7 @@ class ProjectProcessor:
         self.macros_snapshot = self.db.get_macros_snapshot()
         self.model_macros_snapshot = self.db.get_model_macros_snapshot()
         self.columns_snapshot = self.db.get_columns_snapshot()
+        self.column_references_snapshot = self.db.get_column_references_snapshot()
         self.parser = SQLMeshParser(self.db, self.assigner, self.root)
 
     def _process_directories(self, directory_names: list[str], dir_rel: str) -> None:
@@ -254,6 +255,14 @@ class ProjectProcessor:
             self.db_batches["columns"],
         )
         self._insert_batch(final=True)
+        self.parser.sync_column_references(
+            self.models_snapshot,
+            self.columns_snapshot,
+            self.column_references_snapshot,
+            self.db_batches["column_references"],
+        )
+        self._insert_batch(final=True)
+        self.db.delete_column_references(self.column_references_snapshot)
         self.db.delete_model_macros(self.model_macros_snapshot)
         self.db.delete_macros(self.macros_snapshot)
         self.db.delete_columns(self.columns_snapshot)

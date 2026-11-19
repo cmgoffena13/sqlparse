@@ -11,6 +11,7 @@ BATCH_TABLES = {
     "macros",
     "model_macros",
     "columns",
+    "column_references",
 }
 
 ASSIGNER_TABLES = {
@@ -19,6 +20,7 @@ ASSIGNER_TABLES = {
     "models",
     "macros",
     "columns",
+    "column_references",
 }
 
 
@@ -61,6 +63,13 @@ class MacroSnapshot(TypedDict):
 class ModelMacroSnapshot(TypedDict):
     macro_name: str
     model_id: int
+    seen: bool
+
+
+class ColumnReferenceSnapshot(TypedDict):
+    id: int
+    ref_column_id: int
+    source_column_id: int
     seen: bool
 
 
@@ -240,6 +249,37 @@ class ProjectDB:
                 rows,
             )
 
+    def get_column_references_snapshot(self) -> dict[str, ColumnReferenceSnapshot]:
+        cursor = self.connection.execute(
+            "SELECT id, ref_column_id, ref_column_qualified_name, source_column_id, "
+            "source_column_qualified_name, source_line, ref_kind "
+            "FROM column_references"
+        )
+        return {
+            self._column_reference_key(
+                str(row["ref_column_qualified_name"]),
+                str(row["source_column_qualified_name"]),
+                int(row["source_line"]),
+                str(row["ref_kind"]),
+            ): self._column_reference_snapshot(row)
+            for row in cursor
+        }
+
+    def delete_column_references(
+        self, column_references: dict[str, ColumnReferenceSnapshot]
+    ) -> None:
+        reference_ids = [row["id"] for row in column_references.values() if not row["seen"]]
+        self.delete_ids("column_references", reference_ids)
+
+    def _column_reference_key(
+        self,
+        ref_qn: str,
+        source_qn: str,
+        source_line: int,
+        ref_kind: str,
+    ) -> str:
+        return f"{ref_qn}\0{source_qn}\0{source_line}\0{ref_kind}"
+
     def _file_snapshot(self, row: sqlite3.Row) -> FileSnapshot:
         directory_id = row["directory_id"]
         return {
@@ -281,6 +321,14 @@ class ProjectDB:
         return {
             "macro_name": str(row["macro_name"]),
             "model_id": int(row["model_id"]),
+            "seen": False,
+        }
+
+    def _column_reference_snapshot(self, row: sqlite3.Row) -> ColumnReferenceSnapshot:
+        return {
+            "id": int(row["id"]),
+            "ref_column_id": int(row["ref_column_id"]),
+            "source_column_id": int(row["source_column_id"]),
             "seen": False,
         }
 
@@ -346,6 +394,22 @@ class ProjectDB:
                 )
                 """,
                 batches["columns"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR REPLACE INTO column_references (
+                    id, ref_column_id, ref_column_model_id, ref_column_query_name,
+                    ref_column_qualified_name, source_column_id, source_models_id,
+                    source_query_name, source_column_qualified_name,
+                    source_line, source_column, ref_kind, context
+                ) VALUES (
+                    :id, :ref_column_id, :ref_column_model_id, :ref_column_query_name,
+                    :ref_column_qualified_name, :source_column_id, :source_models_id,
+                    :source_query_name, :source_column_qualified_name,
+                    :source_line, :source_column, :ref_kind, :context
+                )
+                """,
+                batches["column_references"],
             )
 
     def close(self) -> None:

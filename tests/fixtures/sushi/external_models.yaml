@@ -6,3 +6,4 @@
   columns:
     order_id: int
     customer_id: int
+    amount_cents: int

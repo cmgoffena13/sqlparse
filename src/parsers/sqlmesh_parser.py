@@ -4,6 +4,7 @@ from sqlmesh.core.context import Context
 
 from src.assigner import GlobalIDAssigner
 from src.db import (
+    ColumnReferenceSnapshot,
     ColumnSnapshot,
     FileSnapshot,
     MacroSnapshot,
@@ -11,7 +12,7 @@ from src.db import (
     ModelSnapshot,
     ProjectDB,
 )
-from src.parsers.column_lineage import extract_model_columns
+from src.parsers.column_lineage import extract_model_column_references, extract_model_columns
 
 
 class SQLMeshParser:
@@ -181,6 +182,96 @@ class SQLMeshParser:
                     "qualified_name": qualified_name,
                     "line_start": line_start,
                     "line_end": line_end,
+                    "seen": True,
+                }
+
+    def sync_column_references(
+        self,
+        models_snapshot: dict[str, ModelSnapshot],
+        columns_snapshot: dict[str, ColumnSnapshot],
+        column_references_snapshot: dict[str, ColumnReferenceSnapshot],
+        column_references_batch: list[dict[str, object]],
+    ) -> None:
+        model_name_to_id = {
+            model.name: models_snapshot[model.fqn]["id"] for model in self.context.models.values()
+        }
+        for model in self.context.models.values():
+            model_id = models_snapshot[model.fqn]["id"]
+            for reference in extract_model_column_references(model):
+                ref_query_name = reference["ref_column_query_name"]
+                ref_qn = reference["ref_column_qualified_name"]
+                source_query_name = reference["source_query_name"]
+                source_qn = reference["source_column_qualified_name"]
+                source_line = reference["source_line"]
+                source_column = reference["source_column"]
+                ref_kind = reference["ref_kind"]
+                context = reference["context"]
+                if source_qn not in columns_snapshot:
+                    continue
+                ref_column_id = columns_snapshot[ref_qn]["id"]
+                source_column_id = columns_snapshot[source_qn]["id"]
+                source_models_id = model_id
+                matched_name = ""
+                for name, mid in model_name_to_id.items():
+                    if (source_qn == name or source_qn.startswith(f"{name}.")) and len(name) > len(
+                        matched_name
+                    ):
+                        matched_name = name
+                        source_models_id = mid
+                key = self.db._column_reference_key(ref_qn, source_qn, source_line, ref_kind)
+                prior = column_references_snapshot.get(key)
+                if prior is None:
+                    reference_id = self.assigner.reserve("column_references", 1)[0]
+                    column_references_batch.append(
+                        {
+                            "id": reference_id,
+                            "ref_column_id": ref_column_id,
+                            "ref_column_model_id": model_id,
+                            "ref_column_query_name": ref_query_name,
+                            "ref_column_qualified_name": ref_qn,
+                            "source_column_id": source_column_id,
+                            "source_models_id": source_models_id,
+                            "source_query_name": source_query_name,
+                            "source_column_qualified_name": source_qn,
+                            "source_line": source_line,
+                            "source_column": source_column,
+                            "ref_kind": ref_kind,
+                            "context": context,
+                        }
+                    )
+                    column_references_snapshot[key] = {
+                        "id": reference_id,
+                        "ref_column_id": ref_column_id,
+                        "source_column_id": source_column_id,
+                        "seen": True,
+                    }
+                    continue
+                reference_id = prior["id"]
+                if (
+                    prior["ref_column_id"] != ref_column_id
+                    or prior["source_column_id"] != source_column_id
+                ):
+                    column_references_batch.append(
+                        {
+                            "id": reference_id,
+                            "ref_column_id": ref_column_id,
+                            "ref_column_model_id": model_id,
+                            "ref_column_query_name": ref_query_name,
+                            "ref_column_qualified_name": ref_qn,
+                            "source_column_id": source_column_id,
+                            "source_models_id": source_models_id,
+                            "source_query_name": source_query_name,
+                            "source_column_qualified_name": source_qn,
+                            "source_line": source_line,
+                            "source_column": source_column,
+                            "ref_kind": ref_kind,
+                            "context": context,
+                        }
+                    )
+                column_references_snapshot[key] = {
+                    "id": reference_id,
+                    "ref_column_id": ref_column_id,
+                    "source_column_id": source_column_id,
                     "seen": True,
                 }
 

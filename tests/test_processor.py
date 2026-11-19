@@ -7,6 +7,7 @@ from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
 
 CUSTOMERS_FQN = '"memory"."sushi"."customers"'
+CUSTOMER_ORDERS_FQN = '"memory"."sushi"."customer_orders"'
 ORDERS_FQN = '"memory"."sushi"."orders"'
 WAITERS_FQN = '"memory"."sushi"."waiters"'
 RAW_CUSTOMERS_FQN = '"memory"."raw"."customers"'
@@ -35,6 +36,20 @@ def test_processor_indexes_files_and_directories() -> None:
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
+        first_references = {
+            (
+                str(row["ref_column_qualified_name"]),
+                str(row["source_column_qualified_name"]),
+                int(row["source_line"]),
+                str(row["ref_kind"]),
+            ): dict(row)
+            for row in db.fetch(
+                "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
+                "ref_column_qualified_name, source_column_id, source_models_id, "
+                "source_query_name, source_column_qualified_name, "
+                "source_line, source_column, ref_kind, context FROM column_references"
+            )
+        }
         ProjectProcessor(db, FIXTURE_PROJECT).process()
         second_models = {
             str(row["qualified_name"]): dict(row)
@@ -53,6 +68,20 @@ def test_processor_indexes_files_and_directories() -> None:
         second_model_macros = {
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+        }
+        second_references = {
+            (
+                str(row["ref_column_qualified_name"]),
+                str(row["source_column_qualified_name"]),
+                int(row["source_line"]),
+                str(row["ref_kind"]),
+            ): dict(row)
+            for row in db.fetch(
+                "SELECT id, ref_column_id, ref_column_model_id, ref_column_query_name, "
+                "ref_column_qualified_name, source_column_id, source_models_id, "
+                "source_query_name, source_column_qualified_name, "
+                "source_line, source_column, ref_kind, context FROM column_references"
+            )
         }
         directories = sorted(str(row["path"]) for row in db.fetch("SELECT path FROM directories"))
         config = db.fetch(
@@ -86,9 +115,10 @@ def test_processor_indexes_files_and_directories() -> None:
     assert waiter["normalized_path"] == "models.waiters"
     assert customer["language"] == "sql"
     assert customer["normalized_path"] == "models/customers"
-    assert file_count == 9
+    assert file_count == 10
     assert set(first_models) == {
         CUSTOMERS_FQN,
+        CUSTOMER_ORDERS_FQN,
         ORDERS_FQN,
         WAITERS_FQN,
         RAW_CUSTOMERS_FQN,
@@ -123,18 +153,23 @@ def test_processor_indexes_files_and_directories() -> None:
     )
     assert first_columns["sushi.customers.cte.raw.customers.status"]["name"] == "status"
     assert first_columns["sushi.customers.customer_id"]["from_table"] is None
-    assert first_columns["sushi.customers.customer_id"]["line_start"] == 11
-    assert first_columns["sushi.customers.customer_id"]["line_end"] == 11
-    assert first_columns["sushi.customers.amount"]["line_start"] == 11
-    assert first_columns["sushi.customers.amount"]["line_end"] == 14
-    assert first_columns["sushi.customers.status"]["line_start"] == 15
-    assert first_columns["sushi.customers.status"]["line_end"] == 15
+    assert first_columns["sushi.customers.customer_id"]["line_start"] == 12
+    assert first_columns["sushi.customers.customer_id"]["line_end"] == 12
+    assert first_columns["sushi.customers.amount"]["line_start"] == 14
+    assert first_columns["sushi.customers.amount"]["line_end"] == 15
+    assert first_columns["sushi.customers.status"]["line_start"] == 16
+    assert first_columns["sushi.customers.status"]["line_end"] == 16
     assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["line_start"] == 3
     assert first_columns["sushi.customers.cte.raw.customers.customer_id"]["line_end"] == 3
     assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["line_start"] == 4
     assert first_columns["sushi.customers.cte.raw.orders.customer_id"]["line_end"] == 4
     assert first_columns["sushi.customers.cte.raw.customers.status"]["line_start"] == 5
     assert first_columns["sushi.customers.cte.raw.customers.status"]["line_end"] == 5
+    assert first_columns["sushi.customers.cte.raw.orders.amount_cents"]["line_start"] == 6
+    assert first_columns["sushi.customers.cte.raw.orders.amount_cents"]["line_end"] == 6
+    assert first_columns["sushi.customers.cte.raw.orders.amount_cents"]["from_table"] == (
+        "raw.orders"
+    )
     assert first_columns["raw.customers.customer_id"]["from_table"] is None
     assert first_columns["raw.customers.customer_id"]["query_name"] == "raw.customers"
     assert (
@@ -148,6 +183,81 @@ def test_processor_indexes_files_and_directories() -> None:
     assert second_macros == first_macros
     assert first_model_macros == {("cents_to_dollars", first_models[CUSTOMERS_FQN]["id"])}
     assert second_model_macros == first_model_macros
+    customer_id_refs = [
+        row
+        for row in first_references.values()
+        if row["ref_column_qualified_name"] == "sushi.customers.customer_id"
+    ]
+    assert any(
+        row["ref_column_query_name"] == "sushi.customers"
+        and row["source_query_name"] == "sushi.customers.cte"
+        and row["source_column_qualified_name"] == "sushi.customers.cte.raw.customers.customer_id"
+        and row["ref_kind"] == "alias"
+        for row in customer_id_refs
+    )
+    amount_refs = [
+        row
+        for row in first_references.values()
+        if row["ref_column_qualified_name"] == "sushi.customers.amount"
+    ]
+    assert any(
+        row["ref_column_query_name"] == "sushi.customers"
+        and row["source_query_name"] == "sushi.customers.cte"
+        and row["source_column_qualified_name"] == "sushi.customers.cte.raw.orders.amount_cents"
+        and row["ref_kind"] == "expression"
+        for row in amount_refs
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customers.cte.raw.orders.amount_cents"
+        and row["source_column_qualified_name"] == "raw.orders.amount_cents"
+        and row["ref_kind"] == "alias"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_query_name"] == "sushi.customers.cte"
+        and row["ref_column_qualified_name"] == "sushi.customers.cte.raw.customers.customer_id"
+        and row["source_query_name"] == "raw.customers"
+        and row["source_column_qualified_name"] == "raw.customers.customer_id"
+        and row["ref_kind"] == "alias"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_query_name"] == "sushi.customers.cte"
+        and row["ref_column_qualified_name"] == "sushi.customers.cte.raw.orders.customer_id"
+        and row["source_query_name"] == "raw.orders"
+        and row["source_column_qualified_name"] == "raw.orders.customer_id"
+        and row["ref_kind"] == "alias"
+        for row in first_references.values()
+    )
+    assert second_references == first_references
+    assert all(
+        row["ref_column_model_id"] == first_models[CUSTOMERS_FQN]["id"]
+        for row in first_references.values()
+        if str(row["ref_column_qualified_name"]).startswith("sushi.customers.")
+    )
+    assert all(row["source_column_id"] is not None for row in first_references.values())
+    assert all("?" not in str(row["context"]) for row in first_references.values())
+    assert all(
+        "?" not in str(row["source_column_qualified_name"]) for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customer_orders.customer_id"
+        and row["source_column_qualified_name"] == "sushi.customers.customer_id"
+        and row["ref_kind"] == "alias"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customer_orders.status"
+        and row["source_column_qualified_name"] == "sushi.customers.status"
+        and row["ref_kind"] == "alias"
+        for row in first_references.values()
+    )
+    assert any(
+        row["ref_column_qualified_name"] == "sushi.customer_orders.order_id"
+        and row["source_column_qualified_name"] == "sushi.orders.order_id"
+        and row["ref_kind"] == "alias"
+        for row in first_references.values()
+    )
 
 
 def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:
@@ -167,6 +277,10 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
+        before_references = {
+            str(row["ref_column_qualified_name"])
+            for row in db.fetch("SELECT ref_column_qualified_name FROM column_references")
+        }
         customers_model_id = db.fetch(
             "SELECT id FROM models WHERE qualified_name = ?",
             (CUSTOMERS_FQN,),
@@ -185,10 +299,15 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
+        after_references = {
+            str(row["ref_column_qualified_name"])
+            for row in db.fetch("SELECT ref_column_qualified_name FROM column_references")
+        }
     finally:
         db.close()
     assert CUSTOMERS_FQN in before
     assert after == {
+        CUSTOMER_ORDERS_FQN,
         ORDERS_FQN,
         WAITERS_FQN,
         RAW_CUSTOMERS_FQN,
@@ -204,6 +323,10 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
     assert "cents_to_dollars" not in after_macros
     assert ("cents_to_dollars", customers_model_id) in before_model_macros
     assert after_model_macros == set()
+    assert "sushi.customers.customer_id" in before_references
+    assert "sushi.customers.cte.raw.orders.customer_id" in before_references
+    assert "sushi.customers.customer_id" not in after_references
+    assert "sushi.customers.cte.raw.orders.customer_id" not in after_references
 
 
 def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) -> None:
