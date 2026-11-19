@@ -33,17 +33,14 @@ class SQLMeshParser:
         self.db.bulk_insert(self.batches)
         self.batches = self._new_batches()
 
-    def sync(
-        self,
-        files_snapshot: dict[str, FileSnapshot],
-        models_snapshot: dict[str, ModelSnapshot],
-        macros_snapshot: dict[str, MacroSnapshot],
-        model_macros_snapshot: dict[str, ModelMacroSnapshot],
-        columns_snapshot: dict[str, ColumnSnapshot],
-        column_references_snapshot: dict[str, ColumnReferenceSnapshot],
-    ) -> None:
+    def sync(self, files_snapshot: dict[str, FileSnapshot]) -> None:
+        macros_snapshot = self.db.get_macros_snapshot()
         self._sync_macros(macros_snapshot)
         self._flush()
+
+        models_snapshot = self.db.get_models_snapshot()
+        model_macros_snapshot = self.db.get_model_macros_snapshot()
+        columns_snapshot = self.db.get_columns_snapshot()
         for model in self.context.models.values():
             self._sync_model(model, files_snapshot, models_snapshot)
             self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
@@ -52,6 +49,7 @@ class SQLMeshParser:
         self.db.delete_model_macros(model_macros_snapshot)
         self.db.delete_macros(macros_snapshot)
 
+        column_references_snapshot = self.db.get_column_references_snapshot()
         for model in self.context.models.values():
             self._sync_column_references(
                 model, models_snapshot, columns_snapshot, column_references_snapshot

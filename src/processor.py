@@ -39,11 +39,6 @@ class ProjectProcessor:
         self._lock = threading.RLock()
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
-        self.models_snapshot = self.db.get_models_snapshot()
-        self.macros_snapshot = self.db.get_macros_snapshot()
-        self.model_macros_snapshot = self.db.get_model_macros_snapshot()
-        self.columns_snapshot = self.db.get_columns_snapshot()
-        self.column_references_snapshot = self.db.get_column_references_snapshot()
         self.parser = SQLMeshParser(self.db, self.assigner, self.root)
 
     def _process_directories(self, directory_names: list[str], dir_rel: str) -> None:
@@ -233,14 +228,7 @@ class ProjectProcessor:
         self.db.delete_files(self.files_snapshot)
         self.db.delete_directories(self.directories_snapshot)
 
-        self.parser.sync(
-            self.files_snapshot,
-            self.models_snapshot,
-            self.macros_snapshot,
-            self.model_macros_snapshot,
-            self.columns_snapshot,
-            self.column_references_snapshot,
-        )
+        self.parser.sync(self.files_snapshot)
 
         duration_ms = round((time.perf_counter() - start_time) * 1000)
         indexed = (
