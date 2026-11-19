@@ -13,6 +13,7 @@ from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_
 from src.sqlparse_mcp.model_relations import get_model_relations as run_model_relations
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
+from src.sqlparse_mcp.sql_tree import get_sql_tree as run_sql_tree
 from src.utils import get_sqlparse_config_dir
 
 _INSTRUCTIONS = """\
@@ -81,6 +82,17 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
     Optional ``directory_path`` scopes to one directory tree (exact path).
     """
     return run_directory_tree(_db(ctx), directory_path)
+
+
+@mcp.tool()
+def get_sql_tree(ctx: Context, target: str) -> str:
+    """
+    Return the SQL query tree for a model name or model file path.
+
+    Lists each query (``$`` for the final output, otherwise the CTE name) with
+    column, where, and join counts.
+    """
+    return run_sql_tree(_db(ctx), target)
 
 
 @mcp.tool()

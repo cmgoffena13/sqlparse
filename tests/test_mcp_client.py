@@ -8,7 +8,13 @@ from fastmcp.client.client import CallToolResult
 from src.sqlparse_mcp.skill import SKILL_INSTRUCTIONS
 from tests.conftest import FIXTURE_PROJECT
 
-_TOOLS = {"search", "get_directory_tree", "get_model_relations", "get_column_relations"}
+_TOOLS = {
+    "search",
+    "get_directory_tree",
+    "get_sql_tree",
+    "get_model_relations",
+    "get_column_relations",
+}
 
 
 def _text(result: CallToolResult) -> str:

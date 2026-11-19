@@ -47,6 +47,10 @@ async def _print_tools() -> None:
             _body(await client.call_tool("get_directory_tree", {})),
         )
         _print_section(
+            "SQL TREE",
+            _body(await client.call_tool("get_sql_tree", {"target": "sushi.customers"})),
+        )
+        _print_section(
             "MODEL DEPENDENCIES",
             _body(
                 await client.call_tool(
