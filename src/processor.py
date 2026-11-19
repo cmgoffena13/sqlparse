@@ -9,7 +9,7 @@ import xxhash
 from src.assigner import GlobalIDAssigner
 from src.db import BATCH_TABLES, ProjectDB
 from src.git_utils import path_spec_for_indexing, relative_path_is_ignored
-from src.parsers.sqlmesh_parser import SQLMeshParser
+from src.parse.sqlmesh_parser import SQLMeshParser
 
 
 def _language(file_extension: str) -> str | None:

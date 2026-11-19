@@ -14,7 +14,7 @@ from src.db import (
     ModelSnapshot,
     ProjectDB,
 )
-from src.parsers.column_lineage import extract_model_column_references, extract_model_columns
+from src.parse.column_lineage import extract_model_column_references, extract_model_columns
 
 
 class SQLMeshParser:

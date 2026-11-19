@@ -6,7 +6,7 @@ install:
 	cp .env.example .env
 
 clean:
-	rm -rf dist/ __pycache__/ .ruff_cache/ .pytest_cache/ .sqlparse/
+	rm -rf dist/ __pycache__/ .ruff_cache/ .pytest_cache/ .sqlparse/ src/__pycache__/
 	rm -f .coverage
 
 reset: clean
