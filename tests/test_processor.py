@@ -44,14 +44,19 @@ def test_processor_indexes_files_and_directories() -> None:
         }
         first_macros = {
             str(row["name"]): dict(row)
-            for row in db.fetch("SELECT id, file_id, name, kind FROM macros")
+            for row in db.fetch(
+                "SELECT id, file_id, name, kind, line_start, line_end, snapshot_hash FROM macros"
+            )
         }
         first_model_macros = {
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
         first_audits = {
-            str(row["name"]): dict(row) for row in db.fetch("SELECT id, file_id, name FROM audits")
+            str(row["name"]): dict(row)
+            for row in db.fetch(
+                "SELECT id, file_id, name, line_start, line_end, snapshot_hash FROM audits"
+            )
         }
         first_model_audits = {
             (str(row["audit_name"]), int(row["model_id"]))
@@ -73,7 +78,9 @@ def test_processor_indexes_files_and_directories() -> None:
         }
         first_tests = {
             str(row["name"]): dict(row)
-            for row in db.fetch("SELECT id, file_id, model_id, name FROM tests")
+            for row in db.fetch(
+                "SELECT id, file_id, model_id, name, line_start, line_end, snapshot_hash FROM tests"
+            )
         }
         first_test_references = {
             (int(row["test_id"]), str(row["qualified_name"]))
@@ -108,14 +115,19 @@ def test_processor_indexes_files_and_directories() -> None:
         }
         second_macros = {
             str(row["name"]): dict(row)
-            for row in db.fetch("SELECT id, file_id, name, kind FROM macros")
+            for row in db.fetch(
+                "SELECT id, file_id, name, kind, line_start, line_end, snapshot_hash FROM macros"
+            )
         }
         second_model_macros = {
             (str(row["macro_name"]), int(row["model_id"]))
             for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
         }
         second_audits = {
-            str(row["name"]): dict(row) for row in db.fetch("SELECT id, file_id, name FROM audits")
+            str(row["name"]): dict(row)
+            for row in db.fetch(
+                "SELECT id, file_id, name, line_start, line_end, snapshot_hash FROM audits"
+            )
         }
         second_model_audits = {
             (str(row["audit_name"]), int(row["model_id"]))
@@ -137,7 +149,9 @@ def test_processor_indexes_files_and_directories() -> None:
         }
         second_tests = {
             str(row["name"]): dict(row)
-            for row in db.fetch("SELECT id, file_id, model_id, name FROM tests")
+            for row in db.fetch(
+                "SELECT id, file_id, model_id, name, line_start, line_end, snapshot_hash FROM tests"
+            )
         }
         second_test_references = {
             (int(row["test_id"]), str(row["qualified_name"]))
@@ -314,20 +328,32 @@ def test_processor_indexes_files_and_directories() -> None:
     assert set(first_macros) == {"cents_to_dollars", "identity"}
     assert first_macros["cents_to_dollars"]["kind"] == "jinja"
     assert first_macros["cents_to_dollars"]["file_id"] == jinja_macro_file["id"]
+    assert first_macros["cents_to_dollars"]["line_start"] == 1
+    assert first_macros["cents_to_dollars"]["line_end"] == 3
+    assert first_macros["cents_to_dollars"]["snapshot_hash"]
     assert first_macros["identity"]["kind"] == "python"
     assert first_macros["identity"]["file_id"] == python_macro_file["id"]
+    assert first_macros["identity"]["line_start"] == 4
+    assert first_macros["identity"]["line_end"] == 6
+    assert first_macros["identity"]["snapshot_hash"]
     assert "star" not in first_macros
     assert second_macros == first_macros
     assert first_model_macros == {("cents_to_dollars", first_models[CUSTOMERS_FQN]["id"])}
     assert second_model_macros == first_model_macros
     assert set(first_audits) == {"not_null_customer_id"}
     assert first_audits["not_null_customer_id"]["file_id"] == audit_file["id"]
+    assert first_audits["not_null_customer_id"]["line_start"] == 1
+    assert first_audits["not_null_customer_id"]["line_end"] == 7
+    assert first_audits["not_null_customer_id"]["snapshot_hash"]
     assert second_audits == first_audits
     assert first_model_audits == {("not_null_customer_id", first_models[CUSTOMERS_FQN]["id"])}
     assert second_model_audits == first_model_audits
     assert set(first_tests) == {"test_orders_exist"}
     assert first_tests["test_orders_exist"]["file_id"] == test_orders["id"]
     assert first_tests["test_orders_exist"]["model_id"] == first_models[ORDERS_FQN]["id"]
+    assert first_tests["test_orders_exist"]["line_start"] == 1
+    assert first_tests["test_orders_exist"]["line_end"] == 12
+    assert first_tests["test_orders_exist"]["snapshot_hash"]
     assert second_tests == first_tests
     test_orders_id = first_tests["test_orders_exist"]["id"]
     assert first_test_references == {

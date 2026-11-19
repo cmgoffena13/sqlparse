@@ -76,8 +76,7 @@ class ColumnSnapshot(TypedDict):
 
 class MacroSnapshot(TypedDict):
     id: int
-    file_id: int
-    kind: str
+    snapshot_hash: str
     seen: bool
 
 
@@ -89,7 +88,7 @@ class ModelMacroSnapshot(TypedDict):
 
 class AuditSnapshot(TypedDict):
     id: int
-    file_id: int
+    snapshot_hash: str
     seen: bool
 
 
@@ -107,8 +106,7 @@ class ColumnLineageSnapshot(TypedDict):
 
 class TestSnapshot(TypedDict):
     id: int
-    file_id: int
-    name: str
+    snapshot_hash: str
     seen: bool
 
 
@@ -270,7 +268,7 @@ class ProjectDB:
         self.delete_ids("columns", column_ids)
 
     def get_macros_snapshot(self) -> dict[str, MacroSnapshot]:
-        cursor = self.connection.execute("SELECT id, file_id, name, kind FROM macros")
+        cursor = self.connection.execute("SELECT id, name, snapshot_hash FROM macros")
         return {str(row["name"]): self._macro_snapshot(row) for row in cursor}
 
     def delete_macros(self, macros: dict[str, MacroSnapshot]) -> None:
@@ -295,7 +293,7 @@ class ProjectDB:
             )
 
     def get_audits_snapshot(self) -> dict[str, AuditSnapshot]:
-        cursor = self.connection.execute("SELECT id, file_id, name FROM audits")
+        cursor = self.connection.execute("SELECT id, name, snapshot_hash FROM audits")
         return {str(row["name"]): self._audit_snapshot(row) for row in cursor}
 
     def delete_audits(self, audits: dict[str, AuditSnapshot]) -> None:
@@ -339,7 +337,7 @@ class ProjectDB:
         self.delete_ids("column_lineage", reference_ids)
 
     def get_tests_snapshot(self) -> dict[str, TestSnapshot]:
-        cursor = self.connection.execute("SELECT id, file_id, model_id, name FROM tests")
+        cursor = self.connection.execute("SELECT id, file_id, name, snapshot_hash FROM tests")
         return {f"{row['file_id']}:{row['name']}": self._test_snapshot(row) for row in cursor}
 
     def delete_tests(self, tests: dict[str, TestSnapshot]) -> None:
@@ -419,8 +417,7 @@ class ProjectDB:
     def _macro_snapshot(self, row: sqlite3.Row) -> MacroSnapshot:
         return {
             "id": int(row["id"]),
-            "file_id": int(row["file_id"]),
-            "kind": str(row["kind"]),
+            "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
 
@@ -434,7 +431,7 @@ class ProjectDB:
     def _audit_snapshot(self, row: sqlite3.Row) -> AuditSnapshot:
         return {
             "id": int(row["id"]),
-            "file_id": int(row["file_id"]),
+            "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
 
@@ -455,8 +452,7 @@ class ProjectDB:
     def _test_snapshot(self, row: sqlite3.Row) -> TestSnapshot:
         return {
             "id": int(row["id"]),
-            "file_id": int(row["file_id"]),
-            "name": str(row["name"]),
+            "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
 
@@ -523,9 +519,9 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO macros (
-                    id, file_id, name, kind
+                    id, file_id, name, kind, line_start, line_end, snapshot_hash
                 ) VALUES (
-                    :id, :file_id, :name, :kind
+                    :id, :file_id, :name, :kind, :line_start, :line_end, :snapshot_hash
                 )
                 """,
                 batches["macros"],
@@ -543,9 +539,9 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO audits (
-                    id, file_id, name
+                    id, file_id, name, line_start, line_end, snapshot_hash
                 ) VALUES (
-                    :id, :file_id, :name
+                    :id, :file_id, :name, :line_start, :line_end, :snapshot_hash
                 )
                 """,
                 batches["audits"],
@@ -593,9 +589,9 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO tests (
-                    id, file_id, model_id, name
+                    id, file_id, model_id, name, line_start, line_end, snapshot_hash
                 ) VALUES (
-                    :id, :file_id, :model_id, :name
+                    :id, :file_id, :model_id, :name, :line_start, :line_end, :snapshot_hash
                 )
                 """,
                 batches["tests"],

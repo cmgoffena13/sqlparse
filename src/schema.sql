@@ -61,7 +61,10 @@ CREATE TABLE IF NOT EXISTS macros (
     id                  INTEGER NOT NULL PRIMARY KEY,
     file_id             INTEGER NOT NULL REFERENCES files(id),
     name                TEXT NOT NULL,
-    kind                TEXT NOT NULL
+    kind                TEXT NOT NULL,
+    line_start          INTEGER NOT NULL,
+    line_end            INTEGER NOT NULL,
+    snapshot_hash       TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS macros_name_index ON macros (name);
 
@@ -75,7 +78,10 @@ CREATE INDEX IF NOT EXISTS model_macros_model_id_index ON model_macros (model_id
 CREATE TABLE IF NOT EXISTS audits (
     id                  INTEGER NOT NULL PRIMARY KEY,
     file_id             INTEGER NOT NULL REFERENCES files(id),
-    name                TEXT NOT NULL
+    name                TEXT NOT NULL,
+    line_start          INTEGER NOT NULL,
+    line_end            INTEGER NOT NULL,
+    snapshot_hash       TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS audits_name_index ON audits (name);
 
@@ -122,7 +128,10 @@ CREATE TABLE IF NOT EXISTS tests (
     id                  INTEGER NOT NULL PRIMARY KEY,
     file_id             INTEGER NOT NULL REFERENCES files(id),
     model_id            INTEGER NOT NULL REFERENCES models(id),
-    name                TEXT NOT NULL
+    name                TEXT NOT NULL,
+    line_start          INTEGER NOT NULL,
+    line_end            INTEGER NOT NULL,
+    snapshot_hash       TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS tests_file_id_name_index ON tests (file_id, name);
 

@@ -20,10 +20,11 @@ from src.db import (
     TestReferenceSnapshot,
     TestSnapshot,
 )
+from src.parse.audit_utils import audit_line_span
 from src.parse.column_lineage import extract_model_column_references, extract_model_columns
-from src.parse.macro_utils import macro_paths
+from src.parse.macro_utils import macro_locations
 from src.parse.model_utils import model_config_lines
-from src.parse.test_utils import fixture_column_names
+from src.parse.test_utils import fixture_column_names, test_line_span
 from src.utils import snapshot_hash
 
 
@@ -105,39 +106,42 @@ class SQLMeshParser:
         files_snapshot: dict[str, FileSnapshot],
         macros_snapshot: dict[str, MacroSnapshot],
     ) -> None:
-        paths = macro_paths(self.context)
-        macros: list[tuple[str, str]] = [
-            (name, "jinja") for name in self.context._jinja_macros.root_macros
-        ]
-        for name, macro in self.context._macros.items():
-            if not getattr(macro, "__sqlmesh__builtin__", False):
-                macros.append((name, "python"))
-        for name, kind in macros:
-            file_id = self._file_id(paths[name], files_snapshot)
+        for name, location in macro_locations(self.context).items():
+            file_id = self._file_id(location["path"], files_snapshot)
+            kind = location["kind"]
+            line_start = location["line_start"]
+            line_end = location["line_end"]
+            digest = snapshot_hash([file_id, name, kind, line_start, line_end])
             prior = macros_snapshot.get(name)
             if prior is None:
                 macro_id = self.assigner.reserve("macros", 1)[0]
                 self.batches["macros"].append(
-                    {"id": macro_id, "file_id": file_id, "name": name, "kind": kind}
+                    {
+                        "id": macro_id,
+                        "file_id": file_id,
+                        "name": name,
+                        "kind": kind,
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "snapshot_hash": digest,
+                    }
                 )
-                macros_snapshot[name] = {
-                    "id": macro_id,
-                    "file_id": file_id,
-                    "kind": kind,
-                    "seen": True,
-                }
+                macros_snapshot[name] = {"id": macro_id, "snapshot_hash": digest, "seen": True}
                 continue
             macro_id = prior["id"]
-            if prior["kind"] != kind or prior["file_id"] != file_id:
+            if prior["snapshot_hash"] != digest:
                 self.batches["macros"].append(
-                    {"id": macro_id, "file_id": file_id, "name": name, "kind": kind}
+                    {
+                        "id": macro_id,
+                        "file_id": file_id,
+                        "name": name,
+                        "kind": kind,
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "snapshot_hash": digest,
+                    }
                 )
-            macros_snapshot[name] = {
-                "id": macro_id,
-                "file_id": file_id,
-                "kind": kind,
-                "seen": True,
-            }
+            macros_snapshot[name] = {"id": macro_id, "snapshot_hash": digest, "seen": True}
 
     def _sync_audits(
         self,
@@ -149,17 +153,38 @@ class SQLMeshParser:
             **dict(self.context.standalone_audits.items()),
         }
         for name, audit in audits.items():
-            file_id = self._file_id(Path(str(audit._path)), files_snapshot)
+            path = Path(str(audit._path))
+            file_id = self._file_id(path, files_snapshot)
+            line_start, line_end = audit_line_span(path, audit.dialect, name)
+            digest = snapshot_hash([file_id, name, line_start, line_end])
             prior = audits_snapshot.get(name)
             if prior is None:
                 audit_id = self.assigner.reserve("audits", 1)[0]
-                self.batches["audits"].append({"id": audit_id, "file_id": file_id, "name": name})
-                audits_snapshot[name] = {"id": audit_id, "file_id": file_id, "seen": True}
+                self.batches["audits"].append(
+                    {
+                        "id": audit_id,
+                        "file_id": file_id,
+                        "name": name,
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "snapshot_hash": digest,
+                    }
+                )
+                audits_snapshot[name] = {"id": audit_id, "snapshot_hash": digest, "seen": True}
                 continue
             audit_id = prior["id"]
-            if prior["file_id"] != file_id:
-                self.batches["audits"].append({"id": audit_id, "file_id": file_id, "name": name})
-            audits_snapshot[name] = {"id": audit_id, "file_id": file_id, "seen": True}
+            if prior["snapshot_hash"] != digest:
+                self.batches["audits"].append(
+                    {
+                        "id": audit_id,
+                        "file_id": file_id,
+                        "name": name,
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "snapshot_hash": digest,
+                    }
+                )
+            audits_snapshot[name] = {"id": audit_id, "snapshot_hash": digest, "seen": True}
 
     def _sync_projects(
         self,
@@ -554,29 +579,45 @@ class SQLMeshParser:
         test_references_snapshot: dict[str, TestReferenceSnapshot],
     ) -> None:
         for metadata in self.context._model_test_metadata:
-            file_id = self._file_id(Path(str(metadata.path)), files_snapshot)
+            path = Path(str(metadata.path))
+            file_id = self._file_id(path, files_snapshot)
             model = self.context.get_model(metadata.model_name)
             if model is None or model.fqn not in models_snapshot:
                 continue
             model_id = models_snapshot[model.fqn]["id"]
             name = metadata.test_name
+            line_start, line_end = test_line_span(path, name)
+            digest = snapshot_hash([file_id, model_id, name, line_start, line_end])
             key = f"{file_id}:{name}"
             prior = tests_snapshot.get(key)
-            test_id = self.assigner.reserve("tests", 1)[0] if prior is None else prior["id"]
-            self.batches["tests"].append(
-                {
-                    "id": test_id,
-                    "file_id": file_id,
-                    "model_id": model_id,
-                    "name": name,
-                }
-            )
-            tests_snapshot[key] = {
-                "id": test_id,
-                "file_id": file_id,
-                "name": name,
-                "seen": True,
-            }
+            if prior is None:
+                test_id = self.assigner.reserve("tests", 1)[0]
+                self.batches["tests"].append(
+                    {
+                        "id": test_id,
+                        "file_id": file_id,
+                        "model_id": model_id,
+                        "name": name,
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "snapshot_hash": digest,
+                    }
+                )
+            else:
+                test_id = prior["id"]
+                if prior["snapshot_hash"] != digest:
+                    self.batches["tests"].append(
+                        {
+                            "id": test_id,
+                            "file_id": file_id,
+                            "model_id": model_id,
+                            "name": name,
+                            "line_start": line_start,
+                            "line_end": line_end,
+                            "snapshot_hash": digest,
+                        }
+                    )
+            tests_snapshot[key] = {"id": test_id, "snapshot_hash": digest, "seen": True}
             body = metadata.body if isinstance(metadata.body, dict) else {}
             column_qns: list[str] = []
             for input_name, values in (body.get("inputs") or {}).items():
