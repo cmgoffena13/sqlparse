@@ -22,7 +22,11 @@ from src.db import (
     TestSnapshot,
 )
 from src.parse.audit_utils import audit_line_span
-from src.parse.column_lineage import extract_model_column_references, extract_model_columns
+from src.parse.column_lineage import (
+    extract_model_column_references,
+    extract_model_columns,
+    final_query_name,
+)
 from src.parse.macro_utils import macro_locations
 from src.parse.model_utils import model_config_lines
 from src.parse.test_utils import fixture_column_names, test_line_span
@@ -410,7 +414,11 @@ class SQLMeshParser:
             line_start = column["line_start"]
             line_end = column["line_end"]
             context = column["context"]
-            description = column_descriptions.get(name) if query_name == model_name else None
+            description = (
+                column_descriptions.get(name)
+                if query_name == final_query_name(model_name)
+                else None
+            )
             data_type = column["data_type"]
             digest = snapshot_hash(
                 [
@@ -469,9 +477,11 @@ class SQLMeshParser:
                 "snapshot_hash": digest,
                 "seen": True,
             }
-            relative = ""
-            if query_name != model_name and query_name.startswith(f"{model_name}."):
-                relative = query_name[len(model_name) + 1 :]
+            relative = (
+                query_name[len(model_name) + 1 :]
+                if query_name.startswith(f"{model_name}.")
+                else query_name
+            )
             column_label = f"{from_table}.{name}" if from_table is not None else name
             doc_digest = snapshot_hash([model_name, relative, column_label])
             doc_prior = search_docs_snapshot.get(str(column_id))
@@ -655,14 +665,14 @@ class SQLMeshParser:
                     dialect=input_model.dialect,
                     base_path=fixture_base,
                 ):
-                    column_qns.append(f"{input_model.name}.{column_name}")
+                    column_qns.append(f"{final_query_name(input_model.name)}.{column_name}")
             outputs = body.get("outputs") or {}
             for column_name in fixture_column_names(
                 outputs.get("query"),
                 dialect=model.dialect,
                 base_path=fixture_base,
             ):
-                column_qns.append(f"{model.name}.{column_name}")
+                column_qns.append(f"{final_query_name(model.name)}.{column_name}")
             for cte_name, values in (outputs.get("ctes") or {}).items():
                 for column_name in fixture_column_names(
                     values,

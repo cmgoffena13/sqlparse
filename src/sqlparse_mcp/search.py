@@ -49,11 +49,10 @@ def search(db: ProjectDB, query: str, limit: int) -> str:
                 model_name = str(row["model_name"])
                 query_name = str(row["query_name"])
                 column_name = str(row["column_name"])
-                query_label = query_name if query_name else "$"
                 for section, label in (
                     ("models", model_name),
-                    ("queries", f"{model_name} / {query_label}"),
-                    ("columns", f"{model_name} / {query_label} / {column_name}"),
+                    ("queries", f"{model_name} / {query_name}"),
+                    ("columns", f"{model_name} / {query_name} / {column_name}"),
                 ):
                     if label not in hits:
                         hits[label] = section

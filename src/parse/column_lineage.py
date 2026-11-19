@@ -7,6 +7,12 @@ from sqlglot.optimizer.qualify import qualify
 from sqlglot.optimizer.scope import Scope, traverse_scope
 from sqlmesh.core.model import Model
 
+FINAL_QUERY = "$"
+
+
+def final_query_name(model_name: str) -> str:
+    return f"{model_name}.{FINAL_QUERY}"
+
 
 class ExtractedColumn(TypedDict):
     query_name: str
@@ -82,16 +88,17 @@ def _ref_kind(expression: exp.Expression) -> str:
 
 def _columns_from_types(model: Model) -> list[ExtractedColumn]:
     model_name = model.name
+    query_name = final_query_name(model_name)
     dialect = model.dialect
     columns: list[ExtractedColumn] = []
     for name, dtype in (model.columns_to_types or {}).items():
         type_sql = dtype.sql(dialect=dialect)
         columns.append(
             {
-                "query_name": model_name,
+                "query_name": query_name,
                 "from_table": None,
                 "name": name,
-                "qualified_name": _qualified_name(model_name, None, name),
+                "qualified_name": _qualified_name(query_name, None, name),
                 "data_type": type_sql,
                 "line_start": 0,
                 "line_end": 0,
@@ -114,7 +121,7 @@ def _columns_from_query(
         query_name = (
             f"{model_name}.{parent.alias_or_name}"
             if scope.is_cte and parent is not None
-            else model_name
+            else final_query_name(model_name)
         )
         for expression in scope.expression.expressions:
             name = expression.alias_or_name
@@ -194,19 +201,24 @@ def _cte_projection_qn(
 
 def _table_column_qn(
     scope: Scope, column: exp.Column, *, model_name: str
-) -> tuple[str, str] | None:
-    resolved: tuple[str, str] | None = None
+) -> tuple[str, str, str] | None:
+    resolved: tuple[str, str, str] | None = None
     source = scope.sources.get(column.table) if column.table else None
     if isinstance(source, exp.Table):
-        query_name = _table_source_name(source)
-        resolved = (query_name, f"{query_name}.{column.name}")
+        from_table = _table_source_name(source)
+        source_query_name = final_query_name(from_table)
+        resolved = (from_table, source_query_name, f"{source_query_name}.{column.name}")
     if isinstance(source, Scope):
         cte_name = column.table
         query_name = f"{model_name}.{cte_name}"
         expression = next(
             e for e in source.expression.expressions if e.alias_or_name == column.name
         )
-        resolved = (query_name, _cte_projection_qn(model_name, cte_name, source, expression))
+        resolved = (
+            query_name,
+            query_name,
+            _cte_projection_qn(model_name, cte_name, source, expression),
+        )
     return resolved
 
 
@@ -231,7 +243,7 @@ def _columns_from_clauses(
         for column in node.find_all(exp.Column):
             source = _table_column_qn(scope, column, model_name=model_name)
             if source is not None:
-                from_table, _source_qn = source
+                from_table, _source_query_name, _source_qn = source
                 line_start, line_end = _line_span(column)
                 columns.append(
                     {
@@ -260,11 +272,11 @@ def _emit_clause_refs(
         for column in node.find_all(exp.Column):
             source = _table_column_qn(scope, column, model_name=model_name)
             if source is not None:
-                source_query_name, source_qn = source
+                from_table, source_query_name, source_qn = source
                 _append_reference(
                     refs,
                     ref_query_name=query_base,
-                    ref_qn=_qualified_name(query_base, source_query_name, column.name),
+                    ref_qn=_qualified_name(query_base, from_table, column.name),
                     source_query_name=source_query_name,
                     source_qn=source_qn,
                     ref_expression=node,
@@ -289,7 +301,7 @@ def _emit_cte_projection_refs(
         if isinstance(inner, exp.Column):
             source = _table_column_qn(scope, inner, model_name=model_name)
             if source is not None:
-                source_query_name, source_qn = source
+                _from_table, source_query_name, source_qn = source
                 _append_reference(
                     refs,
                     ref_query_name=ref_query_name,
@@ -305,7 +317,7 @@ def _emit_cte_projection_refs(
         for column in inner.find_all(exp.Column):
             source = _table_column_qn(scope, column, model_name=model_name)
             if source is not None:
-                source_query_name, source_qn = source
+                _from_table, source_query_name, source_qn = source
                 _append_reference(
                     refs,
                     ref_query_name=ref_query_name,
@@ -326,7 +338,7 @@ def _lineage_node_qn(model_name: str, root_scope: Scope, node: Node) -> tuple[st
         resolved = None
     elif isinstance(expression, exp.Table):
         column_name = node.name.split(".")[-1].strip('"')
-        query_name = _table_source_name(expression)
+        query_name = final_query_name(_table_source_name(expression))
         resolved = (query_name, f"{query_name}.{column_name}")
     elif node.reference_node_name:
         cte_scope = root_scope.sources.get(node.reference_node_name)
@@ -336,7 +348,8 @@ def _lineage_node_qn(model_name: str, root_scope: Scope, node: Node) -> tuple[st
                 _cte_projection_qn(model_name, node.reference_node_name, cte_scope, expression),
             )
     elif isinstance(_unwrap(expression), exp.Column):
-        resolved = (model_name, f"{model_name}.{expression.alias_or_name}")
+        query_name = final_query_name(model_name)
+        resolved = (query_name, f"{query_name}.{expression.alias_or_name}")
     return resolved
 
 
@@ -349,9 +362,10 @@ def _emit_root_lineage_refs(
     schema: dict | None,
 ) -> None:
     root_scope = next(scope for scope in traverse_scope(query) if scope.is_root)
+    query_name = final_query_name(model_name)
     for expression in root_scope.expression.expressions:
         name = expression.alias_or_name
-        ref_qn = f"{model_name}.{name}"
+        ref_qn = f"{query_name}.{name}"
         node = lineage(name, query, dialect=dialect, schema=schema, copy=False)
         kind = _ref_kind(cast(exp.Expression, node.expression))
         for child in node.downstream:
@@ -360,7 +374,7 @@ def _emit_root_lineage_refs(
                 source_query_name, source_qn = source
                 _append_reference(
                     refs,
-                    ref_query_name=model_name,
+                    ref_query_name=query_name,
                     ref_qn=ref_qn,
                     source_query_name=source_query_name,
                     source_qn=source_qn,
@@ -390,7 +404,7 @@ def extract_model_column_references(model: Model) -> list[ExtractedColumnReferen
             query_base = (
                 f"{model_name}.{parent.alias_or_name}"
                 if scope.is_cte and parent is not None
-                else model_name
+                else final_query_name(model_name)
             )
             if scope.is_cte and parent is not None:
                 _emit_cte_projection_refs(
