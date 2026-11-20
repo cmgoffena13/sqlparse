@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS columns (
     name                TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
     data_type           TEXT NOT NULL,
+    nullable            BOOLEAN NULL,
     line_start          INTEGER NOT NULL,
     line_end            INTEGER NOT NULL,
     context             TEXT NOT NULL,

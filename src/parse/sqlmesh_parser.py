@@ -21,7 +21,7 @@ from src.db import (
     TestReferenceSnapshot,
     TestSnapshot,
 )
-from src.parse.audit_utils import audit_line_span
+from src.parse.audit_utils import audit_line_span, not_null_column_names
 from src.parse.column_lineage import (
     extract_model_column_references,
     extract_model_columns,
@@ -406,6 +406,8 @@ class SQLMeshParser:
         model_id = models_snapshot[model.name]["id"]
         model_name = model.name
         column_descriptions = model.column_descriptions
+        final_query = final_query_name(model_name)
+        not_null_columns = not_null_column_names(model, self.context._audits)
         for column in extract_model_columns(model):
             query_name = column["query_name"]
             from_table = column["from_table"]
@@ -414,11 +416,9 @@ class SQLMeshParser:
             line_start = column["line_start"]
             line_end = column["line_end"]
             context = column["context"]
-            description = (
-                column_descriptions.get(name)
-                if query_name == final_query_name(model_name)
-                else None
-            )
+            is_final = query_name == final_query
+            description = column_descriptions.get(name) if is_final else None
+            nullable = None if not is_final else name not in not_null_columns
             data_type = column["data_type"]
             digest = snapshot_hash(
                 [
@@ -428,6 +428,7 @@ class SQLMeshParser:
                     name,
                     qualified_name,
                     data_type,
+                    nullable,
                     line_start,
                     line_end,
                     context,
@@ -446,6 +447,7 @@ class SQLMeshParser:
                         "name": name,
                         "qualified_name": qualified_name,
                         "data_type": data_type,
+                        "nullable": nullable,
                         "line_start": line_start,
                         "line_end": line_end,
                         "context": context,
@@ -465,6 +467,7 @@ class SQLMeshParser:
                             "name": name,
                             "qualified_name": qualified_name,
                             "data_type": data_type,
+                            "nullable": nullable,
                             "line_start": line_start,
                             "line_end": line_end,
                             "context": context,
