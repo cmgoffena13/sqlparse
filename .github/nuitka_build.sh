@@ -17,20 +17,6 @@ if [[ "${OS:-}" == "Windows_NT" || "${RUNNER_OS:-}" == "Windows" ]]; then
   OUTPUT_NAME="sqlparse.exe"
 fi
 
-export NUITKA_CACHE_DIR="${NUITKA_CACHE_DIR:-${PWD}/.nuitka-cache}"
-mkdir -p "${NUITKA_CACHE_DIR}"
-
-if command -v ccache >/dev/null 2>&1; then
-  if [[ "$(uname -s 2>/dev/null || echo unknown)" == "Darwin" ]]; then
-    export CC="${CC:-ccache clang}"
-    export CXX="${CXX:-ccache clang++}"
-  else
-    export CC="${CC:-ccache cc}"
-    export CXX="${CXX:-ccache c++}"
-  fi
-  ccache -z || true
-fi
-
 uv run --no-dev -- nuitka \
   --onefile \
   --lto=no \
@@ -51,7 +37,3 @@ uv run --no-dev -- nuitka \
   --include-data-files=src/schema.sql=src/schema.sql \
   --include-data-files=src/drop_schema.sql=src/drop_schema.sql \
   --output-dir=dist/
-
-if command -v ccache >/dev/null 2>&1; then
-  ccache -s || true
-fi
