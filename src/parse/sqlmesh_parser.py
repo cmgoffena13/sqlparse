@@ -1,7 +1,10 @@
 from pathlib import Path
 
+from sqlmesh.core.config import Config
+from sqlmesh.core.config.loader import ALL_CONFIG_FILENAMES, load_config_from_paths
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
+from sqlmesh.utils.errors import ConfigError
 
 from src.assigner import GlobalIDAssigner
 from src.db import (
@@ -31,6 +34,21 @@ from src.parse.macro_utils import macro_locations
 from src.parse.model_utils import model_config_lines
 from src.parse.test_utils import fixture_column_names, test_line_span
 from src.utils import snapshot_hash
+
+
+def is_sqlmesh_project(root: Path) -> bool:
+    try:
+        load_config_from_paths(
+            Config,
+            project_paths=[root / name for name in ALL_CONFIG_FILENAMES],
+            personal_paths=[],
+            load_from_env=False,
+        )
+    except ConfigError:
+        project = False
+    else:
+        project = True
+    return project
 
 
 class SQLMeshParser:

@@ -1,10 +1,14 @@
 import asyncio
+import os
+from pathlib import Path
 
 import mcp_types
 import pytest
 from fastmcp import Client
 from fastmcp.client.client import CallToolResult
+from fastmcp.exceptions import ToolError
 
+from src.parse.sqlmesh_parser import is_sqlmesh_project
 from src.sqlparse_mcp.skill import SKILL_INSTRUCTIONS
 from tests.conftest import FIXTURE_PROJECT
 
@@ -75,3 +79,27 @@ def test_client_lists_tools_and_reads_the_project(
             assert "cte" in column_out
 
     asyncio.run(run())
+
+
+def test_plain_config_yaml_is_not_a_sqlmesh_project(tmp_path: Path) -> None:
+    (tmp_path / "config.yaml").write_text("service: api\n", encoding="utf-8")
+    assert is_sqlmesh_project(FIXTURE_PROJECT) is True
+    assert is_sqlmesh_project(tmp_path) is False
+
+
+def test_mcp_skips_the_database_outside_a_sqlmesh_project(
+    mcp_client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "config.yaml").write_text("service: api\n", encoding="utf-8")
+    monkeypatch.setenv("SQLPARSE_WORKSPACE", str(tmp_path))
+
+    async def run() -> None:
+        async with mcp_client:
+            await mcp_client.call_tool("search", {"query": "customers"})
+
+    with pytest.raises(ToolError, match="is not a SQLMesh project"):
+        asyncio.run(run())
+    config_dir = Path(os.environ["SQLPARSE_CONFIG_DIR"])
+    assert list(config_dir.glob("indexes/*.db")) == []

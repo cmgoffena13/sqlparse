@@ -7,6 +7,7 @@ from typing import Literal
 from fastmcp import Context, FastMCP
 
 from src.db import ProjectDB
+from src.parse.sqlmesh_parser import is_sqlmesh_project
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.column_relations import get_column_relations as run_column_relations
 from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_tree
@@ -31,15 +32,17 @@ def index_root() -> Path:
 
 
 @asynccontextmanager
-async def _lifespan(_app: FastMCP) -> AsyncGenerator[dict[str, ProjectDB]]:
+async def _lifespan(_app: FastMCP) -> AsyncGenerator[dict[str, ProjectDB | None]]:
     get_sqlparse_config_dir()
     root = index_root()
-    db = ProjectDB(root)
-    ProjectProcessor(db, root).process()
+    db = ProjectDB(root) if is_sqlmesh_project(root) else None
+    if db is not None:
+        ProjectProcessor(db, root).process()
     try:
         yield {"db": db}
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
 
 mcp = FastMCP("sqlparse", instructions=_INSTRUCTIONS, lifespan=_lifespan)
@@ -47,8 +50,8 @@ mcp = FastMCP("sqlparse", instructions=_INSTRUCTIONS, lifespan=_lifespan)
 
 def _db(ctx: Context) -> ProjectDB:
     db = ctx.lifespan_context["db"]
-    if not isinstance(db, ProjectDB):
-        raise TypeError("index database missing from MCP lifespan")
+    if db is None:
+        raise RuntimeError(f"{index_root()} is not a SQLMesh project")
     return db
 
 
