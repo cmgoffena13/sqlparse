@@ -192,3 +192,32 @@ CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
     query_name,
     column_name
 );
+
+CREATE TABLE IF NOT EXISTS session_stats (
+    id                  INTEGER NOT NULL PRIMARY KEY,
+    session_id          TEXT NOT NULL,
+    session_start_time  INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS session_stats_session_id_index ON session_stats (session_id);
+
+CREATE TABLE IF NOT EXISTS session_stats_files (
+    id                      INTEGER NOT NULL PRIMARY KEY,
+    session_id              INTEGER NOT NULL REFERENCES session_stats(id),
+    file_id                 INTEGER NOT NULL REFERENCES files(id),
+    current_file_tokens     INTEGER NOT NULL,
+    tool_call_count         INTEGER NOT NULL,
+    output_tokens           INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS session_stats_files_session_id_file_id_index
+    ON session_stats_files (session_id, file_id);
+
+CREATE TABLE IF NOT EXISTS session_stats_tool_outputs (
+    id                          INTEGER NOT NULL PRIMARY KEY,
+    session_file_id             INTEGER NOT NULL REFERENCES session_stats_files(id),
+    tool                        TEXT NOT NULL,
+    tool_symbol_qualified_name  TEXT,
+    output_tokens               INTEGER NOT NULL,
+    file_tokens                 INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS session_stats_tool_outputs_session_file_id_index
+    ON session_stats_tool_outputs (session_file_id);

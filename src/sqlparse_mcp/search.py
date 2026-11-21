@@ -60,7 +60,7 @@ def search(
                 model_name = str(row["model_name"])
                 query_name = str(row["query_name"])
                 if str(row["model_kind"]) == "EXTERNAL":
-                    query_name = "EXTERNAL"
+                    query_name = "$EXTERNAL"
                 column_name = str(row["column_name"])
                 candidates = (
                     ("models", search_models, model_name),

@@ -72,7 +72,7 @@ async def _print_tools() -> None:
             _body(
                 await client.call_tool(
                     "get_query",
-                    {"target": "sushi.customers", "query_name": "MODEL"},
+                    {"target": "sushi.customers", "query_name": "$CONFIG"},
                 )
             ),
         )

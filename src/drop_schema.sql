@@ -1,3 +1,6 @@
+DROP TABLE IF EXISTS session_stats_tool_outputs;
+DROP TABLE IF EXISTS session_stats_files;
+DROP TABLE IF EXISTS session_stats;
 DROP TABLE IF EXISTS search_fts;
 DROP TABLE IF EXISTS search_docs;
 DROP TABLE IF EXISTS test_references;

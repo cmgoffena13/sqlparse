@@ -1,0 +1,508 @@
+import sqlite3
+import threading
+import time
+from pathlib import Path
+
+from fastmcp import Context
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.tools.base import ToolResult
+from pydantic import BaseModel
+
+from src.sqlparse_mcp.model import _normalize_file_path
+from src.utils import db_path_for_index_root
+
+_ARGUMENT_KEYS = {
+    "get_model": ("target", ("target",)),
+    "get_query": ("target", ("target", "query_name")),
+    "get_span_at_lines": ("file_path", ()),
+    "get_test": ("file_path", ("test_name",)),
+    "get_macro": ("file_path", ("macro_name",)),
+    "get_audit": ("file_path", ("audit_name",)),
+}
+_TRACKED_TOOLS = frozenset(_ARGUMENT_KEYS)
+
+_MODEL_FILE_SQL = """
+SELECT files.path
+FROM models
+INNER JOIN files
+    ON files.id = models.file_id
+WHERE models.qualified_name = ?
+"""
+
+_FILE_ID_SQL = "SELECT id FROM files WHERE path = ?"
+
+_INSERT_SESSION_SQL = """
+INSERT INTO session_stats (session_id, session_start_time)
+VALUES (?, ?)
+ON CONFLICT(session_id) DO NOTHING
+"""
+
+_SESSION_ROW_SQL = "SELECT id FROM session_stats WHERE session_id = ?"
+
+_UPSERT_FILE_SQL = """
+INSERT INTO session_stats_files (
+    session_id,
+    file_id,
+    current_file_tokens,
+    tool_call_count,
+    output_tokens
+)
+VALUES (?, ?, ?, 1, ?)
+ON CONFLICT(session_id, file_id) DO UPDATE SET
+    current_file_tokens = excluded.current_file_tokens,
+    tool_call_count = session_stats_files.tool_call_count + 1,
+    output_tokens = session_stats_files.output_tokens + excluded.output_tokens
+RETURNING id
+"""
+
+_WEEK_SECONDS = 7 * 24 * 60 * 60
+
+_OLD_SESSION_IDS_SQL = "SELECT id FROM session_stats WHERE session_start_time < ?"
+
+_INSERT_OUTPUT_SQL = """
+INSERT INTO session_stats_tool_outputs (
+    session_file_id,
+    tool,
+    tool_symbol_qualified_name,
+    output_tokens,
+    file_tokens
+)
+VALUES (?, ?, ?, ?, ?)
+"""
+
+_LOAD_SQL = """
+SELECT
+    s.session_id,
+    f.path,
+    sf.current_file_tokens,
+    sf.tool_call_count,
+    sf.output_tokens,
+    o.tool,
+    o.tool_symbol_qualified_name,
+    o.output_tokens AS call_output_tokens,
+    o.file_tokens AS call_file_tokens
+FROM session_stats_files AS sf
+INNER JOIN session_stats AS s
+    ON s.id = sf.session_id
+INNER JOIN files AS f
+    ON f.id = sf.file_id
+LEFT JOIN session_stats_tool_outputs AS o
+    ON o.session_file_id = sf.id
+ORDER BY sf.id, o.id
+"""
+
+_REPORT_SQL = """
+SELECT
+    s.session_id,
+    s.session_start_time,
+    f.path,
+    sf.tool_call_count,
+    sf.output_tokens,
+    sf.current_file_tokens,
+    COALESCE(
+        (
+            SELECT SUM(o.file_tokens)
+            FROM session_stats_tool_outputs AS o
+            WHERE o.session_file_id = sf.id
+        ),
+        0
+    ) AS if_file_read_every_time
+FROM session_stats_files AS sf
+INNER JOIN session_stats AS s
+    ON s.id = sf.session_id
+INNER JOIN files AS f
+    ON f.id = sf.file_id
+ORDER BY s.session_start_time DESC, s.session_id, f.path
+"""
+
+
+class ToolOutput(BaseModel):
+    tool: str
+    tool_symbol_qualified_name: str | None
+    output_tokens: int
+    file_tokens: int
+
+
+class FileToolStats(BaseModel):
+    session_id: str
+    file_path: str
+    current_file_tokens: int
+    tool_call_count: int
+    output_tokens: int
+    outputs: list[ToolOutput]
+
+
+def _tokens(length: int) -> int:
+    return length // 4
+
+
+def _tokens_saved_range(latest: int, every: int, output: int) -> tuple[int, int]:
+    return latest - output, every - output
+
+
+def _format_tokens_saved(low: int, high: int) -> str:
+    result = str(low)
+    if low != high:
+        result = f"{low}..{high}"
+    return result
+
+
+def load_session_files(root: Path) -> list[FileToolStats]:
+    grouped: dict[tuple[str, str], FileToolStats] = {}
+    connection = _connect(root)
+    if connection is not None:
+        try:
+            rows = connection.execute(_LOAD_SQL).fetchall()
+        finally:
+            connection.close()
+        for row in rows:
+            key = (str(row["session_id"]), str(row["path"]))
+            stats = grouped.get(key)
+            if stats is None:
+                stats = FileToolStats(
+                    session_id=key[0],
+                    file_path=key[1],
+                    current_file_tokens=int(row["current_file_tokens"]),
+                    tool_call_count=int(row["tool_call_count"]),
+                    output_tokens=int(row["output_tokens"]),
+                    outputs=[],
+                )
+                grouped[key] = stats
+            if row["tool"] is not None:
+                stats.outputs.append(
+                    ToolOutput(
+                        tool=str(row["tool"]),
+                        tool_symbol_qualified_name=row["tool_symbol_qualified_name"],
+                        output_tokens=int(row["call_output_tokens"]),
+                        file_tokens=int(row["call_file_tokens"]),
+                    )
+                )
+    return list(grouped.values())
+
+
+def format_session_stats_report(root: Path) -> str:
+    lines: list[str] = []
+    connection = _connect(root)
+    rows: list[sqlite3.Row] = []
+    if connection is not None:
+        try:
+            rows = list(connection.execute(_REPORT_SQL).fetchall())
+        finally:
+            connection.close()
+    if not rows:
+        lines.append("No session stats recorded.")
+    else:
+        lines.append(
+            "Tokens saved: low = vs reading each file once; "
+            "high = vs re-reading it on every tool call."
+        )
+        lines.append("")
+    header = (
+        "| file | tool_calls | latest_file_tokens | if_file_read_every_time | "
+        "tool_output_tokens | tokens_saved |"
+    )
+    rule = "| --- | --- | --- | --- | --- | --- |"
+    current_session = ""
+    session_files = 0
+    session_calls = 0
+    session_latest = 0
+    session_every = 0
+    session_output = 0
+    session_saved_low = 0
+    session_saved_high = 0
+    for row in rows:
+        session_id = str(row["session_id"])
+        calls = int(row["tool_call_count"])
+        latest = int(row["current_file_tokens"])
+        output = int(row["output_tokens"])
+        every = int(row["if_file_read_every_time"])
+        saved_low, saved_high = _tokens_saved_range(latest, every, output)
+        if session_id != current_session:
+            if current_session:
+                noun = "file" if session_files == 1 else "files"
+                total = (
+                    f"| {session_files} {noun} | {session_calls} | "
+                    f"{session_latest} | {session_every} | {session_output} | "
+                    f"{_format_tokens_saved(session_saved_low, session_saved_high)} |"
+                )
+                lines.append(total)
+                lines.append("")
+            current_session = session_id
+            session_files = 0
+            session_calls = 0
+            session_latest = 0
+            session_every = 0
+            session_output = 0
+            session_saved_low = 0
+            session_saved_high = 0
+            started = time.strftime(
+                "%Y-%m-%d %H:%M:%S",
+                time.localtime(int(row["session_start_time"])),
+            )
+            lines.append(f"{session_id} - {started}")
+            lines.append(header)
+            lines.append(rule)
+        session_files += 1
+        session_calls += calls
+        session_latest += latest
+        session_every += every
+        session_output += output
+        session_saved_low += saved_low
+        session_saved_high += saved_high
+        lines.append(
+            f"| {row['path']} | {calls} | {latest} | {every} | {output} | "
+            f"{_format_tokens_saved(saved_low, saved_high)} |"
+        )
+    if current_session:
+        noun = "file" if session_files == 1 else "files"
+        total = (
+            f"| {session_files} {noun} | {session_calls} | "
+            f"{session_latest} | {session_every} | {session_output} | "
+            f"{_format_tokens_saved(session_saved_low, session_saved_high)} |"
+        )
+        lines.append(total)
+    return "\n".join(lines) + "\n"
+
+
+def record_tool_call(
+    root: Path,
+    session_id: str,
+    file_path: str,
+    tool: str,
+    qualified_name: str,
+    output: str,
+    file_chars: int,
+) -> None:
+    connection = _connect(root)
+    if connection is not None:
+        try:
+            _write_tool_call(
+                connection,
+                session_id,
+                file_path,
+                tool,
+                qualified_name,
+                output,
+                file_chars,
+            )
+        finally:
+            connection.close()
+
+
+class SessionStatsMiddleware(Middleware):
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext,
+        call_next: CallNext,
+    ) -> ToolResult:
+        result = await call_next(context)
+        _schedule_from_call(context, result)
+        return result
+
+
+def _spawn(
+    root: Path,
+    session_id: str,
+    tool: str,
+    qualified_name: str,
+    raw_path: str,
+    output: str,
+) -> None:
+    threading.Thread(
+        target=_record,
+        args=(root, session_id, tool, qualified_name, raw_path, output),
+        daemon=True,
+    ).start()
+
+
+def _schedule_from_call(context: MiddlewareContext, result: ToolResult) -> None:
+    message = context.message
+    tool = str(getattr(message, "name", "") or "")
+    fastmcp_context = context.fastmcp_context
+    if tool in _TRACKED_TOOLS and fastmcp_context is not None:
+        db = fastmcp_context.lifespan_context.get("db")
+        if db is not None:
+            arguments = getattr(message, "arguments", None)
+            _spawn(
+                db.root,
+                _connection_id(fastmcp_context),
+                tool,
+                _symbol_argument(tool, arguments),
+                _path_argument(tool, arguments),
+                _output_text(result),
+            )
+
+
+def _connection_id(fastmcp_context: Context) -> str:
+    connection = ""
+    try:
+        connection = fastmcp_context.session_id
+    except RuntimeError:
+        connection = ""
+    return connection
+
+
+def _argument(arguments: object, key: str) -> str:
+    value = ""
+    if isinstance(arguments, dict):
+        raw = arguments.get(key)
+        if isinstance(raw, str):
+            value = raw.strip()
+    return value
+
+
+def _path_argument(tool: str, arguments: object) -> str:
+    return _argument(arguments, _ARGUMENT_KEYS[tool][0])
+
+
+def _symbol_argument(tool: str, arguments: object) -> str:
+    parts = [_argument(arguments, key) for key in _ARGUMENT_KEYS[tool][1]]
+    return "/".join(part for part in parts if part)
+
+
+def _output_text(result: ToolResult) -> str:
+    parts: list[str] = []
+    for block in result.content:
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            parts.append(text)
+    return "".join(parts)
+
+
+def _record(
+    root: Path,
+    session_id: str,
+    tool: str,
+    qualified_name: str,
+    raw_path: str,
+    output: str,
+) -> None:
+    relative = _relative_path(root, raw_path)
+    if relative:
+        file_chars = _file_chars(root / relative)
+        if file_chars is not None:
+            record_tool_call(
+                root,
+                session_id,
+                relative,
+                tool,
+                qualified_name,
+                output,
+                file_chars,
+            )
+
+
+def _relative_path(root: Path, raw_path: str) -> str:
+    relative = ""
+    candidate = ""
+    try:
+        candidate = _normalize_file_path(raw_path, root) if raw_path else ""
+    except ValueError:
+        candidate = ""
+    if candidate and _stored_path(root, candidate):
+        relative = candidate
+    elif raw_path:
+        relative = _model_path(root, raw_path)
+    return relative
+
+
+def _stored_path(root: Path, path: str) -> bool:
+    found = False
+    connection = _connect(root)
+    if connection is not None:
+        try:
+            found = connection.execute(_FILE_ID_SQL, (path,)).fetchone() is not None
+        finally:
+            connection.close()
+    return found
+
+
+def _model_path(root: Path, qualified_name: str) -> str:
+    relative = ""
+    connection = _connect(root)
+    if qualified_name and connection is not None:
+        try:
+            row = connection.execute(_MODEL_FILE_SQL, (qualified_name,)).fetchone()
+        finally:
+            connection.close()
+        if row is not None and row["path"]:
+            relative = str(row["path"])
+    return relative
+
+
+def _file_chars(path: Path) -> int | None:
+    size: int | None = None
+    try:
+        size = len(path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        size = None
+    return size
+
+
+def _delete_old_sessions(connection: sqlite3.Connection, cutoff: int) -> None:
+    ids = [int(row["id"]) for row in connection.execute(_OLD_SESSION_IDS_SQL, (cutoff,)).fetchall()]
+    if ids:
+        placeholders = ", ".join("?" for _ in ids)
+        parameters = tuple(ids)
+        connection.execute(
+            f"""
+            DELETE FROM session_stats_tool_outputs
+            WHERE session_file_id IN (
+                SELECT id FROM session_stats_files WHERE session_id IN ({placeholders})
+            )
+            """,  # noqa: S608
+            parameters,
+        )
+        connection.execute(
+            f"DELETE FROM session_stats_files WHERE session_id IN ({placeholders})",  # noqa: S608
+            parameters,
+        )
+        connection.execute(
+            f"DELETE FROM session_stats WHERE id IN ({placeholders})",  # noqa: S608
+            parameters,
+        )
+
+
+def _connect(root: Path) -> sqlite3.Connection | None:
+    db_file = db_path_for_index_root(root)
+    connection = None
+    if db_file.exists():
+        connection = sqlite3.connect(db_file)
+        connection.row_factory = sqlite3.Row
+    return connection
+
+
+def _write_tool_call(
+    connection: sqlite3.Connection,
+    session_id: str,
+    file_path: str,
+    tool: str,
+    qualified_name: str,
+    output: str,
+    file_chars: int,
+) -> None:
+    file_row = connection.execute(_FILE_ID_SQL, (file_path,)).fetchone()
+    if file_row is not None:
+        output_tokens = _tokens(len(output))
+        file_tokens = _tokens(file_chars)
+        connection.execute("BEGIN IMMEDIATE")
+        _delete_old_sessions(connection, int(time.time()) - _WEEK_SECONDS)
+        connection.execute(_INSERT_SESSION_SQL, (session_id, int(time.time())))
+        session_row = connection.execute(_SESSION_ROW_SQL, (session_id,)).fetchone()
+        file_stats = None
+        if session_row is not None:
+            file_stats = connection.execute(
+                _UPSERT_FILE_SQL,
+                (
+                    int(session_row["id"]),
+                    int(file_row["id"]),
+                    file_tokens,
+                    output_tokens,
+                ),
+            ).fetchone()
+        if file_stats is not None:
+            connection.execute(
+                _INSERT_OUTPUT_SQL,
+                (int(file_stats["id"]), tool, qualified_name or None, output_tokens, file_tokens),
+            )
+            connection.commit()

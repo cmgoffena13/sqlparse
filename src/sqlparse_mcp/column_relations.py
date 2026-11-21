@@ -291,7 +291,7 @@ def _relation_text(
     column: str,
     ref_kinds: list[str],
 ) -> str:
-    text = f"{model_name} / EXTERNAL / {column}"
+    text = f"{model_name} / $EXTERNAL / {column}"
     if kind != "EXTERNAL":
         text = (
             f"{model_name} / {_relative_query(model_name, query_name)} / {column}"

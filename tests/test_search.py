@@ -44,8 +44,9 @@ def test_search_finds_models_queries_and_columns() -> None:
     assert "sushi.customers / $" in out
     assert "## Columns\n\n" in out
     assert "sushi.customers / $ / cte.customer_id" in out
-    assert "raw.customers / EXTERNAL / status" in out
-    assert "raw.customers / $" not in out
+    assert "raw.customers / $EXTERNAL" in out
+    assert "raw.customers / $EXTERNAL / status" in out
+    assert "• raw.customers / $\n" not in out
 
 
 def test_search_cte_name_includes_model() -> None:

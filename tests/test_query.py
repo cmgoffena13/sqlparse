@@ -192,11 +192,11 @@ def test_query_named_model_returns_the_config() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        by_name = get_query(db, "sushi.customers", "MODEL")
-        by_file = get_query(db, "models/customers.sql", "MODEL")
-        rendered = get_query(db, "sushi.customers", "MODEL", render=True)
-        external = get_query(db, "raw.customers", "MODEL")
-        python = get_query(db, "sushi.waiters", "MODEL")
+        by_name = get_query(db, "sushi.customers", "$CONFIG")
+        by_file = get_query(db, "models/customers.sql", "$CONFIG")
+        rendered = get_query(db, "sushi.customers", "$CONFIG", render=True)
+        external = get_query(db, "raw.customers", "$CONFIG")
+        python = get_query(db, "sushi.waiters", "$CONFIG")
     finally:
         db.close()
     config = (
@@ -250,8 +250,8 @@ def test_query_external_model_has_no_query() -> None:
         ).fetchone()
     finally:
         db.close()
-    assert out == "EXTERNAL"
-    assert rendered == "EXTERNAL"
+    assert out == "$EXTERNAL"
+    assert rendered == "$EXTERNAL"
     assert stored["rendered_sql"] is None
 
 
@@ -290,7 +290,7 @@ def test_span_at_lines_on_model_config_shows_the_config() -> None:
         db.close()
     assert out == (
         "Model: sushi.customers\n"
-        "Query: MODEL\n"
+        "Query: $CONFIG\n"
         "\n"
         "L1 | MODEL (\n"
         "L2 |   name sushi.customers,\n"

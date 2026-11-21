@@ -14,6 +14,9 @@ from src.sqlparse_mcp.column_relations import _resolve_query_name
 from src.sqlparse_mcp.format_utils import bullet
 from src.sqlparse_mcp.model import _normalize_file_path
 
+_CONFIG_QUERY = "$CONFIG"
+_EXTERNAL_QUERY = "$EXTERNAL"
+
 _MODEL_SQL = """
 SELECT
     models.qualified_name,
@@ -308,8 +311,8 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
             path = str(model_row["file_path"])
             header = f"Model: {model_name}" if from_file else f"File: {path}"
             asked = "" if query_name is None else query_name.strip()
-            result = "EXTERNAL"
-            if asked == "MODEL":
+            result = _EXTERNAL_QUERY
+            if asked == _CONFIG_QUERY:
                 text = (db.root / path).read_text(encoding="utf-8")
                 result = _format_query(
                     header,
@@ -468,7 +471,7 @@ def _stored_spans(db: ProjectDB, path: str, kind: str) -> list[_LineSpan]:
 
 
 def _span_label(span: _LineSpan) -> str:
-    label = f"{span['model_name']}/MODEL"
+    label = f"{span['model_name']}/{_CONFIG_QUERY}"
     if span["kind"] == "query":
         label = (
             f"{span['model_name']}/{_shown_query_name(span['query_name'], span['display_name'])}"
@@ -535,7 +538,7 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
         source = "\n".join(lines[span["start"] - 1 : span["end"]])
         macros = _query_macros(db, span["model_name"], source)
     elif span["kind"] == "config":
-        detail = f"{detail}\nQuery: MODEL"
+        detail = f"{detail}\nQuery: {_CONFIG_QUERY}"
     elif span["kind"] == "audit":
         detail = f"Audit: {span['model_name']}"
     elif span["kind"] == "macro":

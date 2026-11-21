@@ -67,10 +67,20 @@ def test_recreate_schema_keeps_column_lineage_shape(tmp_path: Path) -> None:
         test_model_index = [
             row["name"] for row in db.fetch("PRAGMA index_info(tests_model_id_index)")
         ]
+        names = {
+            row["name"] for row in db.fetch("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
         with pytest.raises(ValueError, match="unsupported table"):
             db.table_max_id("not_a_table")
+        with pytest.raises(ValueError, match="unsupported table"):
+            db.table_max_id("session_stats")
     finally:
         db.close()
+    assert {
+        "session_stats",
+        "session_stats_files",
+        "session_stats_tool_outputs",
+    } <= names
     assert ref_index == ["ref_column_id"]
     assert source_index == ["source_column_id"]
     assert model_edge_index == ["ref_column_model_id", "source_models_id"]

@@ -31,7 +31,7 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
         db.close()
     assert out == (
         "sushi.customers / $cte / raw.customers.customer_id (select, join)\n"
-        "└── raw.customers / EXTERNAL / customer_id\n"
+        "└── raw.customers / $EXTERNAL / customer_id\n"
     )
 
 
@@ -48,7 +48,7 @@ def test_column_relations_marks_external_source_models() -> None:
         )
     finally:
         db.close()
-    assert "raw.orders / EXTERNAL" in out
+    assert "raw.orders / $EXTERNAL" in out
     assert "raw.orders\n" not in out
 
 
@@ -159,13 +159,13 @@ def test_column_relations_customer_status_walks_each_query() -> None:
     assert final == (
         "sushi.customer_status / $filtered / base.customer_id (alias)\n"
         "└── sushi.customer_status / $base / raw.customers.id (alias)\n"
-        "    └── raw.customers / EXTERNAL / customer_id\n"
+        "    └── raw.customers / $EXTERNAL / customer_id\n"
     )
     assert filtered == (
         "sushi.customer_status / $base / raw.customers.id (alias)\n"
-        "└── raw.customers / EXTERNAL / customer_id\n"
+        "└── raw.customers / $EXTERNAL / customer_id\n"
     )
-    assert base == ("raw.customers / EXTERNAL / customer_id\n")
+    assert base == ("raw.customers / $EXTERNAL / customer_id\n")
 
 
 def test_column_relations_join_column_uses_table_qualified_label() -> None:

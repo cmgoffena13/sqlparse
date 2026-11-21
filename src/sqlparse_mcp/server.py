@@ -21,6 +21,7 @@ from src.sqlparse_mcp.model_test import get_test as run_get_test
 from src.sqlparse_mcp.query import get_query as run_get_query
 from src.sqlparse_mcp.query import get_span_at_lines as run_get_span_at_lines
 from src.sqlparse_mcp.search import search as run_search
+from src.sqlparse_mcp.session_stats import SessionStatsMiddleware, format_session_stats_report
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
 from src.utils import get_sqlparse_config_dir
 
@@ -29,10 +30,9 @@ sqlparse tools read an up-to-date view of a SQLMesh project.
 
 Queries/CTEs are prefixed with ``$``. 
 A single ``$`` is the final output query.
-Model Config is treated as a query and called ``MODEL``.
-EXTERNAL models have no query and return ``EXTERNAL``.
-
-Ex. ``$``, ``$cte_name``, or ``MODEL``.
+Model Config is treated as a query and called ``$CONFIG``.
+EXTERNAL models have no query and return an ``$EXTERNAL`` placeholder value.
+Ex. ``$``, ``$cte_name``, or ``$CONFIG``.
 
 Utilize the ``sqlparse`` skill for guided exploration workflows.
 Use the ``skill://sqlparse/SKILL.md`` resource if the skill is not found.
@@ -61,6 +61,7 @@ async def _lifespan(_app: FastMCP) -> AsyncGenerator[dict[str, ProjectDB | None]
 
 
 mcp = FastMCP("sqlparse", instructions=_INSTRUCTIONS, lifespan=_lifespan)
+mcp.add_middleware(SessionStatsMiddleware())
 
 
 def _db(ctx: Context) -> ProjectDB:
@@ -78,6 +79,16 @@ def _db(ctx: Context) -> ProjectDB:
 )
 def sqlparse_skill() -> str:
     return SKILL_INSTRUCTIONS
+
+
+@mcp.resource(
+    "stats://sqlparse/sessions",
+    name="sqlparse/sessions",
+    description="Per MCP session (id + start time), a markdown table of file stats.",
+    mime_type="text/markdown",
+)
+def session_stats_resource() -> str:
+    return format_session_stats_report(index_root())
 
 
 @mcp.tool()
