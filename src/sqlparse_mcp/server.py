@@ -2,7 +2,7 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastmcp import Context, FastMCP
 
@@ -41,14 +41,15 @@ def index_root() -> Path:
 
 
 @asynccontextmanager
-async def _lifespan(_app: FastMCP) -> AsyncGenerator[dict[str, ProjectDB | None]]:
+async def _lifespan(_app: FastMCP) -> AsyncGenerator[dict[str, Any]]:
     get_sqlparse_config_dir()
     root = index_root()
     db = ProjectDB(root) if is_sqlmesh_project(root) else None
-    if db is not None:
-        ProjectProcessor(db, root).process()
+    processor = ProjectProcessor(db, root) if db is not None else None
+    if processor is not None:
+        processor.process()
     try:
-        yield {"db": db}
+        yield {"db": db, "processor": processor}
     finally:
         if db is not None:
             db.close()
@@ -58,11 +59,11 @@ mcp = FastMCP("sqlparse", instructions=_INSTRUCTIONS, lifespan=_lifespan)
 mcp.add_middleware(SessionStatsMiddleware())
 
 
-def _db(ctx: Context) -> ProjectDB:
-    db = ctx.lifespan_context["db"]
-    if db is None:
+def _processor(ctx: Context) -> ProjectProcessor:
+    processor = ctx.lifespan_context["processor"]
+    if processor is None:
         raise RuntimeError(f"{index_root()} is not a SQLMesh project")
-    return db
+    return processor
 
 
 @mcp.resource(
@@ -102,19 +103,21 @@ def search(
 
     Filter the search targets with the ``search_`` flags. All three are included by default.
     """
-    return run_search(_db(ctx), query, limit, search_models, search_queries, search_columns)
+    return _processor(ctx).run_query(
+        lambda db: run_search(db, query, limit, search_models, search_queries, search_columns)
+    )
 
 
 @mcp.tool()
 def list_schemas(ctx: Context) -> str:
     """Return every schema name."""
-    return run_list_schemas(_db(ctx))
+    return _processor(ctx).run_query(run_list_schemas)
 
 
 @mcp.tool()
 def list_models(ctx: Context, schema: str) -> str:
     """Return the model names in one schema."""
-    return run_list_models(_db(ctx), schema)
+    return _processor(ctx).run_query(lambda db: run_list_models(db, schema))
 
 
 @mcp.tool()
@@ -125,7 +128,7 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
     Optional ``directory_path`` scopes to one directory tree (exact path).
     Ex. `audits/`
     """
-    return run_get_directory_tree(_db(ctx), directory_path)
+    return _processor(ctx).run_query(lambda db: run_get_directory_tree(db, directory_path))
 
 
 @mcp.tool()
@@ -136,7 +139,7 @@ def get_model(ctx: Context, target: str) -> str:
     Target can be a model name or model file path.
     Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
     """
-    return run_get_model(_db(ctx), target)
+    return _processor(ctx).run_query(lambda db: run_get_model(db, target))
 
 
 @mcp.tool()
@@ -151,7 +154,7 @@ def get_query(
 
     Enable ``render`` to render the SQL and the query's macros.
     """
-    return run_get_query(_db(ctx), target, query_name, render)
+    return _processor(ctx).run_query(lambda db: run_get_query(db, target, query_name, render))
 
 
 @mcp.tool()
@@ -169,7 +172,9 @@ def get_span_at_lines(
     The tightest match that contains the whole range is returned.
     A range that crosses spans lists each span name.
     """
-    return run_get_span_at_lines(_db(ctx), file_path, start_line, end_line)
+    return _processor(ctx).run_query(
+        lambda db: run_get_span_at_lines(db, file_path, start_line, end_line)
+    )
 
 
 @mcp.tool()
@@ -177,7 +182,7 @@ def get_test(ctx: Context, file_path: str, test_name: str) -> str:
     """
     Return a test definition.
     """
-    return run_get_test(_db(ctx), file_path, test_name)
+    return _processor(ctx).run_query(lambda db: run_get_test(db, file_path, test_name))
 
 
 @mcp.tool()
@@ -185,7 +190,7 @@ def get_macro(ctx: Context, file_path: str, macro_name: str) -> str:
     """
     Return a macro's definition and the models that use it.
     """
-    return run_get_macro(_db(ctx), file_path, macro_name)
+    return _processor(ctx).run_query(lambda db: run_get_macro(db, file_path, macro_name))
 
 
 @mcp.tool()
@@ -193,7 +198,7 @@ def get_audit(ctx: Context, file_path: str, audit_name: str) -> str:
     """
     Return an audit's definition and the models that use it.
     """
-    return run_get_audit(_db(ctx), file_path, audit_name)
+    return _processor(ctx).run_query(lambda db: run_get_audit(db, file_path, audit_name))
 
 
 @mcp.tool()
@@ -209,7 +214,9 @@ def get_model_relations(
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
-    return run_get_model_relations(_db(ctx), model_name, relation, include_tests, page)
+    return _processor(ctx).run_query(
+        lambda db: run_get_model_relations(db, model_name, relation, include_tests, page)
+    )
 
 
 @mcp.tool()
@@ -231,12 +238,14 @@ def get_column_relations(
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
-    return run_get_column_relations(
-        _db(ctx),
-        model_name,
-        query_name,
-        column_name,
-        relation,
-        include_tests=include_tests,
-        page=page,
+    return _processor(ctx).run_query(
+        lambda db: run_get_column_relations(
+            db,
+            model_name,
+            query_name,
+            column_name,
+            relation,
+            include_tests=include_tests,
+            page=page,
+        )
     )

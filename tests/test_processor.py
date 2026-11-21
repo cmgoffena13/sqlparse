@@ -1,5 +1,6 @@
 import os
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from src.db import ProjectDB
@@ -26,6 +27,29 @@ def test_processor_releases_sqlmesh_before_the_next_index() -> None:
             (CUSTOMERS_FQN,),
         )
         assert rows[0]["qualified_name"] == CUSTOMERS_FQN
+    finally:
+        db.close()
+
+
+def test_concurrent_run_query_does_not_raise() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    processor = ProjectProcessor(db, FIXTURE_PROJECT)
+    try:
+        processor.process(full=True)
+
+        def worker() -> int:
+            return processor.run_query(
+                lambda conn: conn.connection.execute("SELECT COUNT(*) AS c FROM models").fetchone()[
+                    "c"
+                ]
+            )
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [pool.submit(worker) for _ in range(8)]
+            results = [future.result() for future in as_completed(futures)]
+
+        assert len(results) == 8
+        assert all(isinstance(count, int) for count in results)
     finally:
         db.close()
 

@@ -2,7 +2,9 @@ import os
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 
 import xxhash
 
@@ -10,6 +12,8 @@ from src.assigner import GlobalIDAssigner
 from src.db import BATCH_TABLES, ProjectDB
 from src.git_utils import path_spec_for_indexing, relative_path_is_ignored
 from src.parse.sqlmesh_parser import SQLMeshParser
+
+T = TypeVar("T")
 
 
 def _language(file_extension: str) -> str | None:
@@ -49,7 +53,6 @@ class ProjectProcessor:
         self._lock = threading.RLock()
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
-        self.parser = SQLMeshParser(self.db, self.assigner, self.root)
 
     def _process_directories(self, directory_names: list[str], dir_rel: str) -> None:
         for directory_name in directory_names:
@@ -199,14 +202,34 @@ class ProjectProcessor:
         self.db.bulk_insert(self.db_batches)
         self.db_batches = self._new_batches()
 
+    def _reset_run_state(self) -> None:
+        self.files_skipped = 0
+        self.files_indexed = 0
+        for entry in self.directories_snapshot.values():
+            entry["seen"] = False
+        for entry in self.files_snapshot.values():
+            entry["seen"] = False
+
     def process(self, full: bool = False) -> None:
         with self._lock:
+            self.parser = SQLMeshParser(self.db, self.assigner, self.root)
             try:
                 self._process_unlocked(full)
             finally:
                 self.parser.context.close()
 
+    def run_query(self, fn: Callable[[ProjectDB], T], *, full: bool = False) -> T:
+        with self._lock:
+            self.parser = SQLMeshParser(self.db, self.assigner, self.root)
+            try:
+                self._process_unlocked(full)
+                result = fn(self.db)
+            finally:
+                self.parser.context.close()
+        return result
+
     def _process_unlocked(self, full: bool = False) -> None:
+        self._reset_run_state()
         start_time = time.perf_counter()
         root_s = str(self.root)
         for directory_path, directory_names, file_names in os.walk(root_s):
