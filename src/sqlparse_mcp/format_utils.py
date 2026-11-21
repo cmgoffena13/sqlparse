@@ -13,12 +13,10 @@ def gutter_width(numbers: list[int]) -> int:
     return max((len(str(number)) for number in numbers), default=1)
 
 
-def file_label(name: str, line_count: int, model_names: list[str] | None = None) -> str:
+def file_label(name: str, line_count: int) -> str:
     label = name or "(unknown path)"
     if line_count > 0:
         label = f"{label} ({line_count}L)"
-    if model_names:
-        label = f"{label} — {', '.join(model_names)}"
     return label
 
 

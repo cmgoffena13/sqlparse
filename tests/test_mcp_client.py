@@ -63,7 +63,8 @@ def test_client_lists_tools_and_reads_the_project(
                 await mcp_client.call_tool("get_directory_tree", {"directory_path": "models"})
             )
             assert tree_out.startswith("models/")
-            assert "sushi.customers" in tree_out
+            assert "customers.sql" in tree_out
+            assert "sushi.customers" not in tree_out
             relations_out = _text(
                 await mcp_client.call_tool(
                     "get_model_relations",

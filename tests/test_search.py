@@ -24,12 +24,12 @@ def test_search_finds_models_queries_and_columns() -> None:
         out = search(db, "customers", limit=30)
     finally:
         db.close()
-    assert "## Models" in out
+    assert "## Models\n\n" in out
     assert "sushi.customers" in out
-    assert "## Queries" in out
+    assert "## Queries\n\n" in out
     assert "sushi.customers / $cte" in out
     assert "sushi.customers / $" in out
-    assert "## Columns" in out
+    assert "## Columns\n\n" in out
     assert "sushi.customers / $ / cte.customer_id" in out
     assert "raw.customers / EXTERNAL / status" in out
     assert "raw.customers / $" not in out

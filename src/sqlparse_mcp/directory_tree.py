@@ -53,16 +53,6 @@ def _normalize_directory_path(directory_path: str, root: Path) -> str:
     return (resolved_root / raw).resolve().relative_to(resolved_root).as_posix()
 
 
-def _models_by_file_id(db: ProjectDB) -> dict[int, list[str]]:
-    models: dict[int, list[str]] = defaultdict(list)
-    for row in db.connection.execute(
-        "SELECT file_id, qualified_name FROM models "
-        "WHERE kind != 'EXTERNAL' ORDER BY qualified_name"
-    ):
-        models[int(row["file_id"])].append(str(row["qualified_name"]))
-    return models
-
-
 def _children_by_parent(
     rows: Iterable[sqlite3.Row],
 ) -> dict[int | None, list[tuple[bool, sqlite3.Row]]]:
@@ -82,7 +72,6 @@ def _lines_under_parent(
     children_by_parent_id: dict[int | None, list[tuple[bool, sqlite3.Row]]],
     parent_key: int | None,
     branch_prefix: str,
-    models_by_file_id: dict[int, list[str]],
 ) -> list[str]:
     lines: list[str] = []
     siblings = children_by_parent_id.get(parent_key, ())
@@ -92,11 +81,7 @@ def _lines_under_parent(
         if is_directory:
             display_name = f"{row['name']}/"
         else:
-            display_name = file_label(
-                str(row["name"]),
-                int(row["line_count"] or 0),
-                models_by_file_id.get(int(row["id"])),
-            )
+            display_name = file_label(str(row["name"]), int(row["line_count"] or 0))
         lines.append(f"{branch_prefix}{connector}{display_name}")
         if is_directory:
             lines.extend(
@@ -104,7 +89,6 @@ def _lines_under_parent(
                     children_by_parent_id,
                     int(row["id"]),
                     branch_prefix + continuation,
-                    models_by_file_id,
                 )
             )
     return lines
@@ -114,9 +98,8 @@ def _render(
     children_by_parent_id: dict[int | None, list[tuple[bool, sqlite3.Row]]],
     root_key: int | None,
     root_label: str,
-    models_by_file_id: dict[int, list[str]],
 ) -> str:
-    body_lines = _lines_under_parent(children_by_parent_id, root_key, "", models_by_file_id)
+    body_lines = _lines_under_parent(children_by_parent_id, root_key, "")
     result = root_label.rstrip("/") or "."
     if body_lines:
         result = root_label + "\n" + "\n".join(body_lines)
@@ -124,7 +107,6 @@ def _render(
 
 
 def get_directory_tree(db: ProjectDB, directory_path: str | None) -> str:
-    models_by_file_id = _models_by_file_id(db)
     scoped = None
     result = ""
     if directory_path and directory_path.strip():
@@ -137,7 +119,7 @@ def get_directory_tree(db: ProjectDB, directory_path: str | None) -> str:
             scoped = normalized
     if not result and scoped is None:
         rows = db.connection.execute(_TREE_SQL)
-        result = _render(_children_by_parent(rows), None, ".", models_by_file_id)
+        result = _render(_children_by_parent(rows), None, ".")
     elif not result:
         dir_row = db.connection.execute(
             "SELECT id, path FROM directories WHERE path = ?",
@@ -153,6 +135,5 @@ def get_directory_tree(db: ProjectDB, directory_path: str | None) -> str:
                 _children_by_parent(rows),
                 int(dir_row["id"]),
                 f"{dir_row['path']}/",
-                models_by_file_id,
             )
     return result

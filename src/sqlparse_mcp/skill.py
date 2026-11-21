@@ -17,7 +17,7 @@ _SKILL_BODY = """\
 2. Use ``list_models`` to list model names in one schema. An external schema starts with
    ``EXTERNAL SCHEMA``.
 3. Use ``search`` to find models, queries, and columns by name.
-4. Use ``get_directory_tree`` to browse files and see model names per file.
+4. Use ``get_directory_tree`` to browse files. ``get_model`` accepts a file path.
 5. Use ``get_model`` for a model's SQL tree, macro refs, and audit refs.
    A model name starts with ``File:``. A file path starts with ``Model:``.
    It lists model kind. Grain and the time column are included when the model has them.

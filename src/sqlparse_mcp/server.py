@@ -103,7 +103,7 @@ def list_models(ctx: Context, schema: str) -> str:
 @mcp.tool()
 def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
     """
-    Return the project's directory/file tree with line counts and model names.
+    Return the project's directory/file tree with line counts.
 
     Optional ``directory_path`` scopes to one directory tree (exact path).
     """

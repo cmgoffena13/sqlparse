@@ -76,19 +76,19 @@ def search(db: ProjectDB, query: str, limit: int) -> str:
             width = gutter_width([*models.values(), *queries.values(), *columns.values()])
             lines: list[str] = []
             if models:
-                lines.append("## Models")
+                lines.extend(["## Models", ""])
                 for label, rank in models.items():
                     lines.append(bullet(label, f"#{rank:<{width}} "))
             if queries:
                 if lines:
                     lines.append("")
-                lines.append("## Queries")
+                lines.extend(["## Queries", ""])
                 for label, rank in queries.items():
                     lines.append(bullet(label, f"#{rank:<{width}} "))
             if columns:
                 if lines:
                     lines.append("")
-                lines.append("## Columns")
+                lines.extend(["## Columns", ""])
                 for label, rank in columns.items():
                     lines.append(bullet(label, f"#{rank:<{width}} "))
             result = "No matches."

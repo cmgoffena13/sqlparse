@@ -21,9 +21,6 @@ def test_gutter_width_pads_to_widest_rank() -> None:
 def test_file_label_lines_and_models_without_symbol_count() -> None:
     assert file_label("empty.sql", 0) == "empty.sql"
     assert file_label("customers.sql", 18) == "customers.sql (18L)"
-    assert file_label("customers.sql", 18, ["sushi.customers"]) == (
-        "customers.sql (18L) — sushi.customers"
-    )
 
 
 def test_line_span_collapses_a_single_line() -> None:
