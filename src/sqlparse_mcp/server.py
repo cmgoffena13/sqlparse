@@ -31,6 +31,7 @@ Queries/CTEs are prefixed with ``$``.
 A single ``$`` is the final output query.
 Model Config is treated as a query and called ``MODEL``.
 EXTERNAL models have no query and return ``EXTERNAL``.
+
 Ex. ``$``, ``$cte_name``, ``MODEL``, or ``EXTERNAL``.
 
 Utilize the ``sqlparse`` skill for guided exploration workflows.

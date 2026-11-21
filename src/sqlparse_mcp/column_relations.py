@@ -20,6 +20,7 @@ WHERE models.qualified_name = ?
 
 _DEPENDENCIES_SQL = """
 SELECT
+    lineage.ref_column_id,
     ref_models.qualified_name AS ref_model_name,
     ref_models.kind AS ref_model_kind,
     lineage.ref_column_query_name AS ref_query_name,
@@ -238,10 +239,11 @@ def _format_groups(
 
 def _fetch_dependencies(
     db: ProjectDB, column_ids: list[int]
-) -> list[tuple[str, str, str, str | None, str, str, int, str, str, str]]:
+) -> list[tuple[int, str, str, str, str | None, str, str, int, str, str, str]]:
     placeholders = ", ".join("?" for _ in column_ids)
     return [
         (
+            int(row["ref_column_id"]),
             str(row["ref_model_name"]),
             str(row["ref_model_kind"]),
             str(row["ref_query_name"]),
@@ -281,47 +283,71 @@ def _dependency_nodes(
     column_ids: list[int],
     seen: set[int],
 ) -> list[tuple[str, list]]:
-    grouped: OrderedDict[tuple[str, str, str, str, int], list[str]] = OrderedDict()
-    sources: dict[int, tuple[str, str, str]] = {}
-    for (
-        model_name,
-        kind,
-        query_name,
-        from_table,
-        name,
-        ref_kind,
-        source_id,
-        source_model_name,
-        source_model_kind,
-        source_name,
-    ) in _fetch_dependencies(db, column_ids):
-        if kind == "EXTERNAL":
+    pending = list(column_ids)
+    owned: dict[int, list[tuple[str, list]]] = {}
+    result: list[tuple[str, list]] = []
+    first = True
+    while pending:
+        grouped: OrderedDict[tuple[int, str, str, str, str, int], list[str]] = OrderedDict()
+        sources: dict[int, tuple[str, str, str]] = {}
+        for (
+            ref_column_id,
+            model_name,
+            kind,
+            query_name,
+            from_table,
+            name,
+            ref_kind,
+            source_id,
+            source_model_name,
+            source_model_kind,
+            source_name,
+        ) in _fetch_dependencies(db, pending):
             column = name
-            ref_kind = ""
-        else:
-            column = _column_label(from_table, name)
-        key = (model_name, kind, query_name, column, source_id)
-        grouped[key] = _relation_kinds(ref_kind, grouped.get(key, []))
-        sources[source_id] = (source_model_name, source_model_kind, source_name)
-    nodes: list[tuple[str, list]] = []
-    child_nodes: dict[int, list] = {}
-    for (model_name, kind, query_name, column, source_id), ref_kinds in grouped.items():
-        if source_id not in child_nodes and source_id not in seen and len(seen) < 100:
-            seen.add(source_id)
-            source_model_name, source_model_kind, source_name = sources[source_id]
-            if source_model_kind == "EXTERNAL":
-                child_nodes[source_id] = [
-                    (_relation_text(source_model_name, source_model_kind, "", source_name, []), [])
-                ]
-            else:
-                child_nodes[source_id] = _dependency_nodes(db, [source_id], seen)
-        nodes.append(
-            (
+            if kind != "EXTERNAL":
+                column = _column_label(from_table, name)
+            if kind == "EXTERNAL":
+                ref_kind = ""
+            key = (ref_column_id, model_name, kind, query_name, column, source_id)
+            grouped[key] = _relation_kinds(ref_kind, grouped.get(key, []))
+            sources[source_id] = (source_model_name, source_model_kind, source_name)
+        level_children: dict[int, list[tuple[str, list]]] = {}
+        next_ids: list[int] = []
+        for (
+            ref_column_id,
+            model_name,
+            kind,
+            query_name,
+            column,
+            source_id,
+        ), ref_kinds in grouped.items():
+            if source_id not in level_children and source_id not in seen and len(seen) < 100:
+                seen.add(source_id)
+                source_model_name, source_model_kind, source_name = sources[source_id]
+                if source_model_kind == "EXTERNAL":
+                    level_children[source_id] = [
+                        (
+                            _relation_text(
+                                source_model_name, source_model_kind, "", source_name, []
+                            ),
+                            [],
+                        )
+                    ]
+                else:
+                    level_children[source_id] = []
+                    owned[source_id] = level_children[source_id]
+                    next_ids.append(source_id)
+            node = (
                 _relation_text(model_name, kind, query_name, column, ref_kinds),
-                child_nodes.get(source_id, []),
+                level_children.get(source_id, []),
             )
-        )
-    return nodes
+            if first:
+                result.append(node)
+            else:
+                owned[ref_column_id].append(node)
+        pending = next_ids
+        first = False
+    return result
 
 
 def _render_dependency_nodes(nodes: list[tuple[str, list]], nested: bool) -> list[str]:

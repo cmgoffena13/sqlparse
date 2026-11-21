@@ -149,6 +149,10 @@ CREATE TABLE IF NOT EXISTS column_lineage (
     ref_context                     TEXT NOT NULL,
     snapshot_hash                   TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS column_lineage_ref_column_id_index
+    ON column_lineage (ref_column_id);
+CREATE INDEX IF NOT EXISTS column_lineage_source_column_id_index
+    ON column_lineage (source_column_id);
 
 CREATE TABLE IF NOT EXISTS tests (
     id                  INTEGER NOT NULL PRIMARY KEY,
