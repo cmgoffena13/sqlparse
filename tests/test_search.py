@@ -27,7 +27,7 @@ def test_search_finds_models_queries_and_columns() -> None:
     assert "## Models" in out
     assert "sushi.customers" in out
     assert "## Queries" in out
-    assert "sushi.customers / cte" in out
+    assert "sushi.customers / $cte" in out
     assert "sushi.customers / $" in out
     assert "## Columns" in out
     assert "sushi.customers / $ / cte.customer_id" in out
@@ -41,7 +41,7 @@ def test_search_cte_name_includes_model() -> None:
         out = search(db, "filtered", limit=20)
     finally:
         db.close()
-    assert "sushi.customer_status / filtered" in out
+    assert "sushi.customer_status / $filtered" in out
 
 
 def test_search_column_prefers_smart_identifier() -> None:
@@ -51,7 +51,7 @@ def test_search_column_prefers_smart_identifier() -> None:
         out = search(db, "amount_cents", limit=20)
     finally:
         db.close()
-    assert "sushi.customers / cte / raw.orders.amount_cents" in out
+    assert "sushi.customers / $cte / raw.orders.amount_cents" in out
 
 
 def test_search_ranks_globally_across_sections() -> None:

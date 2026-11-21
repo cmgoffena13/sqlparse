@@ -11,8 +11,15 @@ from sqlmesh.core.model import Model
 FINAL_QUERY = "$"
 
 
+def stored_query_name(name: str) -> str:
+    stored = name
+    if not name.startswith(FINAL_QUERY):
+        stored = f"{FINAL_QUERY}{name}"
+    return stored
+
+
 def model_query_name(model_name: str, name: str) -> str:
-    return f"{model_name}/{name}"
+    return f"{model_name}/{stored_query_name(name)}"
 
 
 def final_query_name(model_name: str) -> str:
@@ -269,6 +276,7 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
             name = FINAL_QUERY
             if included and scope.is_cte and parent is not None:
                 name = parent.alias_or_name
+            name = stored_query_name(name)
             query_name = model_query_name(model.name, name)
             if included and query_name not in seen:
                 seen.add(query_name)

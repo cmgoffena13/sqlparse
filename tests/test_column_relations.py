@@ -30,7 +30,11 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
     finally:
         db.close()
     assert out == (
-        "sushi.customers\n└── cte\n    └── raw.customers.customer_id (EXTERNAL) (select)\n"
+        "sushi.customers / $cte / raw.customers.customer_id (join)\n"
+        "└── raw.customers / EXTERNAL / customer_id\n"
+        "\n"
+        "sushi.customers / $cte / raw.customers.customer_id (select)\n"
+        "└── raw.customers / EXTERNAL / customer_id\n"
     )
 
 
@@ -47,7 +51,7 @@ def test_column_relations_marks_external_source_models() -> None:
         )
     finally:
         db.close()
-    assert "raw.orders (EXTERNAL)" in out
+    assert "raw.orders / EXTERNAL" in out
     assert "raw.orders\n" not in out
 
 
@@ -84,9 +88,7 @@ def test_column_relations_dependents_include_downstream_models() -> None:
     assert out == (
         "sushi.customer_orders\n"
         "└── $\n"
-        "    ├── sushi.customers.customer_id (group)\n"
-        "    ├── sushi.customers.customer_id (join)\n"
-        "    └── sushi.customers.customer_id (select)\n"
+        "    └── sushi.customers.customer_id (select, join, group)\n"
         "\n"
         "sushi.orders\n"
         "└── $\n"
@@ -130,6 +132,45 @@ def test_column_relations_missing_column() -> None:
     assert out == "No column found."
 
 
+def test_column_relations_customer_status_walks_each_query() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        final = get_column_relations(
+            db,
+            "sushi.customer_status",
+            "$",
+            "filtered.customer_id",
+            "dependencies",
+        )
+        filtered = get_column_relations(
+            db,
+            "sushi.customer_status",
+            "filtered",
+            "base.customer_id",
+            "dependencies",
+        )
+        base = get_column_relations(
+            db,
+            "sushi.customer_status",
+            "base",
+            "raw.customers.id",
+            "dependencies",
+        )
+    finally:
+        db.close()
+    assert final == (
+        "sushi.customer_status / $filtered / base.customer_id (alias)\n"
+        "└── sushi.customer_status / $base / raw.customers.id (alias)\n"
+        "    └── raw.customers / EXTERNAL / customer_id\n"
+    )
+    assert filtered == (
+        "sushi.customer_status / $base / raw.customers.id (alias)\n"
+        "└── raw.customers / EXTERNAL / customer_id\n"
+    )
+    assert base == ("raw.customers / EXTERNAL / customer_id\n")
+
+
 def test_column_relations_join_column_uses_table_qualified_label() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
@@ -151,5 +192,5 @@ def test_column_relations_join_column_uses_table_qualified_label() -> None:
     finally:
         db.close()
     assert bare == "No column found."
-    assert "cte.customer_id (select)" in join_col
-    assert "cte.customer_id (join)" in join_col
+    assert "sushi.customers / $ / cte.customer_id (select)" in join_col
+    assert "sushi.customers / $cte / raw.customers.customer_id (join)" in join_col

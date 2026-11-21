@@ -17,7 +17,7 @@ def test_sql_tree_by_model_name_lists_queries_with_counts() -> None:
     finally:
         db.close()
     assert out == (
-        "sushi.customers\n└── $ (3 select columns)\n    └── cte (4 select columns, 1 join)\n"
+        "sushi.customers\n└── $ (3 select columns)\n    └── $cte (4 select columns, 1 join)\n"
     )
 
 
@@ -29,7 +29,7 @@ def test_sql_tree_by_file_path() -> None:
     finally:
         db.close()
     assert out == (
-        "sushi.customers\n└── $ (3 select columns)\n    └── cte (4 select columns, 1 join)\n"
+        "sushi.customers\n└── $ (3 select columns)\n    └── $cte (4 select columns, 1 join)\n"
     )
 
 
@@ -43,8 +43,8 @@ def test_sql_tree_nests_ctes_under_the_final_query() -> None:
     assert out == (
         "sushi.customer_status\n"
         "└── $ (2 select columns)\n"
-        "    ├── base (2 select columns)\n"
-        "    └── filtered (2 select columns, 1 where condition)\n"
+        "    ├── $base (2 select columns)\n"
+        "    └── $filtered (2 select columns, 1 where condition)\n"
     )
 
 

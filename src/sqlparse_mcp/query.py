@@ -9,7 +9,7 @@ from sqlglot.optimizer.scope import traverse_scope
 from sqlmesh.core.dialect import parse as parse_sql
 
 from src.db import ProjectDB
-from src.parse.column_lineage import _query_line_span
+from src.parse.column_lineage import _query_line_span, stored_query_name
 from src.sqlparse_mcp.column_relations import _resolve_query_name
 from src.sqlparse_mcp.format_utils import bullet
 from src.sqlparse_mcp.sql_tree import _normalize_file_path
@@ -114,6 +114,11 @@ def _expand_query_span(lines: list[str], start: int, end: int) -> tuple[int, int
     return start, end
 
 
+def _indexed_query_name(name: str, dialect: str) -> str:
+    bare = name[1:] if name.startswith("$") and name != "$" else name
+    return stored_query_name(_normalized_identifier(bare, dialect))
+
+
 def _source_span(
     text: str, dialect: str, query_name: str, model_name: str
 ) -> tuple[int, int, str] | None:
@@ -131,7 +136,7 @@ def _source_span(
                 if scope.is_cte and parent is not None:
                     name = parent.alias_or_name
                 included = scope.is_cte or scope.is_root
-                same_name = _normalized_identifier(name, dialect) == _normalized_identifier(
+                same_name = _indexed_query_name(name, dialect) == _indexed_query_name(
                     query_name, dialect
                 )
                 if included and same_name:
@@ -236,7 +241,7 @@ def _parsed_query_spans(
                 name = "$"
                 if scope.is_cte and parent is not None:
                     name = parent.alias_or_name
-                stored = _normalized_identifier(name, dialect)
+                stored = _indexed_query_name(name, dialect)
                 included = (scope.is_cte or scope.is_root) and stored not in seen
                 if included:
                     start, end = _query_line_span(scope.expression)

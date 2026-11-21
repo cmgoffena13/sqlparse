@@ -335,25 +335,25 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_columns["sushi.customers/$/cte.status"]["description"] == "Customer status"
     assert first_columns["sushi.customers/$/cte.status"]["data_type"] == "TEXT"
     assert first_columns["sushi.customers/$/cte.status"]["nullable"] == 1
-    assert first_columns["sushi.customers/cte/raw.customers.customer_id"]["description"] is None
-    assert first_columns["sushi.customers/cte/raw.customers.customer_id"]["data_type"] == "INT"
-    assert first_columns["sushi.customers/cte/raw.customers.customer_id"]["nullable"] is None
-    assert first_columns["sushi.customers/cte/raw.orders.amount_cents"]["data_type"] == "INT"
+    assert first_columns["sushi.customers/$cte/raw.customers.customer_id"]["description"] is None
+    assert first_columns["sushi.customers/$cte/raw.customers.customer_id"]["data_type"] == "INT"
+    assert first_columns["sushi.customers/$cte/raw.customers.customer_id"]["nullable"] is None
+    assert first_columns["sushi.customers/$cte/raw.orders.amount_cents"]["data_type"] == "INT"
     assert (
         first_columns["sushi.customers/$/cte.customer_id"]["model_id"]
         == first_models[CUSTOMERS_FQN]["id"]
     )
-    assert first_columns["sushi.customers/cte/raw.customers.customer_id"]["query_name"] == (
-        "sushi.customers/cte"
+    assert first_columns["sushi.customers/$cte/raw.customers.customer_id"]["query_name"] == (
+        "sushi.customers/$cte"
     )
     assert (
-        first_columns["sushi.customers/cte/raw.customers.customer_id"]["from_table"]
+        first_columns["sushi.customers/$cte/raw.customers.customer_id"]["from_table"]
         == "raw.customers"
     )
-    assert first_columns["sushi.customers/cte/raw.orders.customer_id"]["from_table"] == (
+    assert first_columns["sushi.customers/$cte/raw.orders.customer_id"]["from_table"] == (
         "raw.orders"
     )
-    assert first_columns["sushi.customers/cte/raw.customers.status"]["name"] == "status"
+    assert first_columns["sushi.customers/$cte/raw.customers.status"]["name"] == "status"
     assert first_columns["sushi.customers/$/cte.customer_id"]["from_table"] == "cte"
     assert first_columns["sushi.customers/$/cte.customer_id"]["column_name"] == "cte.customer_id"
     assert first_columns["raw.customers/$/customer_id"]["column_name"] == "customer_id"
@@ -363,15 +363,15 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_columns["sushi.customers/$/cte.amount"]["line_end"] == 15
     assert first_columns["sushi.customers/$/cte.status"]["line_start"] == 16
     assert first_columns["sushi.customers/$/cte.status"]["line_end"] == 16
-    assert first_columns["sushi.customers/cte/raw.customers.customer_id"]["line_start"] == 3
-    assert first_columns["sushi.customers/cte/raw.customers.customer_id"]["line_end"] == 3
-    assert first_columns["sushi.customers/cte/raw.orders.customer_id"]["line_start"] == 4
-    assert first_columns["sushi.customers/cte/raw.orders.customer_id"]["line_end"] == 4
-    assert first_columns["sushi.customers/cte/raw.customers.status"]["line_start"] == 5
-    assert first_columns["sushi.customers/cte/raw.customers.status"]["line_end"] == 5
-    assert first_columns["sushi.customers/cte/raw.orders.amount_cents"]["line_start"] == 6
-    assert first_columns["sushi.customers/cte/raw.orders.amount_cents"]["line_end"] == 6
-    assert first_columns["sushi.customers/cte/raw.orders.amount_cents"]["from_table"] == (
+    assert first_columns["sushi.customers/$cte/raw.customers.customer_id"]["line_start"] == 3
+    assert first_columns["sushi.customers/$cte/raw.customers.customer_id"]["line_end"] == 3
+    assert first_columns["sushi.customers/$cte/raw.orders.customer_id"]["line_start"] == 4
+    assert first_columns["sushi.customers/$cte/raw.orders.customer_id"]["line_end"] == 4
+    assert first_columns["sushi.customers/$cte/raw.customers.status"]["line_start"] == 5
+    assert first_columns["sushi.customers/$cte/raw.customers.status"]["line_end"] == 5
+    assert first_columns["sushi.customers/$cte/raw.orders.amount_cents"]["line_start"] == 6
+    assert first_columns["sushi.customers/$cte/raw.orders.amount_cents"]["line_end"] == 6
+    assert first_columns["sushi.customers/$cte/raw.orders.amount_cents"]["from_table"] == (
         "raw.orders"
     )
     assert first_columns["raw.customers/$/customer_id"]["from_table"] is None
@@ -384,7 +384,7 @@ def test_processor_indexes_files_and_directories() -> None:
     customers_id = first_models[CUSTOMERS_FQN]["id"]
     status_id = first_models[CUSTOMER_STATUS_FQN]["id"]
     customers_root = first_queries[(customers_id, "$")]
-    customers_cte = first_queries[(customers_id, "cte")]
+    customers_cte = first_queries[(customers_id, "$cte")]
     assert customers_root["depth"] == 0
     assert customers_root["line_start"] == 12
     assert customers_root["line_end"] == 17
@@ -408,19 +408,19 @@ def test_processor_indexes_files_and_directories() -> None:
     assert customer_orders["join_statement_count"] == 1
     assert customer_orders["group_by_col_count"] == 3
     assert customers_cte["file_id"] == customer["id"]
-    assert first_queries[(status_id, "base")]["depth"] == 1
-    assert first_queries[(status_id, "filtered")]["depth"] == 1
-    assert first_queries[(status_id, "filtered")]["select_col_count"] == 2
-    assert first_queries[(status_id, "filtered")]["where_condition_count"] == 1
-    assert first_queries[(status_id, "filtered")]["join_statement_count"] == 0
-    assert first_queries[(status_id, "filtered")]["group_by_col_count"] == 0
+    assert first_queries[(status_id, "$base")]["depth"] == 1
+    assert first_queries[(status_id, "$filtered")]["depth"] == 1
+    assert first_queries[(status_id, "$filtered")]["select_col_count"] == 2
+    assert first_queries[(status_id, "$filtered")]["where_condition_count"] == 1
+    assert first_queries[(status_id, "$filtered")]["join_statement_count"] == 0
+    assert first_queries[(status_id, "$filtered")]["group_by_col_count"] == 0
     assert first_queries[(status_id, "$")]["depth"] == 0
     assert first_queries[(status_id, "$")]["line_start"] == 21
     assert first_queries[(status_id, "$")]["line_end"] == 23
     assert first_columns["sushi.customers/$/cte.customer_id"]["query_id"] == customers_root["id"]
     assert first_columns["sushi.customers/$/cte.customer_id"]["file_id"] == customer["id"]
     assert (
-        first_columns["sushi.customers/cte/raw.customers.customer_id"]["query_id"]
+        first_columns["sushi.customers/$cte/raw.customers.customer_id"]["query_id"]
         == customers_cte["id"]
     )
     assert second_queries == first_queries
@@ -491,58 +491,58 @@ def test_processor_indexes_files_and_directories() -> None:
     customer_id_ref = first_references[
         (
             "sushi.customers/$/cte.customer_id",
-            "sushi.customers/cte/raw.customers.customer_id",
+            "sushi.customers/$cte/raw.customers.customer_id",
             3,
             12,
             "select",
         )
     ]
     assert customer_id_ref["ref_column_query_name"] == "sushi.customers/$"
-    assert customer_id_ref["source_query_name"] == "sushi.customers/cte"
+    assert customer_id_ref["source_query_name"] == "sushi.customers/$cte"
     amount_ref = first_references[
         (
             "sushi.customers/$/cte.amount",
-            "sushi.customers/cte/raw.orders.amount_cents",
+            "sushi.customers/$cte/raw.orders.amount_cents",
             6,
             15,
             "expression",
         )
     ]
     assert amount_ref["ref_column_query_name"] == "sushi.customers/$"
-    assert amount_ref["source_query_name"] == "sushi.customers/cte"
+    assert amount_ref["source_query_name"] == "sushi.customers/$cte"
     assert "/ 100" in str(amount_ref["ref_context"])
     cte_amount_ref = first_references[
         (
-            "sushi.customers/cte/raw.orders.amount_cents",
+            "sushi.customers/$cte/raw.orders.amount_cents",
             "raw.orders/$/amount_cents",
             6,
             6,
             "select",
         )
     ]
-    assert cte_amount_ref["ref_column_query_name"] == "sushi.customers/cte"
+    assert cte_amount_ref["ref_column_query_name"] == "sushi.customers/$cte"
     assert cte_amount_ref["source_query_name"] == "raw.orders/$"
     cte_customer_ref = first_references[
         (
-            "sushi.customers/cte/raw.customers.customer_id",
+            "sushi.customers/$cte/raw.customers.customer_id",
             "raw.customers/$/customer_id",
             3,
             3,
             "select",
         )
     ]
-    assert cte_customer_ref["ref_column_query_name"] == "sushi.customers/cte"
+    assert cte_customer_ref["ref_column_query_name"] == "sushi.customers/$cte"
     assert cte_customer_ref["source_query_name"] == "raw.customers/$"
     cte_orders_customer_ref = first_references[
         (
-            "sushi.customers/cte/raw.orders.customer_id",
+            "sushi.customers/$cte/raw.orders.customer_id",
             "raw.orders/$/customer_id",
             4,
             4,
             "select",
         )
     ]
-    assert cte_orders_customer_ref["ref_column_query_name"] == "sushi.customers/cte"
+    assert cte_orders_customer_ref["ref_column_query_name"] == "sushi.customers/$cte"
     assert cte_orders_customer_ref["source_query_name"] == "raw.orders/$"
     assert second_references == first_references
     assert all(
@@ -652,91 +652,91 @@ def test_processor_indexes_files_and_directories() -> None:
     assert orders_join_ref["ref_column_query_name"] == "sushi.orders/$"
     cte_join_customers_ref = first_references[
         (
-            "sushi.customers/cte/raw.customers.customer_id",
+            "sushi.customers/$cte/raw.customers.customer_id",
             "raw.customers/$/customer_id",
             9,
             9,
             "join",
         )
     ]
-    assert cte_join_customers_ref["ref_column_query_name"] == "sushi.customers/cte"
+    assert cte_join_customers_ref["ref_column_query_name"] == "sushi.customers/$cte"
     cte_join_orders_ref = first_references[
         (
-            "sushi.customers/cte/raw.orders.customer_id",
+            "sushi.customers/$cte/raw.orders.customer_id",
             "raw.orders/$/customer_id",
             9,
             9,
             "join",
         )
     ]
-    assert cte_join_orders_ref["ref_column_query_name"] == "sushi.customers/cte"
+    assert cte_join_orders_ref["ref_column_query_name"] == "sushi.customers/$cte"
     assert first_models[CUSTOMER_STATUS_FQN]["kind"] == "FULL"
     assert first_models[CUSTOMER_STATUS_FQN]["description"] == (
         "Nested CTE chain over raw customers"
     )
-    assert first_columns["sushi.customer_status/base/raw.customers.customer_id"]["query_name"] == (
-        "sushi.customer_status/base"
+    assert first_columns["sushi.customer_status/$base/raw.customers.id"]["query_name"] == (
+        "sushi.customer_status/$base"
     )
-    assert first_columns["sushi.customer_status/base/raw.customers.customer_id"]["from_table"] == (
+    assert first_columns["sushi.customer_status/$base/raw.customers.id"]["from_table"] == (
         "raw.customers"
     )
-    assert first_columns["sushi.customer_status/filtered/base.customer_id"]["query_name"] == (
-        "sushi.customer_status/filtered"
+    assert first_columns["sushi.customer_status/$filtered/base.customer_id"]["query_name"] == (
+        "sushi.customer_status/$filtered"
     )
-    assert first_columns["sushi.customer_status/filtered/base.customer_id"]["from_table"] == "base"
+    assert first_columns["sushi.customer_status/$filtered/base.customer_id"]["from_table"] == "base"
     assert first_columns["sushi.customer_status/$/filtered.customer_id"]["query_name"] == (
         "sushi.customer_status/$"
     )
     assert (
-        first_columns["sushi.customer_status/filtered/sushi.customer_status/base.status"][
+        first_columns["sushi.customer_status/$filtered/sushi.customer_status/$base.status"][
             "query_name"
         ]
-        == "sushi.customer_status/filtered"
+        == "sushi.customer_status/$filtered"
     )
     nested_base_customer_ref = first_references[
         (
-            "sushi.customer_status/base/raw.customers.customer_id",
+            "sushi.customer_status/$base/raw.customers.id",
             "raw.customers/$/customer_id",
             9,
             9,
-            "select",
+            "alias",
         )
     ]
-    assert nested_base_customer_ref["ref_column_query_name"] == "sushi.customer_status/base"
+    assert nested_base_customer_ref["ref_column_query_name"] == "sushi.customer_status/$base"
     nested_filtered_customer_ref = first_references[
         (
-            "sushi.customer_status/filtered/base.customer_id",
-            "sushi.customer_status/base/raw.customers.customer_id",
+            "sushi.customer_status/$filtered/base.customer_id",
+            "sushi.customer_status/$base/raw.customers.id",
             15,
             15,
-            "select",
+            "alias",
         )
     ]
     assert nested_filtered_customer_ref["ref_column_query_name"] == (
-        "sushi.customer_status/filtered"
+        "sushi.customer_status/$filtered"
     )
-    assert nested_filtered_customer_ref["source_query_name"] == "sushi.customer_status/base"
+    assert nested_filtered_customer_ref["source_query_name"] == "sushi.customer_status/$base"
     nested_outer_customer_ref = first_references[
         (
             "sushi.customer_status/$/filtered.customer_id",
-            "sushi.customer_status/filtered/base.customer_id",
+            "sushi.customer_status/$filtered/base.customer_id",
             15,
             21,
             "select",
         )
     ]
     assert nested_outer_customer_ref["ref_column_query_name"] == "sushi.customer_status/$"
-    assert nested_outer_customer_ref["source_query_name"] == "sushi.customer_status/filtered"
+    assert nested_outer_customer_ref["source_query_name"] == "sushi.customer_status/$filtered"
     nested_where_ref = first_references[
         (
-            "sushi.customer_status/filtered/sushi.customer_status/base.status",
-            "sushi.customer_status/base/raw.customers.status",
+            "sushi.customer_status/$filtered/sushi.customer_status/$base.status",
+            "sushi.customer_status/$base/raw.customers.status",
             18,
             18,
             "where",
         )
     ]
-    assert nested_where_ref["ref_column_query_name"] == "sushi.customer_status/filtered"
+    assert nested_where_ref["ref_column_query_name"] == "sushi.customer_status/$filtered"
 
 
 def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> None:
@@ -803,10 +803,10 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         RAW_ORDERS_FQN,
     }
     assert "sushi.customers/$/cte.customer_id" in before_columns
-    assert "sushi.customers/cte/raw.customers.customer_id" in before_columns
-    assert "sushi.customers/cte/raw.orders.customer_id" in before_columns
+    assert "sushi.customers/$cte/raw.customers.customer_id" in before_columns
+    assert "sushi.customers/$cte/raw.orders.customer_id" in before_columns
     assert "sushi.customers/$/cte.customer_id" not in after_columns
-    assert "sushi.customers/cte/raw.customers.customer_id" not in after_columns
+    assert "sushi.customers/$cte/raw.customers.customer_id" not in after_columns
     assert "raw.customers/$/customer_id" in after_columns
     assert "cents_to_dollars" in before_macros
     assert "cents_to_dollars" not in after_macros
@@ -815,9 +815,9 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
     assert ("not_null_customer_id", customers_model_id) in before_model_audits
     assert after_model_audits == set()
     assert "sushi.customers/$/cte.customer_id" in before_references
-    assert "sushi.customers/cte/raw.orders.customer_id" in before_references
+    assert "sushi.customers/$cte/raw.orders.customer_id" in before_references
     assert "sushi.customers/$/cte.customer_id" not in after_references
-    assert "sushi.customers/cte/raw.orders.customer_id" not in after_references
+    assert "sushi.customers/$cte/raw.orders.customer_id" not in after_references
 
 
 def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) -> None:

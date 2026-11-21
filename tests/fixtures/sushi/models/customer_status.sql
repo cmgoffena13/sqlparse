@@ -6,13 +6,13 @@ MODEL (
 
 WITH base AS (
   SELECT
-    customer_id,
+    customer_id AS id,
     status
   FROM raw.customers
 ),
 filtered AS (
   SELECT
-    customer_id,
+    id AS customer_id,
     status
   FROM base
   WHERE status = 'active'

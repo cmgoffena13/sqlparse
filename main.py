@@ -68,7 +68,7 @@ async def _print_tools() -> None:
             _body(
                 await client.call_tool(
                     "get_query",
-                    {"target": "models/customers.sql", "query_name": "cte"},
+                    {"target": "models/customers.sql", "query_name": "$cte"},
                 )
             ),
         )
@@ -91,13 +91,42 @@ async def _print_tools() -> None:
             ),
         )
         _print_section(
-            "COLUMN DEPENDENCIES",
+            "STATUS COLUMN DEPENDENCIES",
             _body(
                 await client.call_tool(
                     "get_column_relations",
                     {
-                        "model_name": "sushi.customers",
-                        "column_name": "cte.customer_id",
+                        "model_name": "sushi.customer_status",
+                        "query_name": "$",
+                        "column_name": "filtered.customer_id",
+                        "relation": "dependencies",
+                    },
+                )
+            ),
+        )
+        _print_section(
+            "FILTERED COLUMN DEPENDENCIES",
+            _body(
+                await client.call_tool(
+                    "get_column_relations",
+                    {
+                        "model_name": "sushi.customer_status",
+                        "query_name": "$filtered",
+                        "column_name": "base.customer_id",
+                        "relation": "dependencies",
+                    },
+                )
+            ),
+        )
+        _print_section(
+            "BASE COLUMN DEPENDENCIES",
+            _body(
+                await client.call_tool(
+                    "get_column_relations",
+                    {
+                        "model_name": "sushi.customer_status",
+                        "query_name": "$base",
+                        "column_name": "raw.customers.id",
                         "relation": "dependencies",
                     },
                 )
