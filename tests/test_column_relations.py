@@ -29,10 +29,9 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
         )
     finally:
         db.close()
-    assert "sushi.customers" in out
-    assert "sushi.customers (EXTERNAL)" not in out
-    assert "  cte" in out
-    assert "    • raw.customers.customer_id (EXTERNAL) (select)" in out
+    assert out == (
+        "sushi.customers\n└── cte\n    └── raw.customers.customer_id (EXTERNAL) (select)\n"
+    )
 
 
 def test_column_relations_marks_external_source_models() -> None:
@@ -82,11 +81,17 @@ def test_column_relations_dependents_include_downstream_models() -> None:
         )
     finally:
         db.close()
-    assert "sushi.customer_orders" in out
-    assert "sushi.orders" in out
-    assert "sushi.customers.customer_id (select)" in out
-    assert "sushi.customers.customer_id (join)" in out
-    assert "## Tests" not in out
+    assert out == (
+        "sushi.customer_orders\n"
+        "└── $\n"
+        "    ├── sushi.customers.customer_id (group)\n"
+        "    ├── sushi.customers.customer_id (join)\n"
+        "    └── sushi.customers.customer_id (select)\n"
+        "\n"
+        "sushi.orders\n"
+        "└── $\n"
+        "    └── sushi.customers.customer_id (join)\n"
+    )
 
 
 def test_column_relations_dependents_include_tests_when_requested() -> None:

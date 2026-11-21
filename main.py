@@ -55,6 +55,15 @@ async def _print_tools() -> None:
             _body(await client.call_tool("get_query", {"target": "sushi.customers"})),
         )
         _print_section(
+            "QUERY AT LINES",
+            _body(
+                await client.call_tool(
+                    "get_query_at_lines",
+                    {"file_path": "models/customers.sql", "start_line": 12},
+                )
+            ),
+        )
+        _print_section(
             "SQL QUERY CTE",
             _body(
                 await client.call_tool(

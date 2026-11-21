@@ -17,8 +17,11 @@ _SKILL_BODY = """\
 2. Use ``get_directory_tree`` to browse files and see model names per file.
 3. Use ``get_sql_tree`` to list a model's queries (``$`` / CTEs) with column and clause counts.
 4. Use ``get_query`` to read one query's source for a model name or model file path.
-5. Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
-6. Use ``get_column_relations`` for column dependents or dependencies; DO NOT grep for this.
+5. Use ``get_query_at_lines`` for a file path and line range. It returns the tightest query
+   that contains the range, each overlapping query name when the range crosses queries,
+   and the model config when the range is on the MODEL block.
+6. Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
+7. Use ``get_column_relations`` for column dependents or dependencies; DO NOT grep for this.
 
 # CAVEATS
  - A macro is expanded away, so column lineage does not show which macro produced a column.

@@ -13,6 +13,7 @@ from src.sqlparse_mcp.column_relations import get_column_relations as run_column
 from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_tree
 from src.sqlparse_mcp.model_relations import get_model_relations as run_model_relations
 from src.sqlparse_mcp.query import get_query as run_query
+from src.sqlparse_mcp.query import get_query_at_lines as run_query_at_lines
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
 from src.sqlparse_mcp.sql_tree import get_sql_tree as run_sql_tree
@@ -108,6 +109,20 @@ def get_query(ctx: Context, target: str, query_name: str | None = None) -> str:
     ``## Output`` lists each column's data type, and ``NOT NULL`` when required.
     """
     return run_query(_db(ctx), target, query_name)
+
+
+@mcp.tool()
+def get_query_at_lines(
+    ctx: Context, file_path: str, start_line: int, end_line: int | None = None
+) -> str:
+    """
+    Return the query that contains ``start_line`` through ``end_line`` in ``file_path``.
+
+    ``end_line`` defaults to ``start_line``. The tightest query that contains the
+    whole range is returned. A range that crosses queries lists each query name.
+    A range on the model config returns that config instead of a query.
+    """
+    return run_query_at_lines(_db(ctx), file_path, start_line, end_line)
 
 
 @mcp.tool()

@@ -8,7 +8,7 @@ from src.parse.column_lineage import (
     final_query_name,
     model_query_name,
 )
-from src.sqlparse_mcp.format_utils import bullet
+from src.sqlparse_mcp.format_utils import bullet, tree_glyphs
 
 _FIND_COLUMNS_SQL = """
 SELECT columns.id
@@ -114,6 +114,43 @@ def _external_model_names(db: ProjectDB) -> set[str]:
     }
 
 
+def _column_suffix(ref_kind: str, external: bool, count: int) -> str:
+    suffix = f" ({ref_kind})"
+    if external:
+        suffix = f" (EXTERNAL){suffix}"
+    if count > 1:
+        suffix = f"{suffix} ({count})"
+    return suffix
+
+
+def _dependency_tree(
+    grouped: OrderedDict[
+        str, tuple[str, OrderedDict[str, OrderedDict[tuple[str, str, bool], int]]]
+    ],
+) -> list[str]:
+    lines: list[str] = []
+    for header, queries in grouped.values():
+        if lines:
+            lines.append("")
+        lines.append(header)
+        query_items = list(queries.items())
+        last_query = len(query_items) - 1
+        for query_index, (relative_query, columns) in enumerate(query_items):
+            connector, continuation = tree_glyphs(query_index == last_query, wide=True)
+            lines.append(f"{connector}{relative_query}")
+            column_items = list(columns.items())
+            last_column = len(column_items) - 1
+            for column_index, ((label, ref_kind, external), count) in enumerate(column_items):
+                column_connector, _column_continuation = tree_glyphs(
+                    column_index == last_column, wide=True
+                )
+                lines.append(
+                    f"{continuation}{column_connector}{label}"
+                    f"{_column_suffix(ref_kind, external, count)}"
+                )
+    return lines
+
+
 def _format_groups(
     rows: list[tuple[str, str, str, str | None, str, str]],
     test_rows: list[tuple[str, str]],
@@ -131,20 +168,7 @@ def _format_groups(
         external = mark_external and from_table in external_names
         key = (_column_label(from_table, column_name), ref_kind, external)
         columns[key] = columns.get(key, 0) + 1
-    lines: list[str] = []
-    for header, queries in grouped.values():
-        if lines:
-            lines.append("")
-        lines.append(header)
-        for relative_query, columns in queries.items():
-            lines.append(f"  {relative_query}")
-            for (label, ref_kind, external), count in columns.items():
-                suffix = f" ({ref_kind})"
-                if external:
-                    suffix = f" (EXTERNAL){suffix}"
-                if count > 1:
-                    suffix = f"{suffix} ({count})"
-                lines.append(bullet(f"{label}{suffix}", lead="  "))
+    lines = _dependency_tree(grouped)
     if test_rows:
         if lines:
             lines.append("")
