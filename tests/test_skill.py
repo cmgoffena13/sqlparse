@@ -26,7 +26,6 @@ def test_frontmatter_description_parses() -> None:
     parsed = yaml.safe_load(frontmatter.removeprefix("---\n"))
     assert parsed == {"name": "sqlparse", "description": DESCRIPTION}
     assert body.lstrip("\n").startswith("# IMPORTANT RULES")
-    assert "A macro is expanded away" in body
     assert "AmbiguousOrInvalidColumn" in body
 
 

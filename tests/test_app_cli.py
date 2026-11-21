@@ -60,7 +60,7 @@ def test_hidden_sync_writes_the_skill(
     assert main() == 0
     skill = skills / "sqlparse" / "SKILL.md"
     assert skill.is_file()
-    assert "search" in skill.read_text(encoding="utf-8")
+    assert "AmbiguousOrInvalidColumn" in skill.read_text(encoding="utf-8")
     assert f"Synced skill → {skill.parent}" in capsys.readouterr().out
 
 
