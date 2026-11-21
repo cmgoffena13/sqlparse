@@ -93,6 +93,7 @@ def search(
     FTS model, query, and column names. Results are ordered #1, #2, #3... by relevance.
 
     Narrow with one distinctive word; Widen with extra space-separated words (OR).
+
     ``models``, ``queries``, and ``columns`` choose which types to search.
     All three are included by default.
     """
@@ -126,9 +127,8 @@ def get_model(ctx: Context, target: str) -> str:
     """
     Return a model's SQL tree, macro refs, and audit refs.
 
-    A model name starts with ``File:``. A file path starts with ``Model:``.
-
-    Lists model kind. Grain and the time column are included when the model has them.
+    Target can be a model name or model file path.
+    Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
     """
     return run_get_model(_db(ctx), target)
 
@@ -138,9 +138,12 @@ def get_query(
     ctx: Context, target: str, query_name: str | None = None, render: bool = False
 ) -> str:
     """
-    Return one query's source for a model name or model file path.
+    Return a query's output schema and definition for a model name or model file path.
 
-    ``render`` defaults to false. When true, macros are rendered and file line numbers are omitted.
+    Target can be a model name or model file path.
+    Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
+
+    Enable ``render`` to render the query's macros.
     """
     return run_get_query(_db(ctx), target, query_name, render)
 
@@ -155,13 +158,10 @@ def get_span_at_lines(
     """
     Return the query, audit, macro, or test that contains ``start_line`` through ``end_line``.
 
-    ``end_line`` defaults to ``start_line``. The tightest match that contains the
-    whole range is returned. A range that crosses queries lists each query name.
-    ``MODEL`` is a query. A query starts with ``Model:`` and ``Query:``.
-    A macro, audit, or test starts with its name.
-    Macros and audits list referencing models under ``## Models``.
-    A path with an ``audits``, ``macros``, or ``tests`` directory returns that kind.
-    Audits, macros, and tests return source without an output section.
+    ``end_line`` defaults to ``start_line`` if not provided.
+
+    The tightest match that contains the whole range is returned.
+    A range that crosses spans lists each span name.
     """
     return run_get_span_at_lines(_db(ctx), file_path, start_line, end_line)
 

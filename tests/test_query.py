@@ -309,7 +309,7 @@ def test_span_at_lines_lists_overlapping_query_names() -> None:
     finally:
         db.close()
     assert out == (
-        "Multiple queries found:\n"
+        "Multiple spans found:\n"
         "  • sushi.customer_status/$base L7-L12\n"
         "  • sushi.customer_status/$filtered L13-L19\n"
     )

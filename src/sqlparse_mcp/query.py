@@ -562,14 +562,7 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
 
 
 def _render_many(spans: list[_LineSpan]) -> str:
-    heading = "Multiple queries found:"
-    if spans[0]["kind"] == "audit":
-        heading = "Multiple audits found:"
-    elif spans[0]["kind"] == "macro":
-        heading = "Multiple macros found:"
-    elif spans[0]["kind"] == "test":
-        heading = "Multiple tests found:"
-    lines = [heading]
+    lines = ["Multiple spans found:"]
     for span in spans:
         lines.append(bullet(f"{_span_label(span)} L{span['start']}-L{span['end']}"))
     return "\n".join(lines) + "\n"
