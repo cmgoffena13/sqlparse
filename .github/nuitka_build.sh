@@ -27,6 +27,7 @@ uv run --no-dev -- nuitka \
   --python-flag="no_warnings" \
   --include-package=src \
   --include-package=sqlglot.optimizer \
+  --include-package=jinja2.ext \
   --include-package=certifi \
   --include-package-data=certifi \
   --include-distribution-metadata=caio \
