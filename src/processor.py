@@ -53,6 +53,7 @@ class ProjectProcessor:
         self._lock = threading.RLock()
         self.directories_snapshot = self.db.get_directories_snapshot()
         self.files_snapshot = self.db.get_files_snapshot()
+        self.parser = SQLMeshParser(self.db, self.assigner, self.root)
 
     def _process_directories(self, directory_names: list[str], dir_rel: str) -> None:
         for directory_name in directory_names:
@@ -212,25 +213,23 @@ class ProjectProcessor:
 
     def process(self, full: bool = False) -> None:
         with self._lock:
-            self.parser = SQLMeshParser(self.db, self.assigner, self.root)
-            try:
-                self._process_unlocked(full)
-            finally:
-                self.parser.context.close()
+            self._process_unlocked(full)
 
     def run_query(self, fn: Callable[[ProjectDB], T], *, full: bool = False) -> T:
         with self._lock:
-            self.parser = SQLMeshParser(self.db, self.assigner, self.root)
-            try:
-                self._process_unlocked(full)
-                result = fn(self.db)
-            finally:
-                self.parser.context.close()
-        return result
+            self._process_unlocked(full)
+            return fn(self.db)
+
+    def close(self) -> None:
+        with self._lock:
+            self.parser.context.close()
 
     def _process_unlocked(self, full: bool = False) -> None:
         self._reset_run_state()
         start_time = time.perf_counter()
+        reloaded = any(loader.reload_needed() for loader in self.parser.context._loaders)
+        if reloaded:
+            self.parser.context.load(update_schemas=True)
         root_s = str(self.root)
         for directory_path, directory_names, file_names in os.walk(root_s):
             dir_rel = (
@@ -260,10 +259,19 @@ class ProjectProcessor:
             self._process_files(file_names, directory_path, dir_rel, full)
 
         self._insert_batch(final=True)
+        deleted = any(not row["seen"] for row in self.files_snapshot.values()) or any(
+            not row["seen"] for row in self.directories_snapshot.values()
+        )
         self.db.delete_files(self.files_snapshot)
         self.db.delete_directories(self.directories_snapshot)
-
-        self.parser.sync(self.files_snapshot)
+        self.files_snapshot = {
+            path: meta for path, meta in self.files_snapshot.items() if meta["seen"]
+        }
+        self.directories_snapshot = {
+            path: meta for path, meta in self.directories_snapshot.items() if meta["seen"]
+        }
+        if reloaded or full or self.files_indexed or deleted:
+            self.parser.sync(self.files_snapshot)
 
         duration_ms = round((time.perf_counter() - start_time) * 1000)
         indexed = (

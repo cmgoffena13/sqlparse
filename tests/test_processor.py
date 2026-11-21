@@ -19,15 +19,39 @@ RAW_ORDERS_FQN = "raw.orders"
 
 def test_processor_releases_sqlmesh_before_the_next_index() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
+    first = ProjectProcessor(db, FIXTURE_PROJECT)
     try:
-        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        ProjectProcessor(db, FIXTURE_PROJECT).process()
+        first.process(full=True)
+        first.close()
+        second = ProjectProcessor(db, FIXTURE_PROJECT)
+        try:
+            second.process()
+            rows = db.fetch(
+                "SELECT qualified_name FROM models WHERE qualified_name = ?",
+                (CUSTOMERS_FQN,),
+            )
+            assert rows[0]["qualified_name"] == CUSTOMERS_FQN
+        finally:
+            second.close()
+    finally:
+        db.close()
+
+
+def test_processor_reuses_context_across_process_calls() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    processor = ProjectProcessor(db, FIXTURE_PROJECT)
+    try:
+        processor.process(full=True)
+        context = processor.parser.context
+        processor.process()
+        assert processor.parser.context is context
         rows = db.fetch(
             "SELECT qualified_name FROM models WHERE qualified_name = ?",
             (CUSTOMERS_FQN,),
         )
         assert rows[0]["qualified_name"] == CUSTOMERS_FQN
     finally:
+        processor.close()
         db.close()
 
 
@@ -51,13 +75,15 @@ def test_concurrent_run_query_does_not_raise() -> None:
         assert len(results) == 8
         assert all(isinstance(count, int) for count in results)
     finally:
+        processor.close()
         db.close()
 
 
 def test_processor_indexes_files_and_directories() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
+    processor = ProjectProcessor(db, FIXTURE_PROJECT)
     try:
-        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        processor.process(full=True)
         first_projects = {
             str(row["name"]): dict(row) for row in db.fetch("SELECT id, name FROM projects")
         }
@@ -145,7 +171,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "INNER JOIN columns c ON c.id = tr.column_id"
             )
         }
-        ProjectProcessor(db, FIXTURE_PROJECT).process()
+        processor.process()
         second_projects = {
             str(row["name"]): dict(row) for row in db.fetch("SELECT id, name FROM projects")
         }
@@ -276,6 +302,7 @@ def test_processor_indexes_files_and_directories() -> None:
         )[0]
         file_count = db.fetch("SELECT COUNT(*) AS file_count FROM files")[0]["file_count"]
     finally:
+        processor.close()
         db.close()
     assert directories == ["audits", "macros", "models", "seeds", "tests"]
     assert config["directory_id"] is None
@@ -781,8 +808,9 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
     root = tmp_path / "sushi"
     shutil.copytree(FIXTURE_PROJECT, root)
     db = ProjectDB(root)
+    processor = ProjectProcessor(db, root)
     try:
-        ProjectProcessor(db, root).process(full=True)
+        processor.process(full=True)
         before = {
             str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM models")
         }
@@ -808,7 +836,7 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         )[0]["id"]
         (root / "models" / "customers.sql").unlink()
         (root / "macros" / "cents_to_dollars.sql").unlink()
-        ProjectProcessor(db, root).process()
+        processor.process()
         after = {
             str(row["qualified_name"]) for row in db.fetch("SELECT qualified_name FROM models")
         }
@@ -829,6 +857,7 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
             for row in db.fetch("SELECT ref_column_qualified_name FROM column_lineage")
         }
     finally:
+        processor.close()
         db.close()
     assert CUSTOMERS_FQN in before
     assert after == {
@@ -891,8 +920,9 @@ def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) ->
     (fundamentals / "__init__.py").write_text("")
     (fundamentals / "xxx.py").write_text("def y() -> int:\n    return 1\n")
     db = ProjectDB(root)
+    processor = ProjectProcessor(db, root)
     try:
-        ProjectProcessor(db, root).process(full=True)
+        processor.process(full=True)
         paths = {
             str(row["path"]): row["language"]
             for row in db.fetch("SELECT path, language FROM files")
@@ -908,12 +938,13 @@ def test_processor_records_plain_files_and_drops_deleted_ones(tmp_path: Path) ->
         (root / "README.md").unlink()
         (notes / "keep.txt").unlink()
         notes.rmdir()
-        ProjectProcessor(db, root).process()
+        processor.process()
         remaining = {str(row["path"]) for row in db.fetch("SELECT path FROM files")}
         remaining_dirs = {str(row["path"]) for row in db.fetch("SELECT path FROM directories")}
         updated = db.fetch("SELECT line_count FROM files WHERE path = ?", ("pkg/worker.py",))[0]
     finally:
         blocked.chmod(0o644)
+        processor.close()
         db.close()
     assert directories == ["notes", "pkg", "src", "src/fundamentals"]
     assert paths["README.md"] is None

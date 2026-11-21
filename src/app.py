@@ -32,11 +32,14 @@ def _run_reload(root: Path) -> int:
     from src.processor import ProjectProcessor
 
     db = ProjectDB(root, apply_schema=False)
+    processor: ProjectProcessor | None = None
     try:
         db.recreate_schema()
-        processor: ProjectProcessor = ProjectProcessor(db, root)
+        processor = ProjectProcessor(db, root)
         processor.process(full=True)
     finally:
+        if processor is not None:
+            processor.close()
         db.close()
     return 0
 

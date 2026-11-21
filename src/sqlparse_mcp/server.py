@@ -51,6 +51,8 @@ async def _lifespan(_app: FastMCP) -> AsyncGenerator[dict[str, Any]]:
     try:
         yield {"db": db, "processor": processor}
     finally:
+        if processor is not None:
+            processor.close()
         if db is not None:
             db.close()
 
