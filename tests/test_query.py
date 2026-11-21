@@ -10,19 +10,19 @@ _FINAL = (
     "L20 |   customer_id, -- Customer identifier\n"
     "L21 |   {{ cents_to_dollars('amount_cents') }} AS amount, /* Order amount in dollars */\n"
     "L22 |   status -- Customer status\n"
-    "L23 | FROM CTE\n"
+    "L23 | FROM cte\n"
     "\n"
     "## Output\n"
     "\n"
     "  • sushi.customers.customer_id INT NOT NULL\n"
-    "  • sushi.customers.amount DOUBLE\n"
-    "  • sushi.customers.status TEXT\n"
+    "  • sushi.customers.amount      DOUBLE\n"
+    "  • sushi.customers.status      TEXT\n"
 )
 
-_CTE = (
+_cte = (
     "File: models/customers.sql\n"
     "\n"
-    "L9  | WITH CTE AS (\n"
+    "L9  | WITH cte AS (\n"
     "L10 |   SELECT\n"
     "L11 |     s.customer_id,\n"
     "L12 |     o.customer_id,\n"
@@ -35,10 +35,10 @@ _CTE = (
     "\n"
     "## Output\n"
     "\n"
-    "  • CTE.customer_id INT\n"
-    "  • CTE.customer_id INT\n"
-    "  • CTE.status TEXT\n"
-    "  • CTE.amount_cents INT\n"
+    "  • cte.customer_id  INT\n"
+    "  • cte.customer_id  INT\n"
+    "  • cte.status       TEXT\n"
+    "  • cte.amount_cents INT\n"
 )
 
 
@@ -70,7 +70,7 @@ def test_query_lists_the_cte() -> None:
         out = get_query(db, "sushi.customers", "cte")
     finally:
         db.close()
-    assert out == _CTE
+    assert out == _cte
 
 
 def test_query_missing_model_and_query() -> None:
@@ -95,12 +95,12 @@ def test_query_header_follows_the_input_kind() -> None:
         by_file = get_query(db, "models/customers.sql", "cte")
     finally:
         db.close()
-    assert by_model == _CTE
+    assert by_model == _cte
     assert "Model:" not in by_model
     assert by_file == (
         "Model: sushi.customers\n"
         "\n"
-        "L9  | WITH CTE AS (\n"
+        "L9  | WITH cte AS (\n"
         "L10 |   SELECT\n"
         "L11 |     s.customer_id,\n"
         "L12 |     o.customer_id,\n"
@@ -113,10 +113,10 @@ def test_query_header_follows_the_input_kind() -> None:
         "\n"
         "## Output\n"
         "\n"
-        "  • CTE.customer_id INT\n"
-        "  • CTE.customer_id INT\n"
-        "  • CTE.status TEXT\n"
-        "  • CTE.amount_cents INT\n"
+        "  • cte.customer_id  INT\n"
+        "  • cte.customer_id  INT\n"
+        "  • cte.status       TEXT\n"
+        "  • cte.amount_cents INT\n"
     )
     assert "File:" not in by_file
 
@@ -149,8 +149,8 @@ def test_query_at_lines_returns_the_containing_query() -> None:
         final = get_query_at_lines(db, "models/customers.sql", 21)
     finally:
         db.close()
-    assert cte == _CTE.replace(
-        "File: models/customers.sql", "Model: sushi.customers\nQuery: CTE", 1
+    assert cte == _cte.replace(
+        "File: models/customers.sql", "Model: sushi.customers\nQuery: $cte", 1
     )
     assert final == _FINAL.replace(
         "File: models/customers.sql", "Model: sushi.customers\nQuery: $", 1
@@ -185,8 +185,8 @@ def test_query_at_lines_lists_overlapping_query_names() -> None:
         db.close()
     assert out == (
         "Multiple queries found:\n"
-        "  • sushi.customer_status/base L7-L12\n"
-        "  • sushi.customer_status/filtered L13-L19\n"
+        "  • sushi.customer_status/$base L7-L12\n"
+        "  • sushi.customer_status/$filtered L13-L19\n"
     )
 
 
@@ -197,8 +197,8 @@ def test_query_at_lines_uses_the_closest_query_beside_the_range() -> None:
         out = get_query_at_lines(db, "models/customers.sql", 8)
     finally:
         db.close()
-    assert out == _CTE.replace(
-        "File: models/customers.sql", "Model: sushi.customers\nQuery: CTE", 1
+    assert out == _cte.replace(
+        "File: models/customers.sql", "Model: sushi.customers\nQuery: $cte", 1
     )
 
 
@@ -214,3 +214,70 @@ def test_query_at_lines_python_body_has_no_query() -> None:
     assert missing == "No model found."
     assert python_body == "No query found."
     assert blank == "No file path given; pass a model file path."
+
+
+def test_query_at_lines_returns_an_audit() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        out = get_query_at_lines(db, "audits/not_null_customer_id.sql", 6)
+    finally:
+        db.close()
+    assert out == (
+        "Audit: not_null_customer_id\n"
+        "\n"
+        "L1 | AUDIT (\n"
+        "L2 |   name not_null_customer_id\n"
+        "L3 | );\n"
+        "L4 | \n"
+        "L5 | SELECT *\n"
+        "L6 | FROM @this_model\n"
+        "L7 | WHERE customer_id IS NULL\n"
+    )
+    assert "## Output" not in out
+
+
+def test_query_at_lines_returns_a_macro() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        jinja = get_query_at_lines(db, "macros/cents_to_dollars.sql", 2)
+        python = get_query_at_lines(db, "macros/identity.py", 5)
+    finally:
+        db.close()
+    assert jinja == (
+        "Macro: cents_to_dollars\n"
+        "\n"
+        "L1 | {% macro cents_to_dollars(column) %}\n"
+        "L2 |   {{ column }} / 100\n"
+        "L3 | {% endmacro %}\n"
+    )
+    assert python == (
+        "Macro: identity\n"
+        "\n"
+        "L4 | @macro()\n"
+        "L5 | def identity(evaluator, expr):\n"
+        "L6 |     return expr\n"
+    )
+    assert "## Output" not in jinja
+    assert "## Output" not in python
+
+
+def test_query_at_lines_keeps_audits_and_macros_in_their_directories() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        missing_audit = get_query_at_lines(db, "audits/missing.sql", 1)
+        missing_macro = get_query_at_lines(db, "macros/missing.sql", 1)
+        nested_audit = get_query_at_lines(db, "team/audits/missing.sql", 1)
+        nested_macro = get_query_at_lines(db, "team/macros/missing.py", 1)
+        named_like_audit = get_query_at_lines(db, "models/audits.sql", 1)
+        model = get_query_at_lines(db, "models/customers.sql", 12)
+    finally:
+        db.close()
+    assert missing_audit == "No audit found."
+    assert missing_macro == "No macro found."
+    assert nested_audit == "No audit found."
+    assert nested_macro == "No macro found."
+    assert named_like_audit == "No model found."
+    assert model.startswith("Model: sushi.customers\nQuery: $cte")

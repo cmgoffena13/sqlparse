@@ -30,10 +30,7 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
     finally:
         db.close()
     assert out == (
-        "sushi.customers / $cte / raw.customers.customer_id (join)\n"
-        "└── raw.customers / EXTERNAL / customer_id\n"
-        "\n"
-        "sushi.customers / $cte / raw.customers.customer_id (select)\n"
+        "sushi.customers / $cte / raw.customers.customer_id (select, join)\n"
         "└── raw.customers / EXTERNAL / customer_id\n"
     )
 
@@ -86,13 +83,8 @@ def test_column_relations_dependents_include_downstream_models() -> None:
     finally:
         db.close()
     assert out == (
-        "sushi.customer_orders\n"
-        "└── $\n"
-        "    └── sushi.customers.customer_id (select, join, group)\n"
-        "\n"
-        "sushi.orders\n"
-        "└── $\n"
-        "    └── sushi.customers.customer_id (join)\n"
+        "sushi.orders / $ / sushi.customers.customer_id (join)\n"
+        "└── sushi.customer_orders / $ / sushi.customers.customer_id (select, join, group)\n"
     )
 
 
@@ -112,8 +104,11 @@ def test_column_relations_dependents_include_tests_when_requested() -> None:
         db.close()
     assert "## Tests\n\ntests/test_orders.yaml" in out
     assert "tests/test_orders.yaml" in out
-    assert "• test_orders_exist" in out
-    assert "• test_orders_csv" in out
+    assert (
+        "• test_orders_exist (L1 - L13)\n"
+        "  • test_orders_csv (L14 - L31)\n"
+        "  • test_orders_query (L32 - L41)\n"
+    ) in out
 
 
 def test_column_relations_missing_column() -> None:
@@ -193,4 +188,4 @@ def test_column_relations_join_column_uses_table_qualified_label() -> None:
         db.close()
     assert bare == "No column found."
     assert "sushi.customers / $ / cte.customer_id (select)" in join_col
-    assert "sushi.customers / $cte / raw.customers.customer_id (join)" in join_col
+    assert "sushi.customers / $cte / raw.customers.customer_id (select, join)" in join_col

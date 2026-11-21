@@ -62,6 +62,7 @@ def _relation_lines(
     budget: list[int],
     kinds: dict[str, str],
     mark_external: bool,
+    nested: bool,
 ) -> list[str]:
     lines: list[str] = []
     siblings = [child for child in children.get(parent, ()) if child not in seen]
@@ -75,8 +76,14 @@ def _relation_lines(
             break
         budget[0] -= 1
         seen.add(child)
-        connector, continuation = tree_glyphs(index == last_index, wide=True)
-        lines.append(f"{branch_prefix}{connector}{_labeled_model(child, kinds, mark_external)}")
+        label = _labeled_model(child, kinds, mark_external)
+        prefix = ""
+        continuation = ""
+        if nested:
+            prefix, continuation = tree_glyphs(index == last_index, wide=True)
+        elif lines:
+            lines.append("")
+        lines.append(f"{branch_prefix}{prefix}{label}")
         lines.extend(
             _relation_lines(
                 children,
@@ -86,6 +93,7 @@ def _relation_lines(
                 budget=budget,
                 kinds=kinds,
                 mark_external=mark_external,
+                nested=True,
             )
         )
         seen.remove(child)
@@ -112,17 +120,17 @@ def get_model_relations(
             kinds = _model_kinds(db)
             mark_external = relation == "dependencies"
             budget = [_MAX_NODES]
-            lines = [_labeled_model(key, kinds, mark_external)]
-            lines.extend(
-                _relation_lines(
-                    children,
-                    key,
-                    "",
-                    seen={key},
-                    budget=budget,
-                    kinds=kinds,
-                    mark_external=mark_external,
-                )
+            lines = _relation_lines(
+                children,
+                key,
+                "",
+                seen={key},
+                budget=budget,
+                kinds=kinds,
+                mark_external=mark_external,
+                nested=False,
             )
-            result = "\n".join(lines) + "\n"
+            result = "No relations."
+            if lines:
+                result = "\n".join(lines) + "\n"
     return result

@@ -116,11 +116,13 @@ def get_query_at_lines(
     ctx: Context, file_path: str, start_line: int, end_line: int | None = None
 ) -> str:
     """
-    Return the query that contains ``start_line`` through ``end_line`` in ``file_path``.
+    Return the query, audit, or macro that contains ``start_line`` through ``end_line``.
 
-    ``end_line`` defaults to ``start_line``. The tightest query that contains the
+    ``end_line`` defaults to ``start_line``. The tightest match that contains the
     whole range is returned. A range that crosses queries lists each query name.
     A range on the model config returns that config instead of a query.
+    A path with an ``audits`` directory is an audit, and a ``macros`` directory is a macro.
+    Those return their source without an output section.
     """
     return run_query_at_lines(_db(ctx), file_path, start_line, end_line)
 

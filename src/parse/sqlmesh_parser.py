@@ -592,13 +592,15 @@ class SQLMeshParser:
                 else query_name
             )
             column_label = f"{from_table}.{name}" if from_table is not None else name
-            doc_digest = snapshot_hash([model_name, relative, column_label])
+            model_kind = model.kind.name
+            doc_digest = snapshot_hash([model_name, model_kind, relative, column_label])
             doc_prior = search_docs_snapshot.get(str(column_id))
             if doc_prior is None or doc_prior["snapshot_hash"] != doc_digest:
                 self.batches["search_docs"].append(
                     {
                         "id": column_id,
                         "model_name": model_name,
+                        "model_kind": model_kind,
                         "query_name": relative,
                         "column_name": column_label,
                         "snapshot_hash": doc_digest,

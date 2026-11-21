@@ -4,6 +4,7 @@ from typing import Literal
 from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_name
 from src.sqlparse_mcp.format_utils import bullet, tree_glyphs
+from src.sqlparse_mcp.model_relations import _load_graph
 
 _FIND_COLUMNS_SQL = """
 SELECT columns.id
@@ -60,16 +61,18 @@ ORDER BY model_name, query_name, column_name, from_table, ref_kind
 """
 
 _TEST_DEPENDENTS_SQL = """
-SELECT DISTINCT 
-    files.path AS file_path, 
-    tests.name AS test_name
+SELECT DISTINCT
+    files.path AS file_path,
+    tests.name AS test_name,
+    tests.line_start,
+    tests.line_end
 FROM test_references
 INNER JOIN tests 
     ON tests.id = test_references.test_id
 INNER JOIN files 
     ON files.id = tests.file_id
 WHERE test_references.column_id IN ({placeholders})
-ORDER BY file_path, test_name
+ORDER BY file_path, tests.line_start, test_name
 """
 
 
@@ -113,46 +116,80 @@ def _use_label(kinds: list[str]) -> str:
     return f" ({', '.join(ordered)})"
 
 
-def _column_suffix(ref_kind: str, count: int) -> str:
-    suffix = f" ({ref_kind})"
-    if count > 1:
-        suffix = f"{suffix} ({count})"
-    return suffix
+def _relation_kinds(ref_kind: str, kinds: list[str]) -> list[str]:
+    if ref_kind and ref_kind not in kinds:
+        kinds.append(ref_kind)
+    return kinds
+
+
+def _model_children(direct: list[str], dependents: dict[str, list[str]]) -> dict[str, list[str]]:
+    included: list[str] = []
+    pending = list(direct)
+    while pending:
+        name = pending.pop(0)
+        if name not in included:
+            included.append(name)
+            pending.extend(dependents.get(name, []))
+    return {
+        name: [child for child in dependents.get(name, []) if child in included]
+        for name in included
+    }
+
+
+def _model_block(
+    name: str,
+    grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]],
+    children: dict[str, list[str]],
+    seen: set[str],
+) -> list[str]:
+    seen.add(name)
+    header, hide_query, queries = grouped.get(name, (name, False, OrderedDict()))
+    lines = [
+        f"{header} / {label}{_use_label(kinds)}"
+        if hide_query
+        else f"{header} / {query_name} / {label}{_use_label(kinds)}"
+        for query_name, columns in queries.items()
+        for label, kinds in columns.items()
+    ]
+    if not lines:
+        lines = [header]
+    kids = [kid for kid in children.get(name, []) if kid not in seen]
+    if kids:
+        parent = lines.pop()
+        nested_lines: list[str] = []
+        last = len(kids) - 1
+        for index, kid in enumerate(kids):
+            connector, continuation = tree_glyphs(index == last, wide=True)
+            nested = _model_block(kid, grouped, children, seen)
+            nested_lines.append(f"{connector}{nested[0]}")
+            nested_lines.extend(f"{continuation}{nested_line}" for nested_line in nested[1:])
+        lines.append(parent)
+        lines.extend(nested_lines)
+    return lines
 
 
 def _dependency_tree(
     grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]],
+    children: dict[str, list[str]],
 ) -> list[str]:
+    nested = {name for kids in children.values() for name in kids}
+    roots = [name for name in children if name not in nested]
+    if not roots and children:
+        roots = [next(iter(children))]
     lines: list[str] = []
-    for header, hide_query, queries in grouped.values():
-        if lines:
-            lines.append("")
-        lines.append(header)
-        query_items = list(queries.items())
-        if hide_query:
-            column_items = [item for _query, columns in query_items for item in columns.items()]
-            last_column = len(column_items) - 1
-            for column_index, (label, kinds) in enumerate(column_items):
-                connector, _continuation = tree_glyphs(column_index == last_column, wide=True)
-                lines.append(f"{connector}{label}{_use_label(kinds)}")
-        else:
-            last_query = len(query_items) - 1
-            for query_index, (relative_query, columns) in enumerate(query_items):
-                connector, continuation = tree_glyphs(query_index == last_query, wide=True)
-                lines.append(f"{connector}{relative_query}")
-                column_items = list(columns.items())
-                last_column = len(column_items) - 1
-                for column_index, (label, kinds) in enumerate(column_items):
-                    column_connector, _column_continuation = tree_glyphs(
-                        column_index == last_column, wide=True
-                    )
-                    lines.append(f"{continuation}{column_connector}{label}{_use_label(kinds)}")
+    seen: set[str] = set()
+    for name in roots:
+        if name not in seen:
+            if lines:
+                lines.append("")
+            lines.extend(_model_block(name, grouped, children, seen))
     return lines
 
 
 def _format_groups(
+    db: ProjectDB,
     rows: list[tuple[str, str, str, str | None, str, str]],
-    test_rows: list[tuple[str, str]],
+    test_rows: list[tuple[str, str, int, int]],
     mark_external: bool,
 ) -> str:
     grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]] = (
@@ -172,15 +209,16 @@ def _format_groups(
         kinds = columns.setdefault(label, [])
         if ref_kind not in kinds:
             kinds.append(ref_kind)
-    lines = _dependency_tree(grouped)
+    _dependencies, dependents = _load_graph(db)
+    lines = _dependency_tree(grouped, _model_children(list(grouped), dependents))
     if test_rows:
         if lines:
             lines.append("")
         lines.append("## Tests")
         lines.append("")
         by_file: OrderedDict[str, list[str]] = OrderedDict()
-        for file_path, test_name in test_rows:
-            by_file.setdefault(file_path, []).append(test_name)
+        for file_path, test_name, line_start, line_end in test_rows:
+            by_file.setdefault(file_path, []).append(f"{test_name} (L{line_start} - L{line_end})")
         for file_path, names in by_file.items():
             lines.append(file_path)
             for name in names:
@@ -220,14 +258,13 @@ def _relation_text(
     kind: str,
     query_name: str,
     column: str,
-    ref_kind: str,
-    count: int,
+    ref_kinds: list[str],
 ) -> str:
     text = f"{model_name} / EXTERNAL / {column}"
     if kind != "EXTERNAL":
         text = (
             f"{model_name} / {_relative_query(model_name, query_name)} / {column}"
-            f"{_column_suffix(ref_kind, count)}"
+            f"{_use_label(ref_kinds)}"
         )
     return text
 
@@ -237,7 +274,7 @@ def _dependency_nodes(
     column_ids: list[int],
     seen: set[int],
 ) -> list[tuple[str, list]]:
-    grouped: OrderedDict[tuple[str, str, str, str, str, int], int] = OrderedDict()
+    grouped: OrderedDict[tuple[str, str, str, str, int], list[str]] = OrderedDict()
     sources: dict[int, tuple[str, str, str]] = {}
     for (
         model_name,
@@ -256,29 +293,24 @@ def _dependency_nodes(
             ref_kind = ""
         else:
             column = _column_label(from_table, name)
-        key = (model_name, kind, query_name, column, ref_kind, source_id)
-        grouped[key] = grouped.get(key, 0) + 1
+        key = (model_name, kind, query_name, column, source_id)
+        grouped[key] = _relation_kinds(ref_kind, grouped.get(key, []))
         sources[source_id] = (source_model_name, source_model_kind, source_name)
     nodes: list[tuple[str, list]] = []
     child_nodes: dict[int, list] = {}
-    for (model_name, kind, query_name, column, ref_kind, source_id), count in grouped.items():
+    for (model_name, kind, query_name, column, source_id), ref_kinds in grouped.items():
         if source_id not in child_nodes and source_id not in seen and len(seen) < 100:
             seen.add(source_id)
             source_model_name, source_model_kind, source_name = sources[source_id]
             if source_model_kind == "EXTERNAL":
                 child_nodes[source_id] = [
-                    (
-                        _relation_text(
-                            source_model_name, source_model_kind, "", source_name, "", 1
-                        ),
-                        [],
-                    )
+                    (_relation_text(source_model_name, source_model_kind, "", source_name, []), [])
                 ]
             else:
                 child_nodes[source_id] = _dependency_nodes(db, [source_id], seen)
         nodes.append(
             (
-                _relation_text(model_name, kind, query_name, column, ref_kind, count),
+                _relation_text(model_name, kind, query_name, column, ref_kinds),
                 child_nodes.get(source_id, []),
             )
         )
@@ -360,14 +392,19 @@ def get_column_relations(
                     column_ids,
                 )
             ]
-            test_rows: list[tuple[str, str]] = []
+            test_rows: list[tuple[str, str, int, int]] = []
             if include_tests:
                 test_rows = [
-                    (str(row["file_path"]), str(row["test_name"]))
+                    (
+                        str(row["file_path"]),
+                        str(row["test_name"]),
+                        int(row["line_start"]),
+                        int(row["line_end"]),
+                    )
                     for row in db.connection.execute(
                         _TEST_DEPENDENTS_SQL.format(placeholders=placeholders),
                         column_ids,
                     )
                 ]
-            result = _format_groups(rows, test_rows, False)
+            result = _format_groups(db, rows, test_rows, False)
     return result

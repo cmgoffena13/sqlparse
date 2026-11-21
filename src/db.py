@@ -688,9 +688,9 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO search_docs (
-                    id, model_name, query_name, column_name, snapshot_hash
+                    id, model_name, model_kind, query_name, column_name, snapshot_hash
                 ) VALUES (
-                    :id, :model_name, :query_name, :column_name, :snapshot_hash
+                    :id, :model_name, :model_kind, :query_name, :column_name, :snapshot_hash
                 )
                 """,
                 batches["search_docs"],
@@ -698,9 +698,9 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO search_fts (
-                    rowid, model_name, query_name, column_name
+                    rowid, model_name, model_kind, query_name, column_name
                 ) VALUES (
-                    :id, :model_name, :query_name, :column_name
+                    :id, :model_name, :model_kind, :query_name, :column_name
                 )
                 """,
                 batches["search_docs"],

@@ -6,7 +6,7 @@ MODEL (
 );
 
 JINJA_QUERY_BEGIN;
-WITH CTE AS (
+WITH cte AS (
   SELECT
     s.customer_id,
     o.customer_id,
@@ -20,5 +20,5 @@ SELECT
   customer_id, -- Customer identifier
   {{ cents_to_dollars('amount_cents') }} AS amount, /* Order amount in dollars */
   status -- Customer status
-FROM CTE
+FROM cte
 JINJA_END;

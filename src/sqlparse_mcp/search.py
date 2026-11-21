@@ -7,9 +7,10 @@ from src.sqlparse_mcp.format_utils import bullet, gutter_width
 _SEARCH_SQL = """
 SELECT
     model_name,
+    model_kind,
     query_name,
     column_name,
-    bm25(search_fts, 10.0, 10.0, 10.0) AS rank
+    bm25(search_fts, 10.0, 0.0, 10.0, 10.0) AS rank
 FROM search_fts
 WHERE search_fts MATCH ?
 ORDER BY rank
@@ -48,6 +49,8 @@ def search(db: ProjectDB, query: str, limit: int) -> str:
             for row in rows:
                 model_name = str(row["model_name"])
                 query_name = str(row["query_name"])
+                if str(row["model_kind"]) == "EXTERNAL":
+                    query_name = "EXTERNAL"
                 column_name = str(row["column_name"])
                 for section, label in (
                     ("models", model_name),

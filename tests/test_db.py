@@ -16,6 +16,7 @@ def test_bulk_insert_upserts_search_docs_snapshot_and_fts(tmp_path: Path) -> Non
             {
                 "id": 7,
                 "model_name": "sushi.customers",
+                "model_kind": "FULL",
                 "query_name": "cte",
                 "column_name": "raw.orders.amount_cents",
                 "snapshot_hash": "abc",

@@ -163,9 +163,11 @@ CREATE TABLE IF NOT EXISTS test_references (
     PRIMARY KEY (test_id, column_id)
 );
 CREATE INDEX IF NOT EXISTS test_references_column_id_index ON test_references (column_id, test_id);
+
 CREATE TABLE IF NOT EXISTS search_docs (
     id                  INTEGER NOT NULL PRIMARY KEY,
     model_name          TEXT NOT NULL,
+    model_kind          TEXT NOT NULL,
     query_name          TEXT NOT NULL,
     column_name         TEXT NOT NULL,
     snapshot_hash       TEXT NOT NULL
@@ -175,6 +177,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS search_docs_names_index
 
 CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
     model_name,
+    model_kind,
     query_name,
     column_name
 );

@@ -11,14 +11,17 @@ def test_model_relations_dependencies_tree() -> None:
         out = get_model_relations(db, "sushi.customer_orders", "dependencies")
     finally:
         db.close()
-    assert out.startswith("sushi.customer_orders\n")
-    assert "├── sushi.customers" in out or "└── sushi.customers" in out
-    assert "sushi.orders" in out
-    assert "sushi.customers (EXTERNAL)" not in out
-    assert "sushi.orders (EXTERNAL)" not in out
-    assert "raw.customers (EXTERNAL)" in out
-    assert "raw.orders (EXTERNAL)" in out
-    assert "└── sushi.orders\n    ├── raw.orders (EXTERNAL)\n    └── sushi.customers\n" in out
+    assert out == (
+        "sushi.customers\n"
+        "├── raw.customers (EXTERNAL)\n"
+        "└── raw.orders (EXTERNAL)\n"
+        "\n"
+        "sushi.orders\n"
+        "├── raw.orders (EXTERNAL)\n"
+        "└── sushi.customers\n"
+        "    ├── raw.customers (EXTERNAL)\n"
+        "    └── raw.orders (EXTERNAL)\n"
+    )
 
 
 def test_model_relations_dependents_tree() -> None:
@@ -28,11 +31,7 @@ def test_model_relations_dependents_tree() -> None:
         out = get_model_relations(db, "sushi.customers", "dependents")
     finally:
         db.close()
-    assert out.startswith("sushi.customers\n")
-    assert "sushi.customer_orders" in out
-    assert "sushi.orders" in out
-    assert "sushi.orders\n    └── sushi.customer_orders\n" in out
-    assert "(EXTERNAL)" not in out
+    assert out == ("sushi.customer_orders\n\nsushi.orders\n└── sushi.customer_orders\n")
 
 
 def test_model_relations_missing_model() -> None:

@@ -65,7 +65,8 @@ def test_client_lists_tools_and_reads_the_project(
                     {"model_name": "sushi.customers", "relation": "dependents"},
                 )
             )
-            assert relations_out.startswith("sushi.customers\n")
+            assert relations_out.startswith("sushi.customer_orders\n")
+            assert "sushi.customers\n" not in relations_out
             assert "sushi.customer_orders" in relations_out
             column_out = _text(
                 await mcp_client.call_tool(
