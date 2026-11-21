@@ -39,7 +39,9 @@ def test_processor_indexes_files_and_directories() -> None:
         }
         first_gateways = {
             str(row["name"]): dict(row)
-            for row in db.fetch("SELECT id, project_id, name, dialect FROM project_gateways")
+            for row in db.fetch(
+                "SELECT id, project_id, name, catalog_name, dialect FROM project_gateways"
+            )
         }
         first_models = {
             str(row["qualified_name"]): dict(row)
@@ -125,7 +127,9 @@ def test_processor_indexes_files_and_directories() -> None:
         }
         second_gateways = {
             str(row["name"]): dict(row)
-            for row in db.fetch("SELECT id, project_id, name, dialect FROM project_gateways")
+            for row in db.fetch(
+                "SELECT id, project_id, name, catalog_name, dialect FROM project_gateways"
+            )
         }
         second_models = {
             str(row["qualified_name"]): dict(row)
@@ -266,6 +270,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert set(first_projects) == {"sushi"}
     assert set(first_gateways) == {"local"}
     assert first_gateways["local"]["project_id"] == first_projects["sushi"]["id"]
+    assert first_gateways["local"]["catalog_name"] is None
     assert first_gateways["local"]["dialect"] is None
     assert second_projects == first_projects
     assert second_gateways == first_gateways

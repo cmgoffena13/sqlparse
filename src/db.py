@@ -61,6 +61,7 @@ class ProjectGatewaySnapshot(TypedDict):
     id: int
     project_id: int
     name: str
+    catalog_name: str | None
     dialect: str | None
     seen: bool
 
@@ -256,7 +257,7 @@ class ProjectDB:
 
     def get_project_gateways_snapshot(self) -> dict[str, ProjectGatewaySnapshot]:
         cursor = self.connection.execute(
-            "SELECT id, project_id, name, dialect FROM project_gateways"
+            "SELECT id, project_id, name, catalog_name, dialect FROM project_gateways"
         )
         return {
             f"{row['project_id']}:{row['name']}": self._project_gateway_snapshot(row)
@@ -441,10 +442,12 @@ class ProjectDB:
 
     def _project_gateway_snapshot(self, row: sqlite3.Row) -> ProjectGatewaySnapshot:
         dialect = row["dialect"]
+        catalog_name = row["catalog_name"]
         return {
             "id": int(row["id"]),
             "project_id": int(row["project_id"]),
             "name": str(row["name"]),
+            "catalog_name": str(catalog_name) if catalog_name is not None else None,
             "dialect": str(dialect) if dialect is not None else None,
             "seen": False,
         }
@@ -561,9 +564,9 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO project_gateways (
-                    id, project_id, name, dialect
+                    id, project_id, name, catalog_name, dialect
                 ) VALUES (
-                    :id, :project_id, :name, :dialect
+                    :id, :project_id, :name, :catalog_name, :dialect
                 )
                 """,
                 batches["project_gateways"],

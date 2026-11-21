@@ -251,6 +251,9 @@ class SQLMeshParser:
                 gateway_dialect = None
                 if gateway.model_defaults is not None and gateway.model_defaults.dialect:
                     gateway_dialect = gateway.model_defaults.dialect
+                catalog_name = None
+                if gateway.connection is not None:
+                    catalog_name = gateway.connection.get_catalog()
                 key = f"{project_id}:{gateway_name}"
                 prior_gateway = gateways_snapshot.get(key)
                 if prior_gateway is None:
@@ -260,6 +263,7 @@ class SQLMeshParser:
                             "id": gateway_id,
                             "project_id": project_id,
                             "name": gateway_name,
+                            "catalog_name": catalog_name,
                             "dialect": gateway_dialect,
                         }
                     )
@@ -268,6 +272,7 @@ class SQLMeshParser:
                     if (
                         prior_gateway["project_id"] != project_id
                         or prior_gateway["name"] != gateway_name
+                        or prior_gateway["catalog_name"] != catalog_name
                         or prior_gateway["dialect"] != gateway_dialect
                     ):
                         self.batches["project_gateways"].append(
@@ -275,6 +280,7 @@ class SQLMeshParser:
                                 "id": gateway_id,
                                 "project_id": project_id,
                                 "name": gateway_name,
+                                "catalog_name": catalog_name,
                                 "dialect": gateway_dialect,
                             }
                         )
@@ -282,6 +288,7 @@ class SQLMeshParser:
                     "id": gateway_id,
                     "project_id": project_id,
                     "name": gateway_name,
+                    "catalog_name": catalog_name,
                     "dialect": gateway_dialect,
                     "seen": True,
                 }

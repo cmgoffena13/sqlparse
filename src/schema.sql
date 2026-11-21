@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS project_gateways (
     id                  INTEGER NOT NULL PRIMARY KEY,
     project_id          INTEGER NOT NULL REFERENCES projects(id),
     name                TEXT NOT NULL,
+    catalog_name        TEXT NULL,
     dialect             TEXT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS project_gateways_project_id_name_index
