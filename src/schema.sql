@@ -92,10 +92,23 @@ CREATE TABLE IF NOT EXISTS model_audits (
 );
 CREATE INDEX IF NOT EXISTS model_audits_model_id_index ON model_audits (model_id, audit_name);
 
-CREATE TABLE IF NOT EXISTS columns (
+CREATE TABLE IF NOT EXISTS queries (
     id                  INTEGER NOT NULL PRIMARY KEY,
     model_id            INTEGER NOT NULL REFERENCES models(id),
-    query_name          TEXT NOT NULL,
+    name                TEXT NOT NULL,
+    line_start          INTEGER NOT NULL,
+    line_end            INTEGER NOT NULL,
+    depth               INTEGER NOT NULL,
+    file_id             INTEGER NOT NULL REFERENCES files(id),
+    snapshot_hash       TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS queries_model_id_name_index ON queries (model_id, name);
+
+CREATE TABLE IF NOT EXISTS columns (
+    id                  INTEGER NOT NULL PRIMARY KEY,
+    file_id             INTEGER NOT NULL REFERENCES files(id),
+    query_id            INTEGER NOT NULL REFERENCES queries(id),
+    model_id            INTEGER NOT NULL REFERENCES models(id),
     from_table          TEXT NULL,
     name                TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
@@ -112,10 +125,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS columns_qualified_name_index ON columns (quali
 CREATE TABLE IF NOT EXISTS column_lineage (
     id                              INTEGER NOT NULL PRIMARY KEY,
     ref_column_id                   INTEGER NOT NULL REFERENCES columns(id),
+    ref_query_id                    INTEGER NOT NULL REFERENCES queries(id),
     ref_column_model_id             INTEGER NOT NULL REFERENCES models(id),
     ref_column_query_name           TEXT NOT NULL,
     ref_column_qualified_name       TEXT NOT NULL,
     source_column_id                INTEGER NOT NULL REFERENCES columns(id),
+    source_query_id                 INTEGER NOT NULL REFERENCES queries(id),
     source_models_id                INTEGER NOT NULL REFERENCES models(id),
     source_query_name               TEXT NOT NULL,
     source_column_qualified_name    TEXT NOT NULL,

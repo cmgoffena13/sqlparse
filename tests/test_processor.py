@@ -38,9 +38,20 @@ def test_processor_indexes_files_and_directories() -> None:
         first_columns = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
-                "SELECT id, model_id, query_name, from_table, name, qualified_name, "
-                "data_type, nullable, line_start, line_end, context, description, "
-                "snapshot_hash FROM columns"
+                "SELECT c.id, c.model_id, c.file_id, c.query_id, "
+                "m.qualified_name || '.' || q.name AS query_name, c.from_table, c.name, "
+                "c.qualified_name, c.data_type, c.nullable, c.line_start, c.line_end, "
+                "c.context, c.description, c.snapshot_hash "
+                "FROM columns AS c "
+                "INNER JOIN queries AS q ON q.id = c.query_id "
+                "INNER JOIN models AS m ON m.id = c.model_id"
+            )
+        }
+        first_queries = {
+            (int(row["model_id"]), str(row["name"])): dict(row)
+            for row in db.fetch(
+                "SELECT id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash "
+                "FROM queries"
             )
         }
         first_macros = {
@@ -111,9 +122,20 @@ def test_processor_indexes_files_and_directories() -> None:
         second_columns = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
-                "SELECT id, model_id, query_name, from_table, name, qualified_name, "
-                "data_type, nullable, line_start, line_end, context, description, "
-                "snapshot_hash FROM columns"
+                "SELECT c.id, c.model_id, c.file_id, c.query_id, "
+                "m.qualified_name || '.' || q.name AS query_name, c.from_table, c.name, "
+                "c.qualified_name, c.data_type, c.nullable, c.line_start, c.line_end, "
+                "c.context, c.description, c.snapshot_hash "
+                "FROM columns AS c "
+                "INNER JOIN queries AS q ON q.id = c.query_id "
+                "INNER JOIN models AS m ON m.id = c.model_id"
+            )
+        }
+        second_queries = {
+            (int(row["model_id"]), str(row["name"])): dict(row)
+            for row in db.fetch(
+                "SELECT id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash "
+                "FROM queries"
             )
         }
         second_macros = {
@@ -337,6 +359,32 @@ def test_processor_indexes_files_and_directories() -> None:
         == first_models[RAW_CUSTOMERS_FQN]["id"]
     )
     assert second_columns == first_columns
+    customers_id = first_models[CUSTOMERS_FQN]["id"]
+    status_id = first_models[CUSTOMER_STATUS_FQN]["id"]
+    customers_root = first_queries[(customers_id, "$")]
+    customers_cte = first_queries[(customers_id, "cte")]
+    assert customers_root["depth"] == 0
+    assert customers_root["line_start"] == 12
+    assert customers_root["line_end"] == 17
+    assert customers_root["file_id"] == customer["id"]
+    assert customers_root["model_id"] == customers_id
+    assert customers_root["snapshot_hash"]
+    assert customers_cte["depth"] == 1
+    assert customers_cte["line_start"] == 1
+    assert customers_cte["line_end"] == 9
+    assert customers_cte["file_id"] == customer["id"]
+    assert first_queries[(status_id, "base")]["depth"] == 1
+    assert first_queries[(status_id, "filtered")]["depth"] == 1
+    assert first_queries[(status_id, "$")]["depth"] == 0
+    assert first_queries[(status_id, "$")]["line_start"] == 21
+    assert first_queries[(status_id, "$")]["line_end"] == 23
+    assert first_columns["sushi.customers.$.customer_id"]["query_id"] == customers_root["id"]
+    assert first_columns["sushi.customers.$.customer_id"]["file_id"] == customer["id"]
+    assert (
+        first_columns["sushi.customers.cte.raw.customers.customer_id"]["query_id"]
+        == customers_cte["id"]
+    )
+    assert second_queries == first_queries
     assert set(first_macros) == {"cents_to_dollars", "identity"}
     assert first_macros["cents_to_dollars"]["kind"] == "jinja"
     assert first_macros["cents_to_dollars"]["file_id"] == jinja_macro_file["id"]

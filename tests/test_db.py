@@ -57,10 +57,12 @@ def test_recreate_schema_keeps_column_lineage_shape(tmp_path: Path) -> None:
     assert reference_columns == [
         "id",
         "ref_column_id",
+        "ref_query_id",
         "ref_column_model_id",
         "ref_column_query_name",
         "ref_column_qualified_name",
         "source_column_id",
+        "source_query_id",
         "source_models_id",
         "source_query_name",
         "source_column_qualified_name",

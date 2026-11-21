@@ -36,6 +36,14 @@ class ExtractedColumnReference(TypedDict):
     ref_context: str
 
 
+class ExtractedQuery(TypedDict):
+    name: str
+    query_name: str
+    line_start: int
+    line_end: int
+    depth: int
+
+
 def _line_span(expression: exp.Expression) -> tuple[int, int]:
     line_start = 0
     line_end = 0
@@ -149,6 +157,79 @@ def _columns_from_query(
                 columns.append(clause_column)
                 seen.add(clause_column["qualified_name"])
     return columns
+
+
+def _query_line_span(expression: exp.Expr) -> tuple[int, int]:
+    line_start = 0
+    line_end = 0
+    pending = [expression]
+    while pending:
+        node = pending.pop()
+        if "line" in node.meta:
+            line = int(node.meta["line"])
+            if line_start == 0 or line < line_start:
+                line_start = line
+            line_end = max(line_end, line)
+        pending.extend(
+            child for child in node.iter_expressions() if not isinstance(child, exp.With)
+        )
+    return line_start, line_end
+
+
+def _query_depth(scope: Scope) -> int:
+    depth = 0
+    parent = scope.parent
+    while parent is not None:
+        depth += 1
+        parent = parent.parent
+    return depth
+
+
+def extract_model_queries(model: Model) -> list[ExtractedQuery]:
+    queries: list[ExtractedQuery] = []
+    try:
+        rendered = model.render_query()
+    except Exception:  # noqa: BLE001
+        rendered = None
+    if rendered is None:
+        queries.append(
+            {
+                "name": FINAL_QUERY,
+                "query_name": final_query_name(model.name),
+                "line_start": 0,
+                "line_end": 0,
+                "depth": 0,
+            }
+        )
+    else:
+        qualified = qualify(
+            rendered,
+            dialect=model.dialect,
+            schema=model.mapping_schema,
+            validate_qualify_columns=False,
+        )
+        annotate_types(qualified, schema=model.mapping_schema, dialect=model.dialect)
+        seen: set[str] = set()
+        for scope in traverse_scope(qualified):
+            parent = scope.expression.parent
+            included = scope.is_cte or scope.is_root
+            name = FINAL_QUERY
+            if included and scope.is_cte and parent is not None:
+                name = parent.alias_or_name
+            query_name = f"{model.name}.{name}"
+            if included and query_name not in seen:
+                seen.add(query_name)
+                line_start, line_end = _query_line_span(scope.expression)
+                queries.append(
+                    {
+                        "name": name,
+                        "query_name": query_name,
+                        "line_start": line_start,
+                        "line_end": line_end,
+                        "depth": _query_depth(scope),
+                    }
+                )
+    return queries
 
 
 def extract_model_columns(model: Model) -> list[ExtractedColumn]:

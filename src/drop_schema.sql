@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS test_references;
 DROP TABLE IF EXISTS tests;
 DROP TABLE IF EXISTS column_lineage;
 DROP TABLE IF EXISTS columns;
+DROP TABLE IF EXISTS queries;
 DROP TABLE IF EXISTS model_audits;
 DROP TABLE IF EXISTS model_macros;
 DROP TABLE IF EXISTS models;

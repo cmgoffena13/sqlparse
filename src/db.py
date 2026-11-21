@@ -14,6 +14,7 @@ BATCH_TABLES = {
     "model_macros",
     "audits",
     "model_audits",
+    "queries",
     "columns",
     "column_lineage",
     "tests",
@@ -29,6 +30,7 @@ ASSIGNER_TABLES = {
     "models",
     "macros",
     "audits",
+    "queries",
     "columns",
     "column_lineage",
     "tests",
@@ -65,6 +67,13 @@ class ProjectGatewaySnapshot(TypedDict):
 
 class ModelSnapshot(TypedDict):
     id: int
+    snapshot_hash: str
+    seen: bool
+
+
+class QuerySnapshot(TypedDict):
+    id: int
+    query_name: str
     snapshot_hash: str
     seen: bool
 
@@ -266,6 +275,18 @@ class ProjectDB:
         model_ids = [row["id"] for row in models.values() if not row["seen"]]
         self.delete_ids("models", model_ids)
 
+    def get_queries_snapshot(self) -> dict[str, QuerySnapshot]:
+        cursor = self.connection.execute(
+            "SELECT queries.id, queries.model_id, queries.name, models.qualified_name, "
+            "queries.snapshot_hash FROM queries "
+            "INNER JOIN models ON models.id = queries.model_id"
+        )
+        return {f"{row['model_id']}:{row['name']}": self._query_snapshot(row) for row in cursor}
+
+    def delete_queries(self, queries: dict[str, QuerySnapshot]) -> None:
+        query_ids = [row["id"] for row in queries.values() if not row["seen"]]
+        self.delete_ids("queries", query_ids)
+
     def get_columns_snapshot(self) -> dict[str, ColumnSnapshot]:
         cursor = self.connection.execute("SELECT id, qualified_name, snapshot_hash FROM columns")
         return {str(row["qualified_name"]): self._column_snapshot(row) for row in cursor}
@@ -435,6 +456,14 @@ class ProjectDB:
             "seen": False,
         }
 
+    def _query_snapshot(self, row: sqlite3.Row) -> QuerySnapshot:
+        return {
+            "id": int(row["id"]),
+            "query_name": f"{row['qualified_name']}.{row['name']}",
+            "snapshot_hash": str(row["snapshot_hash"]),
+            "seen": False,
+        }
+
     def _column_snapshot(self, row: sqlite3.Row) -> ColumnSnapshot:
         return {
             "id": int(row["id"]),
@@ -593,12 +622,22 @@ class ProjectDB:
             )
             self.connection.executemany(
                 """
+                INSERT OR REPLACE INTO queries (
+                    id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash
+                ) VALUES (
+                    :id, :model_id, :name, :line_start, :line_end, :depth, :file_id, :snapshot_hash
+                )
+                """,
+                batches["queries"],
+            )
+            self.connection.executemany(
+                """
                 INSERT OR REPLACE INTO columns (
-                    id, model_id, query_name, from_table, name,
+                    id, file_id, query_id, model_id, from_table, name,
                     qualified_name, data_type, nullable, line_start, line_end, context,
                     description, snapshot_hash
                 ) VALUES (
-                    :id, :model_id, :query_name, :from_table, :name,
+                    :id, :file_id, :query_id, :model_id, :from_table, :name,
                     :qualified_name, :data_type, :nullable, :line_start, :line_end, :context,
                     :description, :snapshot_hash
                 )
@@ -608,14 +647,15 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO column_lineage (
-                    id, ref_column_id, ref_column_model_id, ref_column_query_name,
-                    ref_column_qualified_name, source_column_id, source_models_id,
+                    id, ref_column_id, ref_query_id, ref_column_model_id, ref_column_query_name,
+                    ref_column_qualified_name, source_column_id, source_query_id, source_models_id,
                     source_query_name, source_column_qualified_name,
                     source_line, ref_line, ref_kind, ref_context, snapshot_hash
                 ) VALUES (
-                    :id, :ref_column_id, :ref_column_model_id, :ref_column_query_name,
-                    :ref_column_qualified_name, :source_column_id, :source_models_id,
-                    :source_query_name, :source_column_qualified_name,
+                    :id, :ref_column_id, :ref_query_id, :ref_column_model_id,
+                    :ref_column_query_name,
+                    :ref_column_qualified_name, :source_column_id, :source_query_id,
+                    :source_models_id, :source_query_name, :source_column_qualified_name,
                     :source_line, :ref_line, :ref_kind, :ref_context, :snapshot_hash
                 )
                 """,

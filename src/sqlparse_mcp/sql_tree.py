@@ -1,9 +1,7 @@
-from collections import OrderedDict
 from pathlib import Path
 
 from src.db import ProjectDB
-from src.parse.column_lineage import FINAL_QUERY
-from src.sqlparse_mcp.format_utils import bullet
+from src.sqlparse_mcp.format_utils import tree_glyphs
 
 _MODELS_BY_NAME_SQL = """
 SELECT id, qualified_name
@@ -22,11 +20,11 @@ ORDER BY models.qualified_name
 """
 
 _QUERY_COLUMNS_SQL = """
-SELECT query_name, COUNT(*) AS column_count
+SELECT queries.name, queries.depth, queries.line_start, COUNT(*) AS column_count
 FROM columns
-WHERE model_id = ?
-GROUP BY query_name
-ORDER BY query_name
+INNER JOIN queries ON queries.id = columns.query_id
+WHERE columns.model_id = ?
+GROUP BY queries.id
 """
 
 _QUERY_CLAUSE_COUNTS_SQL = """
@@ -41,15 +39,42 @@ GROUP BY ref_column_query_name, ref_kind
 """
 
 
-def _relative_query(model_name: str, query_name: str) -> str:
-    relative = query_name
-    if query_name.startswith(f"{model_name}."):
-        relative = query_name[len(model_name) + 1 :]
-    return relative
+def _parent_indexes(nodes: list[tuple[int, int]]) -> list[int | None]:
+    parents: list[int | None] = []
+    for depth, line_start in nodes:
+        parent: int | None = None
+        if depth > 0:
+            fallback: int | None = None
+            fallback_line = -1
+            best_line = -1
+            for earlier, (earlier_depth, earlier_line) in enumerate(nodes):
+                shallower = earlier_depth == depth - 1
+                if shallower and (fallback is None or earlier_line < fallback_line):
+                    fallback = earlier
+                    fallback_line = earlier_line
+                if shallower and earlier_line <= line_start and earlier_line >= best_line:
+                    best_line = earlier_line
+                    parent = earlier
+            if parent is None:
+                parent = fallback
+        parents.append(parent)
+    return parents
 
 
-def _query_sort_key(relative: str) -> tuple[int, str]:
-    return (0 if relative == FINAL_QUERY else 1, relative)
+def _query_lines(
+    children: dict[int | None, list[int]],
+    labels: list[str],
+    parent: int | None,
+    prefix: str,
+) -> list[str]:
+    lines: list[str] = []
+    kids = children.get(parent, [])
+    last_index = len(kids) - 1
+    for index, child in enumerate(kids):
+        connector, continuation = tree_glyphs(index == last_index, wide=True)
+        lines.append(f"{prefix}{connector}{labels[child]}")
+        lines.extend(_query_lines(children, labels, child, prefix + continuation))
+    return lines
 
 
 def _count_label(column_count: int, join_count: int, where_count: int) -> str:
@@ -93,28 +118,30 @@ def get_sql_tree(db: ProjectDB, target: str) -> str:
                 if lines:
                     lines.append("")
                 lines.append(model_name)
-                column_counts: OrderedDict[str, int] = OrderedDict()
-                for row in db.connection.execute(_QUERY_COLUMNS_SQL, (model_id,)):
-                    column_counts[str(row["query_name"])] = int(row["column_count"])
                 clause_counts: dict[str, dict[str, int]] = {}
                 for row in db.connection.execute(_QUERY_CLAUSE_COUNTS_SQL, (model_id,)):
                     query_name = str(row["query_name"])
                     kinds = clause_counts.setdefault(query_name, {})
                     kinds[str(row["ref_kind"])] = int(row["kind_count"])
-                relatives = sorted(
-                    (
-                        (_relative_query(model_name, query_name), query_name)
-                        for query_name in column_counts
-                    ),
-                    key=lambda item: _query_sort_key(item[0]),
+                fetched = list(db.connection.execute(_QUERY_COLUMNS_SQL, (model_id,)))
+                fetched.sort(
+                    key=lambda row: (int(row["depth"]), int(row["line_start"]), str(row["name"]))
                 )
-                for relative, query_name in relatives:
-                    kinds = clause_counts.get(query_name, {})
+                labels: list[str] = []
+                nodes: list[tuple[int, int]] = []
+                for row in fetched:
+                    relative = str(row["name"])
+                    kinds = clause_counts.get(f"{model_name}.{relative}", {})
                     label = _count_label(
-                        column_counts[query_name],
+                        int(row["column_count"]),
                         kinds.get("join", 0),
                         kinds.get("where", 0),
                     )
-                    lines.append(bullet(f"{relative} ({label})"))
+                    labels.append(f"{relative} ({label})")
+                    nodes.append((int(row["depth"]), int(row["line_start"])))
+                children: dict[int | None, list[int]] = {}
+                for index, parent in enumerate(_parent_indexes(nodes)):
+                    children.setdefault(parent, []).append(index)
+                lines.extend(_query_lines(children, labels, None, ""))
             result = "\n".join(lines) + "\n"
     return result

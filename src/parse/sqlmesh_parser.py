@@ -20,6 +20,7 @@ from src.db import (
     ProjectDB,
     ProjectGatewaySnapshot,
     ProjectSnapshot,
+    QuerySnapshot,
     SearchDocSnapshot,
     TestReferenceSnapshot,
     TestSnapshot,
@@ -28,6 +29,7 @@ from src.parse.audit_utils import audit_line_span, not_null_column_names
 from src.parse.column_lineage import (
     extract_model_column_references,
     extract_model_columns,
+    extract_model_queries,
     final_query_name,
 )
 from src.parse.macro_utils import macro_locations
@@ -61,6 +63,7 @@ class SQLMeshParser:
         self.batches = self._new_batches()
         self._gateway_ids: dict[tuple[str, str], int] = {}
         self._project_defaults: dict[str, str] = {}
+        self._query_ids: dict[str, int] = {}
 
     def _new_batches(self) -> dict[str, list[dict[str, object]]]:
         return {table: [] for table in BATCH_TABLES}
@@ -86,11 +89,17 @@ class SQLMeshParser:
         model_audits_snapshot = self.db.get_model_audits_snapshot()
         columns_snapshot = self.db.get_columns_snapshot()
         search_docs_snapshot = self.db.get_search_docs_snapshot()
+        queries_snapshot = self.db.get_queries_snapshot()
+        for prior_query in queries_snapshot.values():
+            self._query_ids[prior_query["query_name"]] = prior_query["id"]
         for model in self.context.models.values():
             self._sync_model(model, files_snapshot, models_snapshot)
             self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
             self._sync_model_audits(model, models_snapshot, audits_snapshot, model_audits_snapshot)
-            self._sync_columns(model, models_snapshot, columns_snapshot, search_docs_snapshot)
+            self._sync_queries(model, files_snapshot, models_snapshot, queries_snapshot)
+            self._sync_columns(
+                model, files_snapshot, models_snapshot, columns_snapshot, search_docs_snapshot
+            )
             self._flush()
 
         self.db.delete_model_macros(model_macros_snapshot)
@@ -122,6 +131,7 @@ class SQLMeshParser:
         self.db.delete_column_lineage(column_lineage_snapshot)
         self.db.delete_search_docs(search_docs_snapshot)
         self.db.delete_columns(columns_snapshot)
+        self.db.delete_queries(queries_snapshot)
         self.db.delete_models(models_snapshot)
         self.db.delete_project_gateways(gateways_snapshot)
         self.db.delete_projects(projects_snapshot)
@@ -414,15 +424,60 @@ class SQLMeshParser:
                 "seen": True,
             }
 
+    def _sync_queries(
+        self,
+        model: Model,
+        files_snapshot: dict[str, FileSnapshot],
+        models_snapshot: dict[str, ModelSnapshot],
+        queries_snapshot: dict[str, QuerySnapshot],
+    ) -> None:
+        model_id = models_snapshot[model.name]["id"]
+        file_id = self._file_id(Path(str(model._path)), files_snapshot)
+        for query in extract_model_queries(model):
+            name = query["name"]
+            line_start = query["line_start"]
+            line_end = query["line_end"]
+            depth = query["depth"]
+            digest = snapshot_hash([model_id, file_id, name, line_start, line_end, depth])
+            key = f"{model_id}:{name}"
+            prior = queries_snapshot.get(key)
+            row: dict[str, object] = {
+                "model_id": model_id,
+                "name": name,
+                "line_start": line_start,
+                "line_end": line_end,
+                "depth": depth,
+                "file_id": file_id,
+                "snapshot_hash": digest,
+            }
+            if prior is None:
+                query_id = self.assigner.reserve("queries", 1)[0]
+                row["id"] = query_id
+                self.batches["queries"].append(row)
+            else:
+                query_id = prior["id"]
+                row["id"] = query_id
+                if prior["snapshot_hash"] != digest:
+                    self.batches["queries"].append(row)
+            queries_snapshot[key] = {
+                "id": query_id,
+                "query_name": query["query_name"],
+                "snapshot_hash": digest,
+                "seen": True,
+            }
+            self._query_ids[query["query_name"]] = query_id
+
     def _sync_columns(
         self,
         model: Model,
+        files_snapshot: dict[str, FileSnapshot],
         models_snapshot: dict[str, ModelSnapshot],
         columns_snapshot: dict[str, ColumnSnapshot],
         search_docs_snapshot: dict[str, SearchDocSnapshot],
     ) -> None:
         model_id = models_snapshot[model.name]["id"]
         model_name = model.name
+        file_id = self._file_id(Path(str(model._path)), files_snapshot)
         column_descriptions = model.column_descriptions
         final_query = final_query_name(model_name)
         not_null_columns = not_null_column_names(model, self.context._audits)
@@ -438,9 +493,12 @@ class SQLMeshParser:
             description = column_descriptions.get(name) if is_final else None
             nullable = None if not is_final else name not in not_null_columns
             data_type = column["data_type"]
+            query_id = self._query_ids[query_name]
             digest = snapshot_hash(
                 [
                     model_id,
+                    file_id,
+                    query_id,
                     query_name,
                     from_table,
                     name,
@@ -459,8 +517,9 @@ class SQLMeshParser:
                 self.batches["columns"].append(
                     {
                         "id": column_id,
+                        "file_id": file_id,
+                        "query_id": query_id,
                         "model_id": model_id,
-                        "query_name": query_name,
                         "from_table": from_table,
                         "name": name,
                         "qualified_name": qualified_name,
@@ -479,8 +538,9 @@ class SQLMeshParser:
                     self.batches["columns"].append(
                         {
                             "id": column_id,
+                            "file_id": file_id,
+                            "query_id": query_id,
                             "model_id": model_id,
-                            "query_name": query_name,
                             "from_table": from_table,
                             "name": name,
                             "qualified_name": qualified_name,
@@ -556,13 +616,17 @@ class SQLMeshParser:
                 ):
                     matched_name = name
                     source_models_id = mid
+            ref_query_id = self._query_ids[ref_query_name]
+            source_query_id = self._query_ids[source_query_name]
             digest = snapshot_hash(
                 [
                     ref_column_id,
+                    ref_query_id,
                     model_id,
                     ref_query_name,
                     ref_qn,
                     source_column_id,
+                    source_query_id,
                     source_models_id,
                     source_query_name,
                     source_qn,
@@ -580,10 +644,12 @@ class SQLMeshParser:
                     {
                         "id": lineage_id,
                         "ref_column_id": ref_column_id,
+                        "ref_query_id": ref_query_id,
                         "ref_column_model_id": model_id,
                         "ref_column_query_name": ref_query_name,
                         "ref_column_qualified_name": ref_qn,
                         "source_column_id": source_column_id,
+                        "source_query_id": source_query_id,
                         "source_models_id": source_models_id,
                         "source_query_name": source_query_name,
                         "source_column_qualified_name": source_qn,
@@ -606,10 +672,12 @@ class SQLMeshParser:
                     {
                         "id": lineage_id,
                         "ref_column_id": ref_column_id,
+                        "ref_query_id": ref_query_id,
                         "ref_column_model_id": model_id,
                         "ref_column_query_name": ref_query_name,
                         "ref_column_qualified_name": ref_qn,
                         "source_column_id": source_column_id,
+                        "source_query_id": source_query_id,
                         "source_models_id": source_models_id,
                         "source_query_name": source_query_name,
                         "source_column_qualified_name": source_qn,
