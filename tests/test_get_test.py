@@ -4,8 +4,6 @@ from src.sqlparse_mcp.model_test import get_test
 from tests.conftest import FIXTURE_PROJECT
 
 _EXIST = (
-    "Model: sushi.orders\n"
-    "\n"
     "L1  | test_orders_exist:\n"
     "L2  |   model: sushi.orders\n"
     "L3  |   inputs:\n"

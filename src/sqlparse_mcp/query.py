@@ -12,13 +12,15 @@ from src.db import ProjectDB
 from src.parse.column_lineage import _query_line_span, stored_query_name
 from src.sqlparse_mcp.column_relations import _resolve_query_name
 from src.sqlparse_mcp.format_utils import bullet
-from src.sqlparse_mcp.sql_tree import _normalize_file_path
+from src.sqlparse_mcp.model import _normalize_file_path
 
 _MODEL_SQL = """
 SELECT
     models.qualified_name,
     models.dialect,
     models.kind,
+    models.config_start_line,
+    models.config_end_line,
     files.path AS file_path
 FROM models
 INNER JOIN files ON files.id = models.file_id
@@ -30,6 +32,8 @@ SELECT
     models.qualified_name,
     models.dialect,
     models.kind,
+    models.config_start_line,
+    models.config_end_line,
     files.path AS file_path
 FROM models
 INNER JOIN files ON files.id = models.file_id
@@ -264,19 +268,32 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
         else:
             model_row = rows[0]
             model_name = str(model_row["qualified_name"])
+            path = str(model_row["file_path"])
+            header = f"Model: {model_name}" if from_file else f"File: {path}"
+            asked = "" if query_name is None else query_name.strip()
             result = "EXTERNAL"
-            if str(model_row["kind"]) != "EXTERNAL":
+            if asked == "MODEL":
+                text = (db.root / path).read_text(encoding="utf-8")
+                result = _format_query(
+                    header,
+                    text.splitlines(),
+                    int(model_row["config_start_line"]),
+                    int(model_row["config_end_line"]),
+                    model_name,
+                    [],
+                    [],
+                    None,
+                )
+            elif str(model_row["kind"]) != "EXTERNAL":
                 relative = _relative_query(model_name, query_name)
                 query_row = db.connection.execute(_QUERY_SQL, (model_name, relative)).fetchone()
                 if query_row is None:
                     result = "No query found."
                 else:
-                    path = str(model_row["file_path"])
                     text = (db.root / path).read_text(encoding="utf-8")
                     span = _source_span(text, str(model_row["dialect"]), relative, model_name)
                     result = "No SQL source for this query."
                     if span is not None:
-                        header = f"Model: {model_name}" if from_file else f"File: {path}"
                         query_lines = text.splitlines()
                         source = "\n".join(query_lines[span[0] - 1 : span[1]])
                         columns = [

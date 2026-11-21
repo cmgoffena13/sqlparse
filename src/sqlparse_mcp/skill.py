@@ -19,16 +19,22 @@ _SKILL_BODY = """\
    A model name starts with ``File:``. A file path starts with ``Model:``.
    ``include_config`` defaults to false. Pass true to include the MODEL block.
 4. Use ``get_query`` to read one query's source for a model name or model file path.
+   ``query_name`` ``MODEL`` returns the model config with file line numbers.
    ``render`` defaults to false. Pass true to expand macros and drop file line numbers.
+   ``render`` leaves the ``MODEL`` config as source.
    An external model returns ``EXTERNAL`` because it has no query.
 5. Use ``get_query_at_lines`` for a file path and line range. It returns the tightest query
    that contains the range, each overlapping query name when the range crosses queries,
    and the model config when the range is on the MODEL block. ``render`` matches ``get_query``
    and does not render audits, macros, or model config.
 6. Use ``get_test`` for one test in a file. Lines use ``L{n} | {source}``.
-7. Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
+7. Use ``get_macro`` for one macro in a file. Lines use ``L{n} | {source}``.
+   Models that call it are listed under ``## Models``.
+8. Use ``get_audit`` for one audit in a file. Lines use ``L{n} | {source}``.
+   Models that use it are listed under ``## Models``.
+9. Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
    ``include_tests`` defaults to false. On dependents, test files branch under the model they test.
-8. Use ``get_column_relations`` for column dependents or dependencies; DO NOT grep for this.
+10. Use ``get_column_relations`` for column dependents or dependencies; DO NOT grep for this.
 
 # CAVEATS
  - A macro is expanded away, so column lineage does not show which macro produced a column.

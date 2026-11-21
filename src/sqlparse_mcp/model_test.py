@@ -1,17 +1,13 @@
 from src.db import ProjectDB
-from src.sqlparse_mcp.sql_tree import _normalize_file_path
+from src.sqlparse_mcp.model import _normalize_file_path
 
 _TEST_SQL = """
 SELECT
-    tests.name,
     tests.line_start,
-    tests.line_end,
-    models.qualified_name
+    tests.line_end
 FROM tests
 INNER JOIN files
     ON files.id = tests.file_id
-INNER JOIN models
-    ON models.id = tests.model_id
 WHERE files.path = ?
   AND tests.name = ?
 """
@@ -36,6 +32,5 @@ def get_test(db: ProjectDB, file_path: str, test_name: str) -> str:
                 f"L{lineno:<{gutter}} | {line}"
                 for lineno, line in enumerate(text.splitlines()[start - 1 : end], start)
             ]
-            header = f"Model: {row['qualified_name']}"
-            result = "\n".join([header, "", *body]) + "\n"
+            result = "\n".join(body) + "\n"
     return result

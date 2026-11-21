@@ -5,7 +5,7 @@ from sqlglot import exp, parse_one
 from src.db import ProjectDB
 from src.parse.column_lineage import _clause_nodes, _query_counts
 from src.processor import ProjectProcessor
-from src.sqlparse_mcp.sql_tree import get_model
+from src.sqlparse_mcp.model import get_model
 from tests.conftest import FIXTURE_PROJECT
 
 

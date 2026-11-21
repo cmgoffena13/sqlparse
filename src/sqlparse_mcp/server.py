@@ -9,23 +9,26 @@ from fastmcp import Context, FastMCP
 from src.db import ProjectDB
 from src.parse.sqlmesh_parser import is_sqlmesh_project
 from src.processor import ProjectProcessor
-from src.sqlparse_mcp.column_relations import get_column_relations as run_column_relations
-from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_tree
-from src.sqlparse_mcp.model_relations import get_model_relations as run_model_relations
-from src.sqlparse_mcp.model_test import get_test as run_test
-from src.sqlparse_mcp.query import get_query as run_query
-from src.sqlparse_mcp.query import get_query_at_lines as run_query_at_lines
+from src.sqlparse_mcp.audit import get_audit as run_get_audit
+from src.sqlparse_mcp.column_relations import get_column_relations as run_get_column_relations
+from src.sqlparse_mcp.directory_tree import get_directory_tree as run_get_directory_tree
+from src.sqlparse_mcp.macro import get_macro as run_get_macro
+from src.sqlparse_mcp.model import get_model as run_get_model
+from src.sqlparse_mcp.model_relations import get_model_relations as run_get_model_relations
+from src.sqlparse_mcp.model_test import get_test as run_get_test
+from src.sqlparse_mcp.query import get_query as run_get_query
+from src.sqlparse_mcp.query import get_query_at_lines as run_get_query_at_lines
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
-from src.sqlparse_mcp.sql_tree import get_model as run_model
 from src.utils import get_sqlparse_config_dir
 
 _INSTRUCTIONS = """\
 sqlparse tools read an up-to-date view of a SQLMesh project.
 
 Queries/CTEs are prefixed with ``$``. A single ``$`` is the final output query.
+Model Config is treated as a query and called ``MODEL``.
 EXTERNAL models have no query and return ``EXTERNAL``.
-Ex. ``$``, ``$cte_name``, or ``EXTERNAL``.
+Ex. ``$``, ``$cte_name``, ``MODEL``, or ``EXTERNAL``.
 
 Utilize the ``sqlparse`` skill for guided exploration workflows.
 Use the ``skill://sqlparse/SKILL.md`` resource if the skill is not found.
@@ -90,7 +93,7 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
 
     Optional ``directory_path`` scopes to one directory tree (exact path).
     """
-    return run_directory_tree(_db(ctx), directory_path)
+    return run_get_directory_tree(_db(ctx), directory_path)
 
 
 @mcp.tool()
@@ -103,7 +106,7 @@ def get_model(ctx: Context, target: str, include_config: bool = False) -> str:
     ``include_config`` defaults to false. When true, the MODEL block is included
     with file line numbers.
     """
-    return run_model(_db(ctx), target, include_config)
+    return run_get_model(_db(ctx), target, include_config)
 
 
 @mcp.tool()
@@ -115,7 +118,7 @@ def get_query(
 
     ``render`` defaults to false. When true, macros are rendered and file line numbers are omitted.
     """
-    return run_query(_db(ctx), target, query_name, render)
+    return run_get_query(_db(ctx), target, query_name, render)
 
 
 @mcp.tool()
@@ -138,7 +141,7 @@ def get_query_at_lines(
     ``render`` defaults to false. When true, a query's macros are expanded and file line
     numbers are omitted. Audits, macros, and model config stay as source.
     """
-    return run_query_at_lines(_db(ctx), file_path, start_line, end_line, render)
+    return run_get_query_at_lines(_db(ctx), file_path, start_line, end_line, render)
 
 
 @mcp.tool()
@@ -148,7 +151,29 @@ def get_test(ctx: Context, file_path: str, test_name: str) -> str:
 
     Lines use ``L{n} | {source}`` for the test's line span.
     """
-    return run_test(_db(ctx), file_path, test_name)
+    return run_get_test(_db(ctx), file_path, test_name)
+
+
+@mcp.tool()
+def get_macro(ctx: Context, file_path: str, macro_name: str) -> str:
+    """
+    Return one macro's source from a macro file.
+
+    Lines use ``L{n} | {source}`` for the macro's line span.
+    Models that call the macro are listed under ``## Models``.
+    """
+    return run_get_macro(_db(ctx), file_path, macro_name)
+
+
+@mcp.tool()
+def get_audit(ctx: Context, file_path: str, audit_name: str) -> str:
+    """
+    Return one audit's source from an audit file.
+
+    Lines use ``L{n} | {source}`` for the audit's line span.
+    Models that use the audit are listed under ``## Models``.
+    """
+    return run_get_audit(_db(ctx), file_path, audit_name)
 
 
 @mcp.tool()
@@ -166,7 +191,7 @@ def get_model_relations(
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
-    return run_model_relations(_db(ctx), model_name, relation, include_tests)
+    return run_get_model_relations(_db(ctx), model_name, relation, include_tests)
 
 
 @mcp.tool()
@@ -187,7 +212,7 @@ def get_column_relations(
     ``query_name`` defaults to ``$`` (final output query).
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
-    return run_column_relations(
+    return run_get_column_relations(
         _db(ctx),
         model_name,
         query_name,

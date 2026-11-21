@@ -48,7 +48,11 @@ async def _print_tools() -> None:
         )
         _print_section(
             "MODEL",
-            _body(await client.call_tool("get_model", {"target": "sushi.customers"})),
+            _body(
+                await client.call_tool(
+                    "get_model", {"target": "sushi.customers", "include_config": True}
+                )
+            ),
         )
         _print_section(
             "SQL QUERY",
@@ -56,6 +60,15 @@ async def _print_tools() -> None:
                 await client.call_tool(
                     "get_query",
                     {"target": "sushi.customers", "render": True},
+                )
+            ),
+        )
+        _print_section(
+            "MODEL CONFIG",
+            _body(
+                await client.call_tool(
+                    "get_query",
+                    {"target": "sushi.customers", "query_name": "MODEL"},
                 )
             ),
         )
@@ -74,6 +87,27 @@ async def _print_tools() -> None:
                 await client.call_tool(
                     "get_test",
                     {"file_path": "tests/test_orders.yaml", "test_name": "test_orders_exist"},
+                )
+            ),
+        )
+        _print_section(
+            "MACRO",
+            _body(
+                await client.call_tool(
+                    "get_macro",
+                    {"file_path": "macros/cents_to_dollars.sql", "macro_name": "cents_to_dollars"},
+                )
+            ),
+        )
+        _print_section(
+            "AUDIT",
+            _body(
+                await client.call_tool(
+                    "get_audit",
+                    {
+                        "file_path": "audits/not_null_customer_id.sql",
+                        "audit_name": "not_null_customer_id",
+                    },
                 )
             ),
         )

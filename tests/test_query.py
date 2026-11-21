@@ -192,6 +192,50 @@ def test_query_file_with_several_models_asks_for_a_name() -> None:
     assert out == "File contains more than one model; pass a model name."
 
 
+def test_query_named_model_returns_the_config() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        by_name = get_query(db, "sushi.customers", "MODEL")
+        by_file = get_query(db, "models/customers.sql", "MODEL")
+        rendered = get_query(db, "sushi.customers", "MODEL", render=True)
+        external = get_query(db, "raw.customers", "MODEL")
+        python = get_query(db, "sushi.waiters", "MODEL")
+    finally:
+        db.close()
+    config = (
+        "L1 | MODEL (\n"
+        "L2 |   name sushi.customers,\n"
+        "L3 |   kind FULL,\n"
+        "L4 |   audits [not_null_customer_id],\n"
+        "L5 |   description 'Customer grain with order amounts'\n"
+        "L6 | );\n"
+    )
+    assert by_name == f"File: models/customers.sql\n\n{config}"
+    assert by_file == f"Model: sushi.customers\n\n{config}"
+    assert rendered == by_name
+    assert external == (
+        "File: external_models.yaml\n"
+        "\n"
+        "L1 | - name: raw.customers\n"
+        "L2 |   columns:\n"
+        "L3 |     customer_id: int\n"
+        "L4 |     status: text\n"
+    )
+    assert python == (
+        "File: models/waiters.py\n"
+        "\n"
+        "L4  | @model(\n"
+        'L5  |     "sushi.waiters",\n'
+        'L6  |     kind="FULL",\n'
+        "L7  |     columns={\n"
+        'L8  |         "waiter_id": "int",\n'
+        "L9  |     },\n"
+        "L10 | )\n"
+    )
+    assert "## Output" not in by_name
+
+
 def test_query_external_model_has_no_query() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:

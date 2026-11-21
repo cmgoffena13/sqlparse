@@ -19,6 +19,8 @@ _TOOLS = {
     "get_query",
     "get_query_at_lines",
     "get_test",
+    "get_macro",
+    "get_audit",
     "get_model_relations",
     "get_column_relations",
 }
