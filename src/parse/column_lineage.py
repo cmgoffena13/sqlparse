@@ -132,8 +132,13 @@ def _unwrap(expression: exp.Expression) -> exp.Expression:
     return expression.this if isinstance(expression, exp.Alias) else expression
 
 
-def _ref_kind(expression: exp.Expression) -> str:
-    return "alias" if isinstance(_unwrap(expression), exp.Column) else "expression"
+def _ref_kind(expression: exp.Expr) -> str:
+    inner = _unwrap(cast(exp.Expression, expression))
+    renamed = isinstance(expression, exp.Alias) and expression.alias != inner.name
+    kind = "expression"
+    if isinstance(inner, exp.Column):
+        kind = "alias" if renamed else "select"
+    return kind
 
 
 def _columns_from_types(model: Model) -> list[ExtractedColumn]:
@@ -436,7 +441,7 @@ def _emit_cte_projection_refs(
                     ref_expression=expression,
                     source_expression=expression,
                     dialect=dialect,
-                    ref_kind="alias",
+                    ref_kind=_ref_kind(expression),
                 )
             continue
         for column in inner.find_all(exp.Column):

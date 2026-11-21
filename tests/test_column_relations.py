@@ -1,7 +1,19 @@
+from sqlglot import exp
+
 from src.db import ProjectDB
+from src.parse.column_lineage import _ref_kind
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.column_relations import get_column_relations
 from tests.conftest import FIXTURE_PROJECT
+
+
+def test_ref_kind_reserves_alias_for_a_renamed_column() -> None:
+    column = exp.column("customer_id", table="s")
+    calculated = exp.alias_(exp.Literal.number(1), "amount")
+    assert _ref_kind(column) == "select"
+    assert _ref_kind(exp.alias_(column, "customer_id")) == "select"
+    assert _ref_kind(exp.alias_(column.copy(), "id")) == "alias"
+    assert _ref_kind(calculated) == "expression"
 
 
 def test_column_relations_dependencies_groups_by_model_and_query() -> None:
@@ -20,7 +32,7 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
     assert "sushi.customers" in out
     assert "sushi.customers (EXTERNAL)" not in out
     assert "  cte" in out
-    assert "    • raw.customers.customer_id (EXTERNAL) (alias)" in out
+    assert "    • raw.customers.customer_id (EXTERNAL) (select)" in out
 
 
 def test_column_relations_marks_external_source_models() -> None:
@@ -72,7 +84,7 @@ def test_column_relations_dependents_include_downstream_models() -> None:
         db.close()
     assert "sushi.customer_orders" in out
     assert "sushi.orders" in out
-    assert "sushi.customers.customer_id (alias)" in out
+    assert "sushi.customers.customer_id (select)" in out
     assert "sushi.customers.customer_id (join)" in out
     assert "## Tests" not in out
 
@@ -134,7 +146,7 @@ def test_column_relations_join_column_uses_table_qualified_label() -> None:
     finally:
         db.close()
     assert "sushi.customers" in bare
-    assert "• customer_id (alias)" in bare or "customer_id (alias)" in bare
+    assert "• customer_id (select)" in bare or "customer_id (select)" in bare
     assert "sushi.customers" in join_col
     assert "join" in join_col
     assert bare != join_col

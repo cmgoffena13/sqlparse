@@ -471,7 +471,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "sushi.customers/cte/raw.customers.customer_id",
             3,
             12,
-            "alias",
+            "select",
         )
     ]
     assert customer_id_ref["ref_column_query_name"] == "sushi.customers/$"
@@ -494,7 +494,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "raw.orders/$/amount_cents",
             6,
             6,
-            "alias",
+            "select",
         )
     ]
     assert cte_amount_ref["ref_column_query_name"] == "sushi.customers/cte"
@@ -505,7 +505,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "raw.customers/$/customer_id",
             3,
             3,
-            "alias",
+            "select",
         )
     ]
     assert cte_customer_ref["ref_column_query_name"] == "sushi.customers/cte"
@@ -516,7 +516,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "raw.orders/$/customer_id",
             4,
             4,
-            "alias",
+            "select",
         )
     ]
     assert cte_orders_customer_ref["ref_column_query_name"] == "sushi.customers/cte"
@@ -538,7 +538,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "sushi.customers/$/cte.customer_id",
             10,
             7,
-            "alias",
+            "select",
         )
     ]
     assert customer_orders_customer_ref["ref_column_query_name"] == "sushi.customer_orders/$"
@@ -548,7 +548,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "sushi.customers/$/cte.status",
             10,
             8,
-            "alias",
+            "select",
         )
     ]
     assert customer_orders_status_ref["ref_column_query_name"] == "sushi.customer_orders/$"
@@ -558,7 +558,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "sushi.orders/$/raw.orders.order_id",
             11,
             9,
-            "alias",
+            "select",
         )
     ]
     assert customer_orders_order_ref["ref_column_query_name"] == "sushi.customer_orders/$"
@@ -676,7 +676,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "raw.customers/$/customer_id",
             9,
             9,
-            "alias",
+            "select",
         )
     ]
     assert nested_base_customer_ref["ref_column_query_name"] == "sushi.customer_status/base"
@@ -686,7 +686,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "sushi.customer_status/base/raw.customers.customer_id",
             15,
             15,
-            "alias",
+            "select",
         )
     ]
     assert nested_filtered_customer_ref["ref_column_query_name"] == (
@@ -699,7 +699,7 @@ def test_processor_indexes_files_and_directories() -> None:
             "sushi.customer_status/filtered/base.customer_id",
             15,
             21,
-            "alias",
+            "select",
         )
     ]
     assert nested_outer_customer_ref["ref_column_query_name"] == "sushi.customer_status/$"

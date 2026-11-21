@@ -88,6 +88,7 @@ def _relation_lines(
                 mark_external=mark_external,
             )
         )
+        seen.remove(child)
     return lines
 
 
