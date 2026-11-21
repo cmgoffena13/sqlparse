@@ -47,6 +47,10 @@ class ExtractedQuery(TypedDict):
     line_start: int
     line_end: int
     depth: int
+    select_col_count: int
+    where_condition_count: int
+    join_statement_count: int
+    group_by_col_count: int
 
 
 def _line_span(expression: exp.Expression) -> tuple[int, int]:
@@ -244,6 +248,10 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                 "line_start": 0,
                 "line_end": 0,
                 "depth": 0,
+                "select_col_count": len(model.columns_to_types or {}),
+                "where_condition_count": 0,
+                "join_statement_count": 0,
+                "group_by_col_count": 0,
             }
         )
     else:
@@ -265,6 +273,12 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
             if included and query_name not in seen:
                 seen.add(query_name)
                 line_start, line_end = _query_line_span(scope.expression)
+                (
+                    select_col_count,
+                    where_condition_count,
+                    join_statement_count,
+                    group_by_col_count,
+                ) = _query_counts(scope.expression)
                 queries.append(
                     {
                         "name": name,
@@ -272,6 +286,10 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                         "line_start": line_start,
                         "line_end": line_end,
                         "depth": _query_depth(scope),
+                        "select_col_count": select_col_count,
+                        "where_condition_count": where_condition_count,
+                        "join_statement_count": join_statement_count,
+                        "group_by_col_count": group_by_col_count,
                     }
                 )
     return queries
@@ -352,13 +370,46 @@ def _table_column_qn(
     return resolved
 
 
+def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int]:
+    select_col_count = 0
+    where_condition_count = 0
+    join_statement_count = 0
+    group_by_col_count = 0
+    if isinstance(expression, exp.Select):
+        select_col_count = len(expression.expressions)
+        join_statement_count = len(expression.args.get("joins") or [])
+        where = expression.args.get("where")
+        if where is not None:
+            where_condition_count = len(_and_predicates(where.this))
+        group = expression.args.get("group")
+        if group is not None:
+            group_by_col_count = len(group.expressions)
+    return (
+        select_col_count,
+        where_condition_count,
+        join_statement_count,
+        group_by_col_count,
+    )
+
+
+def _and_predicates(expression: exp.Expression) -> list[exp.Expression]:
+    predicates = [expression]
+    if isinstance(expression, exp.And):
+        predicates = _and_predicates(expression.this) + _and_predicates(expression.expression)
+    return predicates
+
+
 def _clause_nodes(select: exp.Select) -> list[tuple[str, exp.Expression]]:
     nodes: list[tuple[str, exp.Expression]] = []
     for join in select.args.get("joins") or []:
         on = join.args.get("on")
         if on is not None:
             nodes.append(("join", on))
-    for kind in ("where", "group", "having", "order"):
+    where = select.args.get("where")
+    if where is not None:
+        for predicate in _and_predicates(where.this):
+            nodes.append(("where", predicate))
+    for kind in ("group", "having", "order"):
         node = select.args.get(kind)
         if node is not None:
             nodes.append((kind, node))

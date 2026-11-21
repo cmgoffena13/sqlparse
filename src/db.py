@@ -623,9 +623,13 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO queries (
-                    id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash
+                    id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash,
+                    select_col_count, where_condition_count, join_statement_count,
+                    group_by_col_count
                 ) VALUES (
-                    :id, :model_id, :name, :line_start, :line_end, :depth, :file_id, :snapshot_hash
+                    :id, :model_id, :name, :line_start, :line_end, :depth, :file_id, :snapshot_hash,
+                    :select_col_count, :where_condition_count, :join_statement_count,
+                    :group_by_col_count
                 )
                 """,
                 batches["queries"],

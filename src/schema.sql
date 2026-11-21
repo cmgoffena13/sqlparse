@@ -100,7 +100,11 @@ CREATE TABLE IF NOT EXISTS queries (
     line_end            INTEGER NOT NULL,
     depth               INTEGER NOT NULL,
     file_id             INTEGER NOT NULL REFERENCES files(id),
-    snapshot_hash       TEXT NOT NULL
+    snapshot_hash       TEXT NOT NULL,
+    select_col_count    INTEGER NOT NULL,
+    where_condition_count INTEGER NULL,
+    join_statement_count          INTEGER NULL,
+    group_by_col_count  INTEGER NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS queries_model_id_name_index ON queries (model_id, name);
 

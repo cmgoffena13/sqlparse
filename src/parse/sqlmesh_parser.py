@@ -441,7 +441,24 @@ class SQLMeshParser:
             line_start = query["line_start"]
             line_end = query["line_end"]
             depth = query["depth"]
-            digest = snapshot_hash([model_id, file_id, name, line_start, line_end, depth])
+            select_col_count = query["select_col_count"]
+            where_condition_count = query["where_condition_count"]
+            join_statement_count = query["join_statement_count"]
+            group_by_col_count = query["group_by_col_count"]
+            digest = snapshot_hash(
+                [
+                    model_id,
+                    file_id,
+                    name,
+                    line_start,
+                    line_end,
+                    depth,
+                    select_col_count,
+                    where_condition_count,
+                    join_statement_count,
+                    group_by_col_count,
+                ]
+            )
             key = f"{model_id}:{name}"
             prior = queries_snapshot.get(key)
             row: dict[str, object] = {
@@ -451,6 +468,10 @@ class SQLMeshParser:
                 "line_end": line_end,
                 "depth": depth,
                 "file_id": file_id,
+                "select_col_count": select_col_count,
+                "where_condition_count": where_condition_count,
+                "join_statement_count": join_statement_count,
+                "group_by_col_count": group_by_col_count,
                 "snapshot_hash": digest,
             }
             if prior is None:

@@ -149,6 +149,7 @@ def _format_groups(
         if lines:
             lines.append("")
         lines.append("## Tests")
+        lines.append("")
         by_file: OrderedDict[str, list[str]] = OrderedDict()
         for file_path, test_name in test_rows:
             by_file.setdefault(file_path, []).append(test_name)

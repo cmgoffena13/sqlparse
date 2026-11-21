@@ -103,7 +103,7 @@ def test_column_relations_dependents_include_tests_when_requested() -> None:
         )
     finally:
         db.close()
-    assert "## Tests" in out
+    assert "## Tests\n\ntests/test_orders.yaml" in out
     assert "tests/test_orders.yaml" in out
     assert "• test_orders_exist" in out
     assert "• test_orders_csv" in out

@@ -19,23 +19,17 @@ WHERE files.path = ?
 ORDER BY models.qualified_name
 """
 
-_QUERY_COLUMNS_SQL = """
-SELECT queries.name, queries.depth, queries.line_start, COUNT(*) AS column_count
-FROM columns
-INNER JOIN queries ON queries.id = columns.query_id
-WHERE columns.model_id = ?
-GROUP BY queries.id
-"""
-
-_QUERY_CLAUSE_COUNTS_SQL = """
+_QUERIES_SQL = """
 SELECT
-    ref_column_query_name AS query_name,
-    ref_kind,
-    COUNT(*) AS kind_count
-FROM column_lineage
-WHERE ref_column_model_id = ?
-  AND ref_kind IN ('join', 'where')
-GROUP BY ref_column_query_name, ref_kind
+    name,
+    depth,
+    line_start,
+    select_col_count,
+    join_statement_count,
+    where_condition_count,
+    group_by_col_count
+FROM queries
+WHERE model_id = ?
 """
 
 
@@ -77,12 +71,17 @@ def _query_lines(
     return lines
 
 
-def _count_label(column_count: int, join_count: int, where_count: int) -> str:
-    parts = [f"{column_count} columns"]
-    if where_count:
-        parts.append(f"{where_count} wheres" if where_count != 1 else "1 where")
+def _count_label(column_count: int, join_count: int, where_count: int, group_count: int) -> str:
+    column_label = "1 select column" if column_count == 1 else f"{column_count} select columns"
+    parts = [column_label]
     if join_count:
-        parts.append(f"{join_count} joins" if join_count != 1 else "1 join")
+        parts.append("1 join" if join_count == 1 else f"{join_count} joins")
+    if where_count:
+        where_label = "1 where condition" if where_count == 1 else f"{where_count} where conditions"
+        parts.append(where_label)
+    if group_count:
+        grouped = "1 column" if group_count == 1 else f"{group_count} columns"
+        parts.append(f"grouped by {grouped}")
     return ", ".join(parts)
 
 
@@ -118,12 +117,7 @@ def get_sql_tree(db: ProjectDB, target: str) -> str:
                 if lines:
                     lines.append("")
                 lines.append(model_name)
-                clause_counts: dict[str, dict[str, int]] = {}
-                for row in db.connection.execute(_QUERY_CLAUSE_COUNTS_SQL, (model_id,)):
-                    query_name = str(row["query_name"])
-                    kinds = clause_counts.setdefault(query_name, {})
-                    kinds[str(row["ref_kind"])] = int(row["kind_count"])
-                fetched = list(db.connection.execute(_QUERY_COLUMNS_SQL, (model_id,)))
+                fetched = list(db.connection.execute(_QUERIES_SQL, (model_id,)))
                 fetched.sort(
                     key=lambda row: (int(row["depth"]), int(row["line_start"]), str(row["name"]))
                 )
@@ -131,11 +125,11 @@ def get_sql_tree(db: ProjectDB, target: str) -> str:
                 nodes: list[tuple[int, int]] = []
                 for row in fetched:
                     relative = str(row["name"])
-                    kinds = clause_counts.get(f"{model_name}/{relative}", {})
                     label = _count_label(
-                        int(row["column_count"]),
-                        kinds.get("join", 0),
-                        kinds.get("where", 0),
+                        int(row["select_col_count"]),
+                        int(row["join_statement_count"]),
+                        int(row["where_condition_count"]),
+                        int(row["group_by_col_count"]),
                     )
                     labels.append(f"{relative} ({label})")
                     nodes.append((int(row["depth"]), int(row["line_start"])))
