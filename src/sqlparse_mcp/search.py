@@ -42,9 +42,9 @@ def search(
     db: ProjectDB,
     query: str,
     limit: int,
-    models: bool = True,
-    queries: bool = True,
-    columns: bool = True,
+    search_models: bool = True,
+    search_queries: bool = True,
+    search_columns: bool = True,
 ) -> str:
     stripped = query.strip().replace("-", " ")
     words = [word for word in stripped.split() if word]
@@ -63,9 +63,9 @@ def search(
                     query_name = "EXTERNAL"
                 column_name = str(row["column_name"])
                 candidates = (
-                    ("models", models, model_name),
-                    ("queries", queries, f"{model_name} / {query_name}"),
-                    ("columns", columns, f"{model_name} / {query_name} / {column_name}"),
+                    ("models", search_models, model_name),
+                    ("queries", search_queries, f"{model_name} / {query_name}"),
+                    ("columns", search_columns, f"{model_name} / {query_name} / {column_name}"),
                 )
                 for section, included, label in candidates:
                     if included and label not in hits:

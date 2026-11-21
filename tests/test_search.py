@@ -85,8 +85,8 @@ def test_search_can_keep_any_combination_of_sections() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        models = search(db, "customers", 30, queries=False, columns=False)
-        queries_and_columns = search(db, "customers", 30, models=False)
+        models = search(db, "customers", 30, search_queries=False, search_columns=False)
+        queries_and_columns = search(db, "customers", 30, search_models=False)
     finally:
         db.close()
     assert models.startswith("## Models\n")

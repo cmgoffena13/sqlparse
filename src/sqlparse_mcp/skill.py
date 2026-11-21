@@ -8,10 +8,50 @@ DESCRIPTION = "Use when navigating a SQLMesh project: models, queries, columns, 
 
 _SKILL_BODY = """\
 # IMPORTANT RULES
+ - ALWAYS use sqlparse tools to read queries, audits, macros, and tests.
+ - NEVER use ``read`` or ``grep .`` on a SQL file or directory.
+ - Only ``include_tests`` when making changes to the codebase. 
+ - DO NOT ``include_tests`` when investigating unless explicitly asked.
 
 # INSTRUCTIONS
 
-# CAVEATS
+The information that is provided to you will determine the tool you should use.
+
+## You are given the file name or model name.
+1. Use ``get_model`` to read the model's SQL tree, macro refs, and audit refs.
+2. Use ``get_query`` to read the query's output schema and definition.
+
+## You are given the file name or model name and a query name.
+1. Use ``get_query`` to read the query's output schema and definition.
+
+## You are given a file name and line numbers from ``grep`` or a ``code selection`` in Cursor.
+1. Use ``get_span_at_lines`` to read the query, audit, macro, or test at a line range.
+
+## You are NOT given a file name, model name, or query name.
+1. Investigate the project using ``list_schemas``, ``list_models``, and keywords
+2. Use ``get_model`` to read the model's SQL tree, macro refs, and audit refs.
+3. Use ``get_query`` to read the query's output schema and definition.
+
+### Investigate the project using keywords
+
+#### ``glob``
+ - Use when the clue is a path or a file name.
+
+#### ``grep``
+ - Use when the clue is specific text in file contents.
+ - Use `-n` to get the line number and then use ``get_span_at_lines`` to get the span.
+ - Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
+ - Use ``get_column_relations`` for column dependents or dependencies; DO NOT grep for this.
+
+#### ``search``
+ - Use when the clue is a reference to a model, query, or column.
+
+# RESOURCES
+
+## ``stats://sqlparse/sessions``
+ - Only use when the question is about sqlparse sessions, cost, or decision quality.
+
+# RECOMMENDATIONS
  - Enable SQLMesh's ``AmbiguousOrInvalidColumn`` linter rule to to get proper column names / types.
 """
 

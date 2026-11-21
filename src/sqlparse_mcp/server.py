@@ -32,7 +32,7 @@ A single ``$`` is the final output query.
 Model Config is treated as a query and called ``MODEL``.
 EXTERNAL models have no query and return ``EXTERNAL``.
 
-Ex. ``$``, ``$cte_name``, ``MODEL``, or ``EXTERNAL``.
+Ex. ``$``, ``$cte_name``, or ``MODEL``.
 
 Utilize the ``sqlparse`` skill for guided exploration workflows.
 Use the ``skill://sqlparse/SKILL.md`` resource if the skill is not found.
@@ -85,19 +85,19 @@ def search(
     ctx: Context,
     query: str,
     limit: int = 20,
-    models: bool = True,
-    queries: bool = True,
-    columns: bool = True,
+    search_models: bool = True,
+    search_queries: bool = True,
+    search_columns: bool = True,
 ) -> str:
     """
     FTS model, query, and column names. Results are ordered #1, #2, #3... by relevance.
+    Full result format is: data_model / query_name / column_name.
 
     Narrow with one distinctive word; Widen with extra space-separated words (OR).
 
-    ``models``, ``queries``, and ``columns`` choose which types to search.
-    All three are included by default.
+    Filter the search targets with the ``search_`` flags. All three are included by default.
     """
-    return run_search(_db(ctx), query, limit, models, queries, columns)
+    return run_search(_db(ctx), query, limit, search_models, search_queries, search_columns)
 
 
 @mcp.tool()
@@ -143,7 +143,7 @@ def get_query(
     Target can be a model name or model file path.
     Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
 
-    Enable ``render`` to render the query's macros.
+    Enable ``render`` to render the SQL and the query's macros.
     """
     return run_get_query(_db(ctx), target, query_name, render)
 
@@ -221,7 +221,9 @@ def get_column_relations(
 ) -> str:
     """
     Return column relations for ``model_name`` / ``query_name`` / ``column_name``.
-    ``query_name`` defaults to ``$`` (final output query).
+    ``query_name`` defaults to ``$`` (final output query) if not provided.
+    ``column_name`` should include the query (without the ``$``) or table name.
+    Ex. ``cte_name.customer_id`` or ``schema.table.column``
 
     ``dependencies`` lists upstream columns this column reads.
     ``dependents`` lists downstream columns that read it.
