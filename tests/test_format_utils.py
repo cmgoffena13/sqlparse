@@ -1,4 +1,4 @@
-from src.sqlparse_mcp.format_utils import bullet, file_label, gutter_width, tree_glyphs
+from src.sqlparse_mcp.format_utils import bullet, file_label, gutter_width, line_span, tree_glyphs
 
 
 def test_bullet_default_lead() -> None:
@@ -24,6 +24,11 @@ def test_file_label_lines_and_models_without_symbol_count() -> None:
     assert file_label("customers.sql", 18, ["sushi.customers"]) == (
         "customers.sql (18L) — sushi.customers"
     )
+
+
+def test_line_span_collapses_a_single_line() -> None:
+    assert line_span(12, 12) == "L12"
+    assert line_span(14, 15) == "L14-15"
 
 
 def test_tree_glyphs_wide() -> None:

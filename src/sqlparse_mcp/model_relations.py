@@ -39,6 +39,20 @@ def _load_graph(
     return dependencies, dependents
 
 
+def _model_kinds(db: ProjectDB) -> dict[str, str]:
+    return {
+        str(row["qualified_name"]): str(row["kind"])
+        for row in db.connection.execute("SELECT qualified_name, kind FROM models")
+    }
+
+
+def _labeled_model(name: str, kinds: dict[str, str], mark_external: bool) -> str:
+    label = name
+    if mark_external and kinds.get(name) == "EXTERNAL":
+        label = f"{name} (EXTERNAL)"
+    return label
+
+
 def _relation_lines(
     children: dict[str, list[str]],
     parent: str,
@@ -46,6 +60,8 @@ def _relation_lines(
     *,
     seen: set[str],
     budget: list[int],
+    kinds: dict[str, str],
+    mark_external: bool,
 ) -> list[str]:
     lines: list[str] = []
     siblings = [child for child in children.get(parent, ()) if child not in seen]
@@ -60,7 +76,7 @@ def _relation_lines(
         budget[0] -= 1
         seen.add(child)
         connector, continuation = tree_glyphs(index == last_index, wide=True)
-        lines.append(f"{branch_prefix}{connector}{child}")
+        lines.append(f"{branch_prefix}{connector}{_labeled_model(child, kinds, mark_external)}")
         lines.extend(
             _relation_lines(
                 children,
@@ -68,6 +84,8 @@ def _relation_lines(
                 branch_prefix + continuation,
                 seen=seen,
                 budget=budget,
+                kinds=kinds,
+                mark_external=mark_external,
             )
         )
     return lines
@@ -90,8 +108,10 @@ def get_model_relations(
         else:
             dependencies, dependents = _load_graph(db)
             children = dependents if relation == "dependents" else dependencies
+            kinds = _model_kinds(db)
+            mark_external = relation == "dependencies"
             budget = [_MAX_NODES]
-            lines = [key]
+            lines = [_labeled_model(key, kinds, mark_external)]
             lines.extend(
                 _relation_lines(
                     children,
@@ -99,6 +119,8 @@ def get_model_relations(
                     "",
                     seen={key},
                     budget=budget,
+                    kinds=kinds,
+                    mark_external=mark_external,
                 )
             )
             result = "\n".join(lines) + "\n"

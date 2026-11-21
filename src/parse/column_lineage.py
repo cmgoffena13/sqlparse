@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import TypedDict, cast
 
 from sqlglot import exp
@@ -10,8 +11,12 @@ from sqlmesh.core.model import Model
 FINAL_QUERY = "$"
 
 
+def model_query_name(model_name: str, name: str) -> str:
+    return f"{model_name}/{name}"
+
+
 def final_query_name(model_name: str) -> str:
-    return f"{model_name}.{FINAL_QUERY}"
+    return model_query_name(model_name, FINAL_QUERY)
 
 
 class ExtractedColumn(TypedDict):
@@ -70,6 +75,14 @@ def _column_table_alias(expression: exp.Expression) -> str | None:
     return column.table if isinstance(column, exp.Column) and column.table else None
 
 
+def _projection_from_table(scope: Scope, expression: exp.Expression) -> str | None:
+    alias = _column_table_alias(expression)
+    if alias is None:
+        tables = {column.table for column in expression.find_all(exp.Column) if column.table}
+        alias = tables.pop() if len(tables) == 1 else None
+    return _resolved_source(scope, alias)
+
+
 def _table_source_name(table: exp.Table) -> str:
     return f"{table.db}.{table.name}" if table.db else table.name
 
@@ -83,7 +96,36 @@ def _resolved_source(scope: Scope, table_alias: str | None) -> str | None:
 
 
 def _qualified_name(query_name: str, from_table: str | None, name: str) -> str:
-    return f"{query_name}.{from_table}.{name}" if from_table is not None else f"{query_name}.{name}"
+    column = f"{from_table}.{name}" if from_table is not None else name
+    model, _, query = query_name.rpartition("/")
+    return f"{model}/{query}/{column}"
+
+
+def _stored_qualified_name(
+    query_name: str, proposed: str, qualified_names: Mapping[str, object]
+) -> str:
+    stored = proposed
+    if proposed not in qualified_names:
+        column_name = proposed.rsplit("/", 1)[-1].rsplit(".", 1)[-1]
+        names = _columns_named(query_name, column_name, qualified_names)
+        if len(names) == 1:
+            stored = names[0]
+    return stored
+
+
+def _columns_named(
+    query_name: str, column_name: str, qualified_names: Mapping[str, object]
+) -> list[str]:
+    model, _, query = query_name.rpartition("/")
+    prefix = f"{model}/{query}/"
+    exact = f"{prefix}{column_name}"
+    matched = [exact] if exact in qualified_names else []
+    if not matched:
+        for qualified_name in qualified_names:
+            bare = qualified_name[len(prefix) :].rsplit(".", 1)[-1]
+            if qualified_name.startswith(prefix) and bare == column_name:
+                matched.append(qualified_name)
+    return matched
 
 
 def _unwrap(expression: exp.Expression) -> exp.Expression:
@@ -127,15 +169,13 @@ def _columns_from_query(
             continue
         parent = scope.expression.parent
         query_name = (
-            f"{model_name}.{parent.alias_or_name}"
+            model_query_name(model_name, parent.alias_or_name)
             if scope.is_cte and parent is not None
             else final_query_name(model_name)
         )
         for expression in scope.expression.expressions:
             name = expression.alias_or_name
-            from_table = (
-                _resolved_source(scope, _column_table_alias(expression)) if scope.is_cte else None
-            )
+            from_table = _projection_from_table(scope, expression)
             line_start, line_end = _line_span(expression)
             columns.append(
                 {
@@ -216,7 +256,7 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
             name = FINAL_QUERY
             if included and scope.is_cte and parent is not None:
                 name = parent.alias_or_name
-            query_name = f"{model.name}.{name}"
+            query_name = model_query_name(model.name, name)
             if included and query_name not in seen:
                 seen.add(query_name)
                 line_start, line_end = _query_line_span(scope.expression)
@@ -277,7 +317,7 @@ def _cte_projection_qn(
 ) -> str:
     name = expression.alias_or_name
     from_table = _resolved_source(scope, _column_table_alias(expression))
-    return _qualified_name(f"{model_name}.{cte_name}", from_table, name)
+    return _qualified_name(model_query_name(model_name, cte_name), from_table, name)
 
 
 def _table_column_qn(
@@ -288,10 +328,14 @@ def _table_column_qn(
     if isinstance(source, exp.Table):
         from_table = _table_source_name(source)
         source_query_name = final_query_name(from_table)
-        resolved = (from_table, source_query_name, f"{source_query_name}.{column.name}")
+        resolved = (
+            from_table,
+            source_query_name,
+            _qualified_name(source_query_name, None, column.name),
+        )
     if isinstance(source, Scope):
         cte_name = column.table
-        query_name = f"{model_name}.{cte_name}"
+        query_name = model_query_name(model_name, cte_name)
         expression = next(
             e for e in source.expression.expressions if e.alias_or_name == column.name
         )
@@ -375,7 +419,7 @@ def _emit_cte_projection_refs(
     cte_name: str,
     dialect: str,
 ) -> None:
-    ref_query_name = f"{model_name}.{cte_name}"
+    ref_query_name = model_query_name(model_name, cte_name)
     for expression in scope.expression.expressions:
         ref_qn = _cte_projection_qn(model_name, cte_name, scope, expression)
         inner = _unwrap(expression)
@@ -420,17 +464,20 @@ def _lineage_node_qn(model_name: str, root_scope: Scope, node: Node) -> tuple[st
     elif isinstance(expression, exp.Table):
         column_name = node.name.split(".")[-1].strip('"')
         query_name = final_query_name(_table_source_name(expression))
-        resolved = (query_name, f"{query_name}.{column_name}")
+        resolved = (query_name, _qualified_name(query_name, None, column_name))
     elif node.reference_node_name:
         cte_scope = root_scope.sources.get(node.reference_node_name)
         if isinstance(cte_scope, Scope):
             resolved = (
-                f"{model_name}.{node.reference_node_name}",
+                model_query_name(model_name, node.reference_node_name),
                 _cte_projection_qn(model_name, node.reference_node_name, cte_scope, expression),
             )
     elif isinstance(_unwrap(expression), exp.Column):
         query_name = final_query_name(model_name)
-        resolved = (query_name, f"{query_name}.{expression.alias_or_name}")
+        resolved = (
+            query_name,
+            _qualified_name(query_name, None, expression.alias_or_name),
+        )
     return resolved
 
 
@@ -446,7 +493,7 @@ def _emit_root_lineage_refs(
     query_name = final_query_name(model_name)
     for expression in root_scope.expression.expressions:
         name = expression.alias_or_name
-        ref_qn = f"{query_name}.{name}"
+        ref_qn = _qualified_name(query_name, _projection_from_table(root_scope, expression), name)
         node = lineage(name, query, dialect=dialect, schema=schema, copy=False)
         kind = _ref_kind(cast(exp.Expression, node.expression))
         for child in node.downstream:
@@ -483,7 +530,7 @@ def extract_model_column_references(model: Model) -> list[ExtractedColumnReferen
                 continue
             parent = scope.expression.parent
             query_base = (
-                f"{model_name}.{parent.alias_or_name}"
+                model_query_name(model_name, parent.alias_or_name)
                 if scope.is_cte and parent is not None
                 else final_query_name(model_name)
             )

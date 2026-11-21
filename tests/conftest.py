@@ -1,7 +1,12 @@
+import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
+
+os.environ["MAX_FORK_WORKERS"] = "1"
+os.environ["SQLMESH_HOME"] = tempfile.mkdtemp(prefix="sqlmesh-test-")
 
 FIXTURE_PROJECT = Path(__file__).resolve().parent / "fixtures" / "sushi"
 

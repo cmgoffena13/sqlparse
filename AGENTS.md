@@ -17,7 +17,7 @@
  - DO NOT use `global` ever.
 
 ## SQL Standards
- - NEVER alias a column name as the exact same name.
+ - NEVER alias a column name as the exact same column name.
  - NEVER check the existence of a record before querying.
  - NEVER use `JOIN`, use `INNER JOIN` instead.
 

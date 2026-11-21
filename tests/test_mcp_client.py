@@ -16,6 +16,7 @@ _TOOLS = {
     "search",
     "get_directory_tree",
     "get_sql_tree",
+    "get_query",
     "get_model_relations",
     "get_column_relations",
 }

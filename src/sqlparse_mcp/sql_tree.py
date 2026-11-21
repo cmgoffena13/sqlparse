@@ -131,7 +131,7 @@ def get_sql_tree(db: ProjectDB, target: str) -> str:
                 nodes: list[tuple[int, int]] = []
                 for row in fetched:
                     relative = str(row["name"])
-                    kinds = clause_counts.get(f"{model_name}.{relative}", {})
+                    kinds = clause_counts.get(f"{model_name}/{relative}", {})
                     label = _count_label(
                         int(row["column_count"]),
                         kinds.get("join", 0),

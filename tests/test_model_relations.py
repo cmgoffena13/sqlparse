@@ -14,7 +14,10 @@ def test_model_relations_dependencies_tree() -> None:
     assert out.startswith("sushi.customer_orders\n")
     assert "├── sushi.customers" in out or "└── sushi.customers" in out
     assert "sushi.orders" in out
-    assert "raw.customers" in out or "raw.orders" in out
+    assert "sushi.customers (EXTERNAL)" not in out
+    assert "sushi.orders (EXTERNAL)" not in out
+    assert "raw.customers (EXTERNAL)" in out
+    assert "raw.orders (EXTERNAL)" in out
 
 
 def test_model_relations_dependents_tree() -> None:
@@ -28,6 +31,7 @@ def test_model_relations_dependents_tree() -> None:
     assert "sushi.customer_orders" in out
     assert "sushi.orders" in out
     assert out.count("sushi.customer_orders") == 1
+    assert "(EXTERNAL)" not in out
 
 
 def test_model_relations_missing_model() -> None:

@@ -459,7 +459,7 @@ class ProjectDB:
     def _query_snapshot(self, row: sqlite3.Row) -> QuerySnapshot:
         return {
             "id": int(row["id"]),
-            "query_name": f"{row['qualified_name']}.{row['name']}",
+            "query_name": f"{row['qualified_name']}/{row['name']}",
             "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }

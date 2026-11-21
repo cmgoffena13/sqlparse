@@ -27,10 +27,13 @@ from src.db import (
 )
 from src.parse.audit_utils import audit_line_span, not_null_column_names
 from src.parse.column_lineage import (
+    _columns_named,
+    _stored_qualified_name,
     extract_model_column_references,
     extract_model_columns,
     extract_model_queries,
     final_query_name,
+    model_query_name,
 )
 from src.parse.macro_utils import macro_locations
 from src.parse.model_utils import model_config_lines
@@ -560,7 +563,7 @@ class SQLMeshParser:
             }
             relative = (
                 query_name[len(model_name) + 1 :]
-                if query_name.startswith(f"{model_name}.")
+                if query_name.startswith(f"{model_name}/")
                 else query_name
             )
             column_label = f"{from_table}.{name}" if from_table is not None else name
@@ -597,9 +600,15 @@ class SQLMeshParser:
         }
         for reference in extract_model_column_references(model):
             ref_query_name = reference["ref_column_query_name"]
-            ref_qn = reference["ref_column_qualified_name"]
+            ref_qn = _stored_qualified_name(
+                ref_query_name, reference["ref_column_qualified_name"], columns_snapshot
+            )
             source_query_name = reference["source_query_name"]
-            source_qn = reference["source_column_qualified_name"]
+            source_qn = _stored_qualified_name(
+                source_query_name,
+                reference["source_column_qualified_name"],
+                columns_snapshot,
+            )
             source_line = reference["source_line"]
             ref_line = reference["ref_line"]
             ref_kind = reference["ref_kind"]
@@ -611,9 +620,8 @@ class SQLMeshParser:
             source_models_id = model_id
             matched_name = ""
             for name, mid in model_name_to_id.items():
-                if (source_qn == name or source_qn.startswith(f"{name}.")) and len(name) > len(
-                    matched_name
-                ):
+                prefix = source_qn == name or source_qn.startswith((f"{name}/", f"{name}."))
+                if prefix and len(name) > len(matched_name):
                     matched_name = name
                     source_models_id = mid
             ref_query_id = self._query_ids[ref_query_name]
@@ -754,21 +762,31 @@ class SQLMeshParser:
                     dialect=input_model.dialect,
                     base_path=fixture_base,
                 ):
-                    column_qns.append(f"{final_query_name(input_model.name)}.{column_name}")
+                    column_qns.extend(
+                        _columns_named(
+                            final_query_name(input_model.name), column_name, columns_snapshot
+                        )
+                    )
             outputs = body.get("outputs") or {}
             for column_name in fixture_column_names(
                 outputs.get("query"),
                 dialect=model.dialect,
                 base_path=fixture_base,
             ):
-                column_qns.append(f"{final_query_name(model.name)}.{column_name}")
+                column_qns.extend(
+                    _columns_named(final_query_name(model.name), column_name, columns_snapshot)
+                )
             for cte_name, values in (outputs.get("ctes") or {}).items():
                 for column_name in fixture_column_names(
                     values,
                     dialect=model.dialect,
                     base_path=fixture_base,
                 ):
-                    column_qns.append(f"{model.name}.{cte_name}.{column_name}")
+                    column_qns.extend(
+                        _columns_named(
+                            model_query_name(model.name, cte_name), column_name, columns_snapshot
+                        )
+                    )
             for column_qn in column_qns:
                 if column_qn not in columns_snapshot:
                     continue

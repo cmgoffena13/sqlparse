@@ -51,6 +51,19 @@ async def _print_tools() -> None:
             _body(await client.call_tool("get_sql_tree", {"target": "sushi.customers"})),
         )
         _print_section(
+            "SQL QUERY",
+            _body(await client.call_tool("get_query", {"target": "sushi.customers"})),
+        )
+        _print_section(
+            "SQL QUERY CTE",
+            _body(
+                await client.call_tool(
+                    "get_query",
+                    {"target": "models/customers.sql", "query_name": "cte"},
+                )
+            ),
+        )
+        _print_section(
             "MODEL DEPENDENCIES",
             _body(
                 await client.call_tool(

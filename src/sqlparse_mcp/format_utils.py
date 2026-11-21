@@ -1,3 +1,10 @@
+def line_span(start_line: int, end_line: int) -> str:
+    loc = f"L{start_line}-{end_line}"
+    if start_line == end_line:
+        loc = f"L{start_line}"
+    return loc
+
+
 def bullet(text: str, lead: str = "") -> str:
     return f"  {lead}• {text}"
 

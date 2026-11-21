@@ -12,6 +12,7 @@ from src.processor import ProjectProcessor
 from src.sqlparse_mcp.column_relations import get_column_relations as run_column_relations
 from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_tree
 from src.sqlparse_mcp.model_relations import get_model_relations as run_model_relations
+from src.sqlparse_mcp.query import get_query as run_query
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
 from src.sqlparse_mcp.sql_tree import get_sql_tree as run_sql_tree
@@ -93,9 +94,20 @@ def get_sql_tree(ctx: Context, target: str) -> str:
     Return the SQL query tree for a model name or model file path.
 
     Lists each query (``$`` for the final output, otherwise the CTE name) with
-    column, where, and join counts.
+    select column, where, and join counts.
     """
     return run_sql_tree(_db(ctx), target)
+
+
+@mcp.tool()
+def get_query(ctx: Context, target: str, query_name: str | None = None) -> str:
+    """
+    Return one query's source for a model name or model file path.
+
+    Lines use ``L{n} | {source}``. ``query_name`` defaults to ``$`` (final output query).
+    ``## Output`` lists each column's data type, and ``NOT NULL`` when required.
+    """
+    return run_query(_db(ctx), target, query_name)
 
 
 @mcp.tool()

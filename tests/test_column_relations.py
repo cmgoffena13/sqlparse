@@ -18,8 +18,43 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
     finally:
         db.close()
     assert "sushi.customers" in out
+    assert "sushi.customers (EXTERNAL)" not in out
     assert "  cte" in out
-    assert "    • raw.customers.customer_id (alias)" in out
+    assert "    • raw.customers.customer_id (EXTERNAL) (alias)" in out
+
+
+def test_column_relations_marks_external_source_models() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        out = get_column_relations(
+            db,
+            "sushi.customers",
+            "cte",
+            "amount_cents",
+            "dependencies",
+        )
+    finally:
+        db.close()
+    assert "raw.orders (EXTERNAL)" in out
+    assert "raw.orders\n" not in out
+
+
+def test_column_relations_dependents_leave_external_models_unmarked() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        out = get_column_relations(
+            db,
+            "raw.orders",
+            "$",
+            "amount_cents",
+            "dependents",
+        )
+    finally:
+        db.close()
+    assert "sushi.customers" in out
+    assert "(EXTERNAL)" not in out
 
 
 def test_column_relations_dependents_include_downstream_models() -> None:
@@ -37,7 +72,8 @@ def test_column_relations_dependents_include_downstream_models() -> None:
         db.close()
     assert "sushi.customer_orders" in out
     assert "sushi.orders" in out
-    assert "• customer_id (alias)" in out or "• customer_id (join)" in out
+    assert "sushi.customers.customer_id (alias)" in out
+    assert "sushi.customers.customer_id (join)" in out
     assert "## Tests" not in out
 
 

@@ -201,7 +201,10 @@ class ProjectProcessor:
 
     def process(self, full: bool = False) -> None:
         with self._lock:
-            self._process_unlocked(full)
+            try:
+                self._process_unlocked(full)
+            finally:
+                self.parser.context.close()
 
     def _process_unlocked(self, full: bool = False) -> None:
         start_time = time.perf_counter()
