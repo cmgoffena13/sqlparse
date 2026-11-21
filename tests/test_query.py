@@ -376,6 +376,7 @@ def test_span_at_lines_returns_a_macro() -> None:
         db.close()
     assert jinja == (
         "Macro: cents_to_dollars\n"
+        "Type: jinja\n"
         "\n"
         "L1 | {% macro cents_to_dollars(column) %}\n"
         "L2 |   {{ column }} / 100\n"
@@ -387,6 +388,7 @@ def test_span_at_lines_returns_a_macro() -> None:
     )
     assert python == (
         "Macro: identity\n"
+        "Type: python\n"
         "\n"
         "L4 | @macro()\n"
         "L5 | def identity(evaluator, expr):\n"

@@ -4,6 +4,8 @@ from src.sqlparse_mcp.macro import get_macro
 from tests.conftest import FIXTURE_PROJECT
 
 _MACRO = (
+    "Type: jinja\n"
+    "\n"
     "L1 | {% macro cents_to_dollars(column) %}\n"
     "L2 |   {{ column }} / 100\n"
     "L3 | {% endmacro %}\n"
@@ -13,7 +15,9 @@ _MACRO = (
     "  • sushi.customers\n"
 )
 
-_UNUSED_MACRO = "L4 | @macro()\nL5 | def identity(evaluator, expr):\nL6 |     return expr\n"
+_UNUSED_MACRO = (
+    "Type: python\n\nL4 | @macro()\nL5 | def identity(evaluator, expr):\nL6 |     return expr\n"
+)
 
 
 def test_get_macro_returns_the_named_macro_with_line_numbers() -> None:

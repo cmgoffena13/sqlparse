@@ -4,6 +4,7 @@ from src.sqlparse_mcp.model import _normalize_file_path
 
 _MACRO_SQL = """
 SELECT
+    macros.kind,
     macros.line_start,
     macros.line_end,
     models.qualified_name
@@ -42,7 +43,8 @@ def get_macro(db: ProjectDB, file_path: str, macro_name: str) -> str:
             models = [
                 str(row["qualified_name"]) for row in rows if row["qualified_name"] is not None
             ]
+            header = [f"Type: {rows[0]['kind']}", ""]
             footer = ["", "## Models", "", *[bullet(model) for model in models]]
-            lines = [*body, *footer] if models else body
+            lines = [*header, *body, *footer] if models else [*header, *body]
             result = "\n".join(lines) + "\n"
     return result

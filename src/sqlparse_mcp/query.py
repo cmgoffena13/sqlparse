@@ -92,6 +92,7 @@ ORDER BY audits.line_start, audits.name
 _FILE_MACROS_SQL = """
 SELECT
     macros.name,
+    macros.kind,
     macros.line_start,
     macros.line_end
 FROM macros
@@ -457,11 +458,14 @@ def _stored_spans(db: ProjectDB, path: str, kind: str) -> list[_LineSpan]:
     spans: list[_LineSpan] = []
     for row in db.connection.execute(sql, (path,)):
         name = str(row["name"])
+        query_name = ""
+        if kind == "macro":
+            query_name = str(row["kind"])
         spans.append(
             {
                 "kind": kind,
                 "model_name": name,
-                "query_name": "",
+                "query_name": query_name,
                 "display_name": name,
                 "start": int(row["line_start"]),
                 "end": int(row["line_end"]),
@@ -542,7 +546,7 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
     elif span["kind"] == "audit":
         detail = f"Audit: {span['model_name']}"
     elif span["kind"] == "macro":
-        detail = f"Macro: {span['model_name']}"
+        detail = f"Macro: {span['model_name']}\nType: {span['query_name']}"
     elif span["kind"] == "test":
         detail = f"Test: {span['model_name']}"
     text = _format_query(
