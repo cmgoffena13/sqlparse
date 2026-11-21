@@ -1,17 +1,29 @@
 from pathlib import Path
 
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import tree_glyphs
+from src.sqlparse_mcp.format_utils import bullet, tree_glyphs
 
 _MODELS_BY_NAME_SQL = """
-SELECT id, qualified_name
+SELECT
+    models.id,
+    models.qualified_name,
+    models.config_start_line,
+    models.config_end_line,
+    files.path AS file_path
 FROM models
-WHERE qualified_name = ?
-ORDER BY qualified_name
+INNER JOIN files
+    ON files.id = models.file_id
+WHERE models.qualified_name = ?
+ORDER BY models.qualified_name
 """
 
 _MODELS_BY_FILE_SQL = """
-SELECT models.id, models.qualified_name
+SELECT
+    models.id,
+    models.qualified_name,
+    models.config_start_line,
+    models.config_end_line,
+    files.path AS file_path
 FROM models
 INNER JOIN files
     ON files.id = models.file_id
@@ -95,28 +107,71 @@ def _normalize_file_path(target: str, root: Path) -> str:
     return normalized
 
 
-def get_sql_tree(db: ProjectDB, target: str) -> str:
+_MACROS_SQL = """
+SELECT
+    model_macros.macro_name,
+    files.path AS file_path
+FROM model_macros
+INNER JOIN macros
+    ON macros.name = model_macros.macro_name
+INNER JOIN files
+    ON files.id = macros.file_id
+WHERE model_macros.model_id = ?
+ORDER BY files.path, model_macros.macro_name
+"""
+
+_AUDITS_SQL = """
+SELECT
+    model_audits.audit_name,
+    files.path AS file_path
+FROM model_audits
+INNER JOIN audits
+    ON audits.name = model_audits.audit_name
+INNER JOIN files
+    ON files.id = audits.file_id
+WHERE model_audits.model_id = ?
+ORDER BY files.path, model_audits.audit_name
+"""
+
+
+def _config_lines(db: ProjectDB, path: str, start: int, end: int) -> list[str]:
+    text = (db.root / path).read_text(encoding="utf-8")
+    gutter = len(str(end))
+    body = [
+        f"L{lineno:<{gutter}} | {line}"
+        for lineno, line in enumerate(text.splitlines()[start - 1 : end], start)
+    ]
+    return ["## Config", "", *body]
+
+
+def _named_section(title: str, rows: list[tuple[str, str]]) -> list[str]:
+    grouped: dict[str, list[str]] = {}
+    for file_path, name in rows:
+        grouped.setdefault(file_path, []).append(name)
+    lines: list[str] = []
+    if grouped:
+        lines = [f"## {title}", ""]
+        for file_path, names in grouped.items():
+            lines.append(file_path)
+            lines.extend(bullet(name) for name in names)
+    return lines
+
+
+def get_model(db: ProjectDB, target: str, include_config: bool = False) -> str:
     key = target.strip()
     result = "No target given; pass a model name or file path."
     if key:
-        models = [
-            (int(row["id"]), str(row["qualified_name"]))
-            for row in db.connection.execute(_MODELS_BY_NAME_SQL, (key,))
-        ]
-        if not models:
+        models = list(db.connection.execute(_MODELS_BY_NAME_SQL, (key,)))
+        from_file = not models
+        if from_file:
             file_path = _normalize_file_path(key, db.root)
-            models = [
-                (int(row["id"]), str(row["qualified_name"]))
-                for row in db.connection.execute(_MODELS_BY_FILE_SQL, (file_path,))
-            ]
+            models = list(db.connection.execute(_MODELS_BY_FILE_SQL, (file_path,)))
         if not models:
             result = "No model found."
         else:
-            lines: list[str] = []
-            for model_id, model_name in models:
-                if lines:
-                    lines.append("")
-                lines.append(model_name)
+            blocks: list[str] = []
+            for model in models:
+                model_id = int(model["id"])
                 fetched = list(db.connection.execute(_QUERIES_SQL, (model_id,)))
                 fetched.sort(
                     key=lambda row: (int(row["depth"]), int(row["line_start"]), str(row["name"]))
@@ -136,6 +191,44 @@ def get_sql_tree(db: ProjectDB, target: str) -> str:
                 children: dict[int | None, list[int]] = {}
                 for index, parent in enumerate(_parent_indexes(nodes)):
                     children.setdefault(parent, []).append(index)
-                lines.extend(_query_lines(children, labels, None, ""))
-            result = "\n".join(lines) + "\n"
+                header = (
+                    f"Model: {model['qualified_name']}"
+                    if from_file
+                    else f"File: {model['file_path']}"
+                )
+                sections: list[list[str]] = [[header]]
+                if include_config:
+                    sections.append(
+                        _config_lines(
+                            db,
+                            str(model["file_path"]),
+                            int(model["config_start_line"]),
+                            int(model["config_end_line"]),
+                        )
+                    )
+                sections.append(
+                    [
+                        "## SQL Tree",
+                        "",
+                        str(model["qualified_name"]),
+                        *_query_lines(children, labels, None, ""),
+                    ]
+                )
+                macros = [
+                    (str(row["file_path"]), str(row["macro_name"]))
+                    for row in db.connection.execute(_MACROS_SQL, (model_id,))
+                ]
+                audits = [
+                    (str(row["file_path"]), str(row["audit_name"]))
+                    for row in db.connection.execute(_AUDITS_SQL, (model_id,))
+                ]
+                sections.append(_named_section("Macros", macros))
+                sections.append(_named_section("Audits", audits))
+                lines: list[str] = []
+                for section in sections:
+                    if section and lines:
+                        lines.append("")
+                    lines.extend(section)
+                blocks.append("\n".join(lines))
+            result = "\n\n".join(blocks) + "\n"
     return result

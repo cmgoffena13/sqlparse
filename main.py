@@ -47,12 +47,17 @@ async def _print_tools() -> None:
             _body(await client.call_tool("get_directory_tree", {})),
         )
         _print_section(
-            "SQL TREE",
-            _body(await client.call_tool("get_sql_tree", {"target": "sushi.customers"})),
+            "MODEL",
+            _body(await client.call_tool("get_model", {"target": "sushi.customers"})),
         )
         _print_section(
             "SQL QUERY",
-            _body(await client.call_tool("get_query", {"target": "sushi.customers"})),
+            _body(
+                await client.call_tool(
+                    "get_query",
+                    {"target": "sushi.customers", "render": True},
+                )
+            ),
         )
         _print_section(
             "QUERY AT LINES",
@@ -64,11 +69,11 @@ async def _print_tools() -> None:
             ),
         )
         _print_section(
-            "SQL QUERY CTE",
+            "TEST",
             _body(
                 await client.call_tool(
-                    "get_query",
-                    {"target": "models/customers.sql", "query_name": "$cte"},
+                    "get_test",
+                    {"file_path": "tests/test_orders.yaml", "test_name": "test_orders_exist"},
                 )
             ),
         )
@@ -86,7 +91,11 @@ async def _print_tools() -> None:
             _body(
                 await client.call_tool(
                     "get_model_relations",
-                    {"model_name": "sushi.customers", "relation": "dependents"},
+                    {
+                        "model_name": "sushi.customers",
+                        "relation": "dependents",
+                        "include_tests": True,
+                    },
                 )
             ),
         )
@@ -99,34 +108,6 @@ async def _print_tools() -> None:
                         "model_name": "sushi.customer_status",
                         "query_name": "$",
                         "column_name": "filtered.customer_id",
-                        "relation": "dependencies",
-                    },
-                )
-            ),
-        )
-        _print_section(
-            "FILTERED COLUMN DEPENDENCIES",
-            _body(
-                await client.call_tool(
-                    "get_column_relations",
-                    {
-                        "model_name": "sushi.customer_status",
-                        "query_name": "$filtered",
-                        "column_name": "base.customer_id",
-                        "relation": "dependencies",
-                    },
-                )
-            ),
-        )
-        _print_section(
-            "BASE COLUMN DEPENDENCIES",
-            _body(
-                await client.call_tool(
-                    "get_column_relations",
-                    {
-                        "model_name": "sushi.customer_status",
-                        "query_name": "$base",
-                        "column_name": "raw.customers.id",
                         "relation": "dependencies",
                     },
                 )

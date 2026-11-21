@@ -58,6 +58,7 @@ class ExtractedQuery(TypedDict):
     where_condition_count: int
     join_statement_count: int
     group_by_col_count: int
+    rendered_sql: str | None
 
 
 def _line_span(expression: exp.Expression) -> tuple[int, int]:
@@ -241,6 +242,23 @@ def _query_depth(scope: Scope) -> int:
     return depth
 
 
+def _rendered_query_sql(expression: exp.Query, dialect: str) -> dict[str, str]:
+    sql_by_name: dict[str, str] = {}
+    for scope in traverse_scope(expression):
+        parent = scope.expression.parent
+        included = scope.is_cte or scope.is_root
+        name = FINAL_QUERY
+        if included and scope.is_cte and parent is not None:
+            name = parent.alias_or_name
+        name = stored_query_name(name)
+        if included and name not in sql_by_name:
+            rendered = scope.expression.copy()
+            if scope.is_root:
+                rendered.set("with_", None)
+            sql_by_name[name] = rendered.sql(dialect=dialect, pretty=True)
+    return sql_by_name
+
+
 def extract_model_queries(model: Model) -> list[ExtractedQuery]:
     queries: list[ExtractedQuery] = []
     try:
@@ -259,9 +277,12 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                 "where_condition_count": 0,
                 "join_statement_count": 0,
                 "group_by_col_count": 0,
+                "rendered_sql": None if model.kind.name == "EXTERNAL" else "",
             }
         )
     else:
+        external = model.kind.name == "EXTERNAL"
+        sql_by_name = {} if external else _rendered_query_sql(rendered.copy(), str(model.dialect))
         qualified = qualify(
             rendered,
             dialect=model.dialect,
@@ -298,6 +319,7 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                         "where_condition_count": where_condition_count,
                         "join_statement_count": join_statement_count,
                         "group_by_col_count": group_by_col_count,
+                        "rendered_sql": None if external else sql_by_name[name],
                     }
                 )
     return queries

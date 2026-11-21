@@ -5,6 +5,21 @@ from src.sqlparse_mcp.format_utils import tree_glyphs
 
 _MAX_NODES = 100
 
+_MODEL_TESTS_SQL = """
+SELECT
+    models.qualified_name,
+    files.path AS file_path,
+    tests.name AS test_name,
+    tests.line_start,
+    tests.line_end
+FROM tests
+INNER JOIN files
+    ON files.id = tests.file_id
+INNER JOIN models
+    ON models.id = tests.model_id
+ORDER BY models.qualified_name, file_path, tests.line_start, test_name
+"""
+
 _EDGES_SQL = """
 SELECT DISTINCT
     ref_models.qualified_name AS dependent_name,
@@ -63,11 +78,19 @@ def _relation_lines(
     kinds: dict[str, str],
     mark_external: bool,
     nested: bool,
+    tests: dict[str, dict[str, list[str]]],
 ) -> list[str]:
     lines: list[str] = []
+    files = list(tests.get(parent, {}).items()) if nested else []
     siblings = [child for child in children.get(parent, ()) if child not in seen]
-    last_index = len(siblings) - 1
-    for index, child in enumerate(siblings):
+    last_index = len(files) + len(siblings) - 1
+    index = 0
+    for file_path, names in files:
+        prefix, continuation = tree_glyphs(index == last_index, wide=True)
+        lines.append(f"{branch_prefix}{prefix}{file_path}")
+        lines.extend(f"{branch_prefix}{continuation}• {name}" for name in names)
+        index += 1
+    for child in siblings:
         if budget[0] < 0:
             break
         if budget[0] == 0:
@@ -94,16 +117,28 @@ def _relation_lines(
                 kinds=kinds,
                 mark_external=mark_external,
                 nested=True,
+                tests=tests,
             )
         )
         seen.remove(child)
+        index += 1
     return lines
+
+
+def _model_tests(db: ProjectDB) -> dict[str, dict[str, list[str]]]:
+    tests: dict[str, dict[str, list[str]]] = {}
+    for row in db.connection.execute(_MODEL_TESTS_SQL):
+        files = tests.setdefault(str(row["qualified_name"]), {})
+        item = str(row["test_name"])
+        files.setdefault(str(row["file_path"]), []).append(item)
+    return tests
 
 
 def get_model_relations(
     db: ProjectDB,
     model_name: str,
     relation: Literal["dependents", "dependencies"],
+    include_tests: bool = False,
 ) -> str:
     key = model_name.strip()
     result = "No model name given; pass a non-empty model name."
@@ -119,6 +154,7 @@ def get_model_relations(
             children = dependents if relation == "dependents" else dependencies
             kinds = _model_kinds(db)
             mark_external = relation == "dependencies"
+            tests = _model_tests(db) if include_tests and relation == "dependents" else {}
             budget = [_MAX_NODES]
             lines = _relation_lines(
                 children,
@@ -129,6 +165,7 @@ def get_model_relations(
                 kinds=kinds,
                 mark_external=mark_external,
                 nested=False,
+                tests=tests,
             )
             result = "No relations."
             if lines:

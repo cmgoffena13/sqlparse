@@ -104,7 +104,8 @@ CREATE TABLE IF NOT EXISTS queries (
     select_col_count    INTEGER NOT NULL,
     where_condition_count INTEGER NULL,
     join_statement_count          INTEGER NULL,
-    group_by_col_count  INTEGER NULL
+    group_by_col_count  INTEGER NULL,
+    rendered_sql        TEXT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS queries_model_id_name_index ON queries (model_id, name);
 

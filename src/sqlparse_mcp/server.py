@@ -12,15 +12,21 @@ from src.processor import ProjectProcessor
 from src.sqlparse_mcp.column_relations import get_column_relations as run_column_relations
 from src.sqlparse_mcp.directory_tree import get_directory_tree as run_directory_tree
 from src.sqlparse_mcp.model_relations import get_model_relations as run_model_relations
+from src.sqlparse_mcp.model_test import get_test as run_test
 from src.sqlparse_mcp.query import get_query as run_query
 from src.sqlparse_mcp.query import get_query_at_lines as run_query_at_lines
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
-from src.sqlparse_mcp.sql_tree import get_sql_tree as run_sql_tree
+from src.sqlparse_mcp.sql_tree import get_model as run_model
 from src.utils import get_sqlparse_config_dir
 
 _INSTRUCTIONS = """\
 sqlparse tools read an up-to-date view of a SQLMesh project.
+
+Queries/CTEs are prefixed with ``$``. A single ``$`` is the final output query.
+EXTERNAL models have no query and return ``EXTERNAL``.
+Ex. ``$``, ``$cte_name``, or ``EXTERNAL``.
+
 Utilize the ``sqlparse`` skill for guided exploration workflows.
 Use the ``skill://sqlparse/SKILL.md`` resource if the skill is not found.
 """
@@ -73,8 +79,6 @@ def search(ctx: Context, query: str, limit: int = 20) -> str:
     FTS model, query, and column names. Results are ordered #1, #2, #3... by relevance.
 
     Narrow with one distinctive word; Widen with extra space-separated words (OR).
-
-    "$" is the default query name for the final output query.
     """
     return run_search(_db(ctx), query, limit)
 
@@ -90,41 +94,61 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
 
 
 @mcp.tool()
-def get_sql_tree(ctx: Context, target: str) -> str:
+def get_model(ctx: Context, target: str, include_config: bool = False) -> str:
     """
-    Return the SQL query tree for a model name or model file path.
+    Return a model's SQL tree, macros, and audits.
 
-    Lists each query (``$`` for the final output, otherwise the CTE name) with
-    select column, where, and join counts.
+    A model name starts with ``File:``. A file path starts with ``Model:``.
+
+    ``include_config`` defaults to false. When true, the MODEL block is included
+    with file line numbers.
     """
-    return run_sql_tree(_db(ctx), target)
+    return run_model(_db(ctx), target, include_config)
 
 
 @mcp.tool()
-def get_query(ctx: Context, target: str, query_name: str | None = None) -> str:
+def get_query(
+    ctx: Context, target: str, query_name: str | None = None, render: bool = False
+) -> str:
     """
     Return one query's source for a model name or model file path.
 
-    Lines use ``L{n} | {source}``. ``query_name`` defaults to ``$`` (final output query).
-    ``## Output`` lists each column's data type, and ``NOT NULL`` when required.
+    ``render`` defaults to false. When true, macros are rendered and file line numbers are omitted.
     """
-    return run_query(_db(ctx), target, query_name)
+    return run_query(_db(ctx), target, query_name, render)
 
 
 @mcp.tool()
 def get_query_at_lines(
-    ctx: Context, file_path: str, start_line: int, end_line: int | None = None
+    ctx: Context,
+    file_path: str,
+    start_line: int,
+    end_line: int | None = None,
+    render: bool = False,
 ) -> str:
     """
-    Return the query, audit, or macro that contains ``start_line`` through ``end_line``.
+    Return the query, model config, audit, or macro
+    that contains the line range ``start_line`` through ``end_line``.
 
     ``end_line`` defaults to ``start_line``. The tightest match that contains the
     whole range is returned. A range that crosses queries lists each query name.
     A range on the model config returns that config instead of a query.
     A path with an ``audits`` directory is an audit, and a ``macros`` directory is a macro.
     Those return their source without an output section.
+    ``render`` defaults to false. When true, a query's macros are expanded and file line
+    numbers are omitted. Audits, macros, and model config stay as source.
     """
-    return run_query_at_lines(_db(ctx), file_path, start_line, end_line)
+    return run_query_at_lines(_db(ctx), file_path, start_line, end_line, render)
+
+
+@mcp.tool()
+def get_test(ctx: Context, file_path: str, test_name: str) -> str:
+    """
+    Return one test's source from a test file.
+
+    Lines use ``L{n} | {source}`` for the test's line span.
+    """
+    return run_test(_db(ctx), file_path, test_name)
 
 
 @mcp.tool()
@@ -132,14 +156,17 @@ def get_model_relations(
     ctx: Context,
     model_name: str,
     relation: Literal["dependents", "dependencies"] = "dependents",
+    include_tests: bool = False,
 ) -> str:
     """
     Return model relations for ``model_name``.
 
     ``dependencies`` lists upstream models this model reads.
     ``dependents`` lists downstream models that read it.
+
+    Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
-    return run_model_relations(_db(ctx), model_name, relation)
+    return run_model_relations(_db(ctx), model_name, relation, include_tests)
 
 
 @mcp.tool()
@@ -157,7 +184,7 @@ def get_column_relations(
     ``dependencies`` lists upstream columns this column reads.
     ``dependents`` lists downstream columns that read it.
 
-    ``query_name`` defaults to ``$`` (final output query). Use a CTE name for CTE columns.
+    ``query_name`` defaults to ``$`` (final output query).
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
     return run_column_relations(

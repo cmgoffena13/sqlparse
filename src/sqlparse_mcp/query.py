@@ -18,6 +18,7 @@ _MODEL_SQL = """
 SELECT
     models.qualified_name,
     models.dialect,
+    models.kind,
     files.path AS file_path
 FROM models
 INNER JOIN files ON files.id = models.file_id
@@ -28,11 +29,20 @@ _MODEL_BY_FILE_SQL = """
 SELECT
     models.qualified_name,
     models.dialect,
+    models.kind,
     files.path AS file_path
 FROM models
 INNER JOIN files ON files.id = models.file_id
 WHERE files.path = ?
 ORDER BY models.qualified_name
+"""
+
+_RENDERED_SQL = """
+SELECT queries.rendered_sql
+FROM queries
+INNER JOIN models ON models.id = queries.model_id
+WHERE models.qualified_name = ?
+  AND queries.name = ?
 """
 
 _QUERY_SQL = """
@@ -201,6 +211,12 @@ def _output_label(name: str, data_type: str, nullable: int | None, width: int) -
     return f"{name:<{width}} {data_type}{constraint}"
 
 
+def _rendered_sql(db: ProjectDB, model_name: str, query_name: str) -> str | None:
+    row = db.connection.execute(_RENDERED_SQL, (model_name, query_name)).fetchone()
+    stored = None if row is None else row["rendered_sql"]
+    return None if stored is None else str(stored)
+
+
 def _format_query(
     header: str,
     lines: list[str],
@@ -209,16 +225,20 @@ def _format_query(
     qualifier: str,
     columns: list[tuple[str, str, int | None]],
     macros: list[str],
+    sql: str | None,
 ) -> str:
     chunk = lines[start - 1 : end]
     gutter = len(str(end))
     body = [f"L{lineno:<{gutter}} | {line}" for lineno, line in enumerate(chunk, start)]
+    if sql is not None:
+        body = sql.splitlines()
     rendered = [header, "", *body]
     if macros:
-        rendered.extend(["", "## Macros Rendered", ""])
+        heading = "## Macros Rendered" if sql is not None else "## Macros"
+        rendered.extend(["", heading, ""])
         rendered.extend(bullet(name) for name in macros)
     if columns:
-        rendered.extend(["", "## Output", ""])
+        rendered.extend(["", "## Output Schema", ""])
         labels = [f"{qualifier}.{name}" for name, _data_type, _nullable in columns]
         width = max(len(label) for label in labels)
         rendered.extend(
@@ -228,7 +248,7 @@ def _format_query(
     return "\n".join(rendered) + "\n"
 
 
-def get_query(db: ProjectDB, target: str, query_name: str | None) -> str:
+def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool = False) -> str:
     key = target.strip()
     result = "No target given; pass a model name or file path."
     if key:
@@ -244,36 +264,43 @@ def get_query(db: ProjectDB, target: str, query_name: str | None) -> str:
         else:
             model_row = rows[0]
             model_name = str(model_row["qualified_name"])
-            relative = _relative_query(model_name, query_name)
-            query_row = db.connection.execute(_QUERY_SQL, (model_name, relative)).fetchone()
-            if query_row is None:
-                result = "No query found."
-            else:
-                path = str(model_row["file_path"])
-                text = (db.root / path).read_text(encoding="utf-8")
-                span = _source_span(text, str(model_row["dialect"]), relative, model_name)
-                result = "No SQL source for this query."
-                if span is not None:
-                    header = f"Model: {model_name}" if from_file else f"File: {path}"
-                    query_lines = text.splitlines()
-                    source = "\n".join(query_lines[span[0] - 1 : span[1]])
-                    columns = [
-                        (
-                            str(column["name"]),
-                            str(column["data_type"]),
-                            None if column["nullable"] is None else int(column["nullable"]),
-                        )
-                        for column in db.connection.execute(_COLUMNS_SQL, (model_name, relative))
-                    ]
-                    result = _format_query(
-                        header,
-                        query_lines,
-                        span[0],
-                        span[1],
-                        span[2],
-                        columns,
-                        _query_macros(db, model_name, source),
-                    )
+            result = "EXTERNAL"
+            if str(model_row["kind"]) != "EXTERNAL":
+                relative = _relative_query(model_name, query_name)
+                query_row = db.connection.execute(_QUERY_SQL, (model_name, relative)).fetchone()
+                if query_row is None:
+                    result = "No query found."
+                else:
+                    path = str(model_row["file_path"])
+                    text = (db.root / path).read_text(encoding="utf-8")
+                    span = _source_span(text, str(model_row["dialect"]), relative, model_name)
+                    result = "No SQL source for this query."
+                    if span is not None:
+                        header = f"Model: {model_name}" if from_file else f"File: {path}"
+                        query_lines = text.splitlines()
+                        source = "\n".join(query_lines[span[0] - 1 : span[1]])
+                        columns = [
+                            (
+                                str(column["name"]),
+                                str(column["data_type"]),
+                                None if column["nullable"] is None else int(column["nullable"]),
+                            )
+                            for column in db.connection.execute(
+                                _COLUMNS_SQL, (model_name, relative)
+                            )
+                        ]
+                        sql = _rendered_sql(db, model_name, relative) if render else None
+                        if not render or sql is not None:
+                            result = _format_query(
+                                header,
+                                query_lines,
+                                span[0],
+                                span[1],
+                                span[2],
+                                columns,
+                                _query_macros(db, model_name, source),
+                                sql,
+                            )
     return result
 
 
@@ -421,7 +448,7 @@ def _matching_spans(spans: list[_LineSpan], start: int, end: int) -> list[_LineS
     return chosen
 
 
-def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
+def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan, render: bool) -> str:
     columns: list[tuple[str, str, int | None]] = []
     if span["kind"] == "query":
         columns = [
@@ -436,24 +463,31 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
         ]
     header = f"Model: {span['model_name']}"
     macros: list[str] = []
+    sql = None
     if span["kind"] == "query":
         shown = _shown_query_name(span["query_name"], span["display_name"])
         header = f"{header}\nQuery: {shown}"
         source = "\n".join(lines[span["start"] - 1 : span["end"]])
         macros = _query_macros(db, span["model_name"], source)
+        if render:
+            sql = _rendered_sql(db, span["model_name"], span["query_name"])
     elif span["kind"] == "audit":
         header = f"Audit: {span['model_name']}"
     elif span["kind"] == "macro":
         header = f"Macro: {span['model_name']}"
-    return _format_query(
-        header,
-        lines,
-        span["start"],
-        span["end"],
-        span["display_name"],
-        columns,
-        macros,
-    )
+    result = "No SQL source for this query."
+    if not render or span["kind"] != "query" or sql is not None:
+        result = _format_query(
+            header,
+            lines,
+            span["start"],
+            span["end"],
+            span["display_name"],
+            columns,
+            macros,
+            sql,
+        )
+    return result
 
 
 def _render_many(spans: list[_LineSpan]) -> str:
@@ -469,7 +503,11 @@ def _render_many(spans: list[_LineSpan]) -> str:
 
 
 def get_query_at_lines(
-    db: ProjectDB, file_path: str, start_line: int, end_line: int | None = None
+    db: ProjectDB,
+    file_path: str,
+    start_line: int,
+    end_line: int | None = None,
+    render: bool = False,
 ) -> str:
     end = start_line if end_line is None else end_line
     key = file_path.strip()
@@ -495,7 +533,7 @@ def get_query_at_lines(
             if kind == "model" and not chosen:
                 result = "No query found."
             elif len(chosen) == 1:
-                result = _render_span(db, text.splitlines(), chosen[0])
+                result = _render_span(db, text.splitlines(), chosen[0], render)
             elif chosen:
                 result = _render_many(chosen)
     return result

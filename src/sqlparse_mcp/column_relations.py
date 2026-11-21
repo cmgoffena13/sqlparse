@@ -3,7 +3,7 @@ from typing import Literal
 
 from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_name
-from src.sqlparse_mcp.format_utils import bullet, tree_glyphs
+from src.sqlparse_mcp.format_utils import tree_glyphs
 from src.sqlparse_mcp.model_relations import _load_graph
 
 _FIND_COLUMNS_SQL = """
@@ -62,17 +62,20 @@ ORDER BY model_name, query_name, column_name, from_table, ref_kind
 
 _TEST_DEPENDENTS_SQL = """
 SELECT DISTINCT
+    models.qualified_name,
     files.path AS file_path,
     tests.name AS test_name,
     tests.line_start,
     tests.line_end
 FROM test_references
-INNER JOIN tests 
+INNER JOIN tests
     ON tests.id = test_references.test_id
-INNER JOIN files 
+INNER JOIN files
     ON files.id = tests.file_id
+INNER JOIN models
+    ON models.id = tests.model_id
 WHERE test_references.column_id IN ({placeholders})
-ORDER BY file_path, tests.line_start, test_name
+ORDER BY models.qualified_name, file_path, tests.line_start, test_name
 """
 
 
@@ -140,37 +143,46 @@ def _model_block(
     name: str,
     grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]],
     children: dict[str, list[str]],
+    tests: OrderedDict[str, OrderedDict[str, list[str]]],
     seen: set[str],
 ) -> list[str]:
     seen.add(name)
     header, hide_query, queries = grouped.get(name, (name, False, OrderedDict()))
-    lines = [
+    entries = [
         f"{header} / {label}{_use_label(kinds)}"
         if hide_query
         else f"{header} / {query_name} / {label}{_use_label(kinds)}"
         for query_name, columns in queries.items()
         for label, kinds in columns.items()
     ]
-    if not lines:
-        lines = [header]
+    if not entries:
+        entries = [header]
     kids = [kid for kid in children.get(name, []) if kid not in seen]
-    if kids:
-        parent = lines.pop()
-        nested_lines: list[str] = []
-        last = len(kids) - 1
-        for index, kid in enumerate(kids):
-            connector, continuation = tree_glyphs(index == last, wide=True)
-            nested = _model_block(kid, grouped, children, seen)
-            nested_lines.append(f"{connector}{nested[0]}")
-            nested_lines.extend(f"{continuation}{nested_line}" for nested_line in nested[1:])
-        lines.append(parent)
-        lines.extend(nested_lines)
+    lines: list[str] = []
+    last = len(entries) - 1
+    for index, text in enumerate(entries):
+        lines.append(text)
+        branches: list[tuple[str, list[str]]] = []
+        if index == 0:
+            branches.extend(
+                (file_path, [f"• {item}" for item in names])
+                for file_path, names in tests.get(name, {}).items()
+            )
+        if index == last:
+            for kid in kids:
+                nested = _model_block(kid, grouped, children, tests, seen)
+                branches.append((nested[0], nested[1:]))
+        for branch_index, (head, rest) in enumerate(branches):
+            connector, continuation = tree_glyphs(branch_index == len(branches) - 1, wide=True)
+            lines.append(f"{connector}{head}")
+            lines.extend(f"{continuation}{line}" for line in rest)
     return lines
 
 
 def _dependency_tree(
     grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]],
     children: dict[str, list[str]],
+    tests: OrderedDict[str, OrderedDict[str, list[str]]],
 ) -> list[str]:
     nested = {name for kids in children.values() for name in kids}
     roots = [name for name in children if name not in nested]
@@ -182,14 +194,14 @@ def _dependency_tree(
         if name not in seen:
             if lines:
                 lines.append("")
-            lines.extend(_model_block(name, grouped, children, seen))
+            lines.extend(_model_block(name, grouped, children, tests, seen))
     return lines
 
 
 def _format_groups(
     db: ProjectDB,
     rows: list[tuple[str, str, str, str | None, str, str]],
-    test_rows: list[tuple[str, str, int, int]],
+    test_rows: list[tuple[str, str, str, int, int]],
     mark_external: bool,
 ) -> str:
     grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]] = (
@@ -210,19 +222,14 @@ def _format_groups(
         if ref_kind not in kinds:
             kinds.append(ref_kind)
     _dependencies, dependents = _load_graph(db)
-    lines = _dependency_tree(grouped, _model_children(list(grouped), dependents))
-    if test_rows:
-        if lines:
-            lines.append("")
-        lines.append("## Tests")
-        lines.append("")
-        by_file: OrderedDict[str, list[str]] = OrderedDict()
-        for file_path, test_name, line_start, line_end in test_rows:
-            by_file.setdefault(file_path, []).append(f"{test_name} (L{line_start} - L{line_end})")
-        for file_path, names in by_file.items():
-            lines.append(file_path)
-            for name in names:
-                lines.append(bullet(name))
+    tests: OrderedDict[str, OrderedDict[str, list[str]]] = OrderedDict()
+    for model_name, file_path, test_name, _line_start, _line_end in test_rows:
+        files = tests.setdefault(model_name, OrderedDict())
+        item = test_name
+        names = files.setdefault(file_path, [])
+        if item not in names:
+            names.append(item)
+    lines = _dependency_tree(grouped, _model_children(list(grouped), dependents), tests)
     result = "No relations."
     if lines:
         result = "\n".join(lines) + "\n"
@@ -392,10 +399,11 @@ def get_column_relations(
                     column_ids,
                 )
             ]
-            test_rows: list[tuple[str, str, int, int]] = []
+            test_rows: list[tuple[str, str, str, int, int]] = []
             if include_tests:
                 test_rows = [
                     (
+                        str(row["qualified_name"]),
                         str(row["file_path"]),
                         str(row["test_name"]),
                         int(row["line_start"]),

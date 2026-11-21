@@ -15,9 +15,10 @@ from tests.conftest import FIXTURE_PROJECT
 _TOOLS = {
     "search",
     "get_directory_tree",
-    "get_sql_tree",
+    "get_model",
     "get_query",
     "get_query_at_lines",
+    "get_test",
     "get_model_relations",
     "get_column_relations",
 }

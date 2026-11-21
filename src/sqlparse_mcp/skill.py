@@ -15,13 +15,20 @@ _SKILL_BODY = """\
 
 1. Use ``search`` to find models, queries, and columns by name.
 2. Use ``get_directory_tree`` to browse files and see model names per file.
-3. Use ``get_sql_tree`` to list a model's queries (``$`` / CTEs) with column and clause counts.
+3. Use ``get_model`` for a model's SQL tree, macros, and audits.
+   A model name starts with ``File:``. A file path starts with ``Model:``.
+   ``include_config`` defaults to false. Pass true to include the MODEL block.
 4. Use ``get_query`` to read one query's source for a model name or model file path.
+   ``render`` defaults to false. Pass true to expand macros and drop file line numbers.
+   An external model returns ``EXTERNAL`` because it has no query.
 5. Use ``get_query_at_lines`` for a file path and line range. It returns the tightest query
    that contains the range, each overlapping query name when the range crosses queries,
-   and the model config when the range is on the MODEL block.
-6. Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
-7. Use ``get_column_relations`` for column dependents or dependencies; DO NOT grep for this.
+   and the model config when the range is on the MODEL block. ``render`` matches ``get_query``
+   and does not render audits, macros, or model config.
+6. Use ``get_test`` for one test in a file. Lines use ``L{n} | {source}``.
+7. Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
+   ``include_tests`` defaults to false. On dependents, test files branch under the model they test.
+8. Use ``get_column_relations`` for column dependents or dependencies; DO NOT grep for this.
 
 # CAVEATS
  - A macro is expanded away, so column lineage does not show which macro produced a column.

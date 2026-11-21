@@ -102,13 +102,15 @@ def test_column_relations_dependents_include_tests_when_requested() -> None:
         )
     finally:
         db.close()
-    assert "## Tests\n\ntests/test_orders.yaml" in out
-    assert "tests/test_orders.yaml" in out
     assert (
-        "• test_orders_exist (L1 - L13)\n"
-        "  • test_orders_csv (L14 - L31)\n"
-        "  • test_orders_query (L32 - L41)\n"
+        "sushi.orders / $ / sushi.customers.customer_id (join)\n"
+        "├── tests/test_orders.yaml\n"
+        "│   • test_orders_exist\n"
+        "│   • test_orders_csv\n"
+        "│   • test_orders_query\n"
+        "└── sushi.customer_orders / $ / sushi.customers.customer_id (select, join, group)\n"
     ) in out
+    assert "## Tests" not in out
 
 
 def test_column_relations_missing_column() -> None:

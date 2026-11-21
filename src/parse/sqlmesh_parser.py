@@ -445,6 +445,7 @@ class SQLMeshParser:
             where_condition_count = query["where_condition_count"]
             join_statement_count = query["join_statement_count"]
             group_by_col_count = query["group_by_col_count"]
+            rendered_sql = query["rendered_sql"]
             digest = snapshot_hash(
                 [
                     model_id,
@@ -457,6 +458,7 @@ class SQLMeshParser:
                     where_condition_count,
                     join_statement_count,
                     group_by_col_count,
+                    rendered_sql,
                 ]
             )
             key = f"{model_id}:{name}"
@@ -472,6 +474,7 @@ class SQLMeshParser:
                 "where_condition_count": where_condition_count,
                 "join_statement_count": join_statement_count,
                 "group_by_col_count": group_by_col_count,
+                "rendered_sql": rendered_sql,
                 "snapshot_hash": digest,
             }
             if prior is None:

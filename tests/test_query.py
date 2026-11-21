@@ -12,11 +12,11 @@ _FINAL = (
     "L22 |   status -- Customer status\n"
     "L23 | FROM cte\n"
     "\n"
-    "## Macros Rendered\n"
+    "## Macros\n"
     "\n"
     "  • cents_to_dollars\n"
     "\n"
-    "## Output\n"
+    "## Output Schema\n"
     "\n"
     "  • sushi.customers.customer_id INT NOT NULL\n"
     "  • sushi.customers.amount      DOUBLE\n"
@@ -37,7 +37,48 @@ _cte = (
     "L17 |     ON s.customer_id = o.customer_id\n"
     "L18 | )\n"
     "\n"
-    "## Output\n"
+    "## Output Schema\n"
+    "\n"
+    "  • cte.customer_id  INT\n"
+    "  • cte.customer_id  INT\n"
+    "  • cte.status       TEXT\n"
+    "  • cte.amount_cents INT\n"
+)
+
+
+_RENDERED_FINAL = (
+    "File: models/customers.sql\n"
+    "\n"
+    "SELECT\n"
+    '  "cte"."customer_id" AS "customer_id", /* Customer identifier */\n'
+    '  "cte"."amount_cents" / 100 AS "amount", /* Order amount in dollars */\n'
+    '  "cte"."status" AS "status" /* Customer status */\n'
+    'FROM "cte" AS "cte"\n'
+    "\n"
+    "## Macros Rendered\n"
+    "\n"
+    "  • cents_to_dollars\n"
+    "\n"
+    "## Output Schema\n"
+    "\n"
+    "  • sushi.customers.customer_id INT NOT NULL\n"
+    "  • sushi.customers.amount      DOUBLE\n"
+    "  • sushi.customers.status      TEXT\n"
+)
+
+_RENDERED_CTE = (
+    "File: models/customers.sql\n"
+    "\n"
+    "SELECT\n"
+    '  "s"."customer_id" AS "customer_id",\n'
+    '  "o"."customer_id" AS "customer_id",\n'
+    '  "s"."status" AS "status",\n'
+    '  "o"."amount_cents" AS "amount_cents"\n'
+    'FROM "memory"."raw"."customers" AS "s"\n'
+    'JOIN "memory"."raw"."orders" AS "o"\n'
+    '  ON "o"."customer_id" = "s"."customer_id"\n'
+    "\n"
+    "## Output Schema\n"
     "\n"
     "  • cte.customer_id  INT\n"
     "  • cte.customer_id  INT\n"
@@ -65,6 +106,22 @@ def test_query_defaults_to_the_final_query() -> None:
     finally:
         db.close()
     assert defaulted == explicit == _FINAL
+
+
+def test_query_render_expands_macros_without_file_lines() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        final = get_query(db, "sushi.customers", None, render=True)
+        cte = get_query(db, "sushi.customers", "cte", render=True)
+        at_lines = get_query_at_lines(db, "models/customers.sql", 21, render=True)
+    finally:
+        db.close()
+    assert final == _RENDERED_FINAL
+    assert cte == _RENDERED_CTE
+    assert at_lines == _RENDERED_FINAL.replace(
+        "File: models/customers.sql", "Model: sushi.customers\nQuery: $", 1
+    )
 
 
 def test_query_lists_the_cte() -> None:
@@ -115,7 +172,7 @@ def test_query_header_follows_the_input_kind() -> None:
         "L17 |     ON s.customer_id = o.customer_id\n"
         "L18 | )\n"
         "\n"
-        "## Output\n"
+        "## Output Schema\n"
         "\n"
         "  • cte.customer_id  INT\n"
         "  • cte.customer_id  INT\n"
@@ -133,6 +190,29 @@ def test_query_file_with_several_models_asks_for_a_name() -> None:
     finally:
         db.close()
     assert out == "File contains more than one model; pass a model name."
+
+
+def test_query_external_model_has_no_query() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        out = get_query(db, "raw.customers", None)
+        rendered = get_query(db, "raw.customers", "$", render=True)
+        stored = db.connection.execute(
+            """
+            SELECT queries.rendered_sql
+            FROM queries
+            INNER JOIN models ON models.id = queries.model_id
+            WHERE models.qualified_name = ?
+              AND queries.name = ?
+            """,
+            ("raw.customers", "$"),
+        ).fetchone()
+    finally:
+        db.close()
+    assert out == "EXTERNAL"
+    assert rendered == "EXTERNAL"
+    assert stored["rendered_sql"] is None
 
 
 def test_query_python_model_has_no_sql_source() -> None:
