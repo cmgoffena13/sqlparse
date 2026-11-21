@@ -10,6 +10,11 @@
 
 SQLParse is a SQLMesh project indexer that gives agents fast, accurate, and compact context while reducing token usage. It parses your SQLMesh project and stores those relationships in a local SQLite database.
 
+## Install MCP Server and Skill
+
+1. Put the `sqlparse` binary on your PATH (release asset or `make compile` → `dist/sqlparse`).
+2. `sqlparse install`
+
 ## Tools
 
 | Tool | Description |
