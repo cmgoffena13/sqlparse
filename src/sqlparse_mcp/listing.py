@@ -20,10 +20,13 @@ ORDER BY models.qualified_name
 """
 
 
-def _bullets(names: list[str], empty: str) -> str:
+def _bullets(names: list[str], singular: str, empty: str) -> str:
+    label = singular
+    if len(names) != 1:
+        label = f"{singular}s"
     result = empty
     if names:
-        result = "\n".join(bullet(name) for name in names) + "\n"
+        result = f"{len(names)} {label}\n\n" + "\n".join(bullet(name) for name in names) + "\n"
     return result
 
 
@@ -32,7 +35,7 @@ def list_schemas(db: ProjectDB) -> str:
         f"{row['schema_name']} (EXTERNAL)" if row["external"] else str(row["schema_name"])
         for row in db.connection.execute(_SCHEMAS_SQL)
     ]
-    return _bullets(names, "No schemas found.")
+    return _bullets(names, "Schema", "No schemas found.")
 
 
 def list_models(db: ProjectDB, schema: str) -> str:
@@ -41,7 +44,8 @@ def list_models(db: ProjectDB, schema: str) -> str:
     if key:
         rows = list(db.connection.execute(_MODELS_SQL, (key,)))
         names = [str(row["qualified_name"]) for row in rows]
-        result = _bullets(names, "No models found.")
+        result = _bullets(names, "Model", "No models found.")
         if rows and all(row["kind"] == "EXTERNAL" for row in rows):
-            result = f"EXTERNAL SCHEMA\n\n{result}"
+            count, body = result.split("\n\n", 1)
+            result = f"{count}\n\nEXTERNAL SCHEMA\n\n{body}"
     return result

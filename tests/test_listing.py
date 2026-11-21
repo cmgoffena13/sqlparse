@@ -11,7 +11,7 @@ def test_list_schemas_is_alphabetical() -> None:
         out = list_schemas(db)
     finally:
         db.close()
-    assert out == "  • raw (EXTERNAL)\n  • sushi\n"
+    assert out == "2 Schemas\n\n  • raw (EXTERNAL)\n  • sushi\n"
 
 
 def test_list_models_is_alphabetical() -> None:
@@ -25,6 +25,8 @@ def test_list_models_is_alphabetical() -> None:
     finally:
         db.close()
     assert sushi == (
+        "6 Models\n"
+        "\n"
         "  • sushi.customer_orders\n"
         "  • sushi.customer_status\n"
         "  • sushi.customers\n"
@@ -32,6 +34,6 @@ def test_list_models_is_alphabetical() -> None:
         "  • sushi.raw_seed\n"
         "  • sushi.waiters\n"
     )
-    assert raw == "EXTERNAL SCHEMA\n\n  • raw.customers\n  • raw.orders\n"
+    assert raw == ("2 Models\n\nEXTERNAL SCHEMA\n\n  • raw.customers\n  • raw.orders\n")
     assert missing == "No models found."
     assert blank == "No schema given; pass a schema name."
