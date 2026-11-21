@@ -571,11 +571,11 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO models (
-                    id, file_id, gateway_id, dialect, qualified_name, kind,
+                    id, file_id, gateway_id, dialect, schema_name, qualified_name, kind,
                     time_column, grain, config_start_line, config_end_line, description,
                     snapshot_hash
                 ) VALUES (
-                    :id, :file_id, :gateway_id, :dialect, :qualified_name, :kind,
+                    :id, :file_id, :gateway_id, :dialect, :schema_name, :qualified_name, :kind,
                     :time_column, :grain, :config_start_line, :config_end_line, :description,
                     :snapshot_hash
                 )

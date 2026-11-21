@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS models (
     file_id             INTEGER NOT NULL REFERENCES files(id),
     gateway_id          INTEGER NOT NULL REFERENCES project_gateways(id),
     dialect             TEXT NOT NULL,
+    schema_name         TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
     kind                TEXT NOT NULL,
     time_column         TEXT NULL,
@@ -55,7 +56,7 @@ CREATE TABLE IF NOT EXISTS models (
     config_start_line   INTEGER NOT NULL,
     config_end_line     INTEGER NOT NULL,
     description         TEXT NULL,
-    snapshot_hash            TEXT NOT NULL
+    snapshot_hash       TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS models_qualified_name_index ON models (qualified_name);
 

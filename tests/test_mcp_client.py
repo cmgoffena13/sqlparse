@@ -13,6 +13,8 @@ from src.sqlparse_mcp.skill import SKILL_INSTRUCTIONS
 from tests.conftest import FIXTURE_PROJECT
 
 _TOOLS = {
+    "list_models",
+    "list_schemas",
     "search",
     "get_directory_tree",
     "get_model",

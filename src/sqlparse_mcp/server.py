@@ -12,6 +12,8 @@ from src.processor import ProjectProcessor
 from src.sqlparse_mcp.audit import get_audit as run_get_audit
 from src.sqlparse_mcp.column_relations import get_column_relations as run_get_column_relations
 from src.sqlparse_mcp.directory_tree import get_directory_tree as run_get_directory_tree
+from src.sqlparse_mcp.listing import list_models as run_list_models
+from src.sqlparse_mcp.listing import list_schemas as run_list_schemas
 from src.sqlparse_mcp.macro import get_macro as run_get_macro
 from src.sqlparse_mcp.model import get_model as run_get_model
 from src.sqlparse_mcp.model_relations import get_model_relations as run_get_model_relations
@@ -84,6 +86,18 @@ def search(ctx: Context, query: str, limit: int = 20) -> str:
     Narrow with one distinctive word; Widen with extra space-separated words (OR).
     """
     return run_search(_db(ctx), query, limit)
+
+
+@mcp.tool()
+def list_schemas(ctx: Context) -> str:
+    """Return every schema name."""
+    return run_list_schemas(_db(ctx))
+
+
+@mcp.tool()
+def list_models(ctx: Context, schema: str) -> str:
+    """Return the model names in one schema."""
+    return run_list_models(_db(ctx), schema)
 
 
 @mcp.tool()

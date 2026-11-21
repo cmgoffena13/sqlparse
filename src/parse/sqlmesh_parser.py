@@ -305,6 +305,7 @@ class SQLMeshParser:
         models_snapshot: dict[str, ModelSnapshot],
     ) -> None:
         qualified_name = model.name
+        schema_name = model.schema_name
         kind = model.kind.name
         time_column = model_time_column(model)
         grain = model_grain(model)
@@ -320,6 +321,7 @@ class SQLMeshParser:
                 file_id,
                 gateway_id,
                 dialect,
+                schema_name,
                 qualified_name,
                 kind,
                 time_column,
@@ -338,6 +340,7 @@ class SQLMeshParser:
                     "file_id": file_id,
                     "gateway_id": gateway_id,
                     "dialect": dialect,
+                    "schema_name": schema_name,
                     "qualified_name": qualified_name,
                     "kind": kind,
                     "time_column": time_column,
@@ -357,6 +360,7 @@ class SQLMeshParser:
                         "file_id": file_id,
                         "gateway_id": gateway_id,
                         "dialect": dialect,
+                        "schema_name": schema_name,
                         "qualified_name": qualified_name,
                         "kind": kind,
                         "time_column": time_column,

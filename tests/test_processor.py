@@ -44,7 +44,7 @@ def test_processor_indexes_files_and_directories() -> None:
         first_models = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
-                "SELECT id, file_id, gateway_id, dialect, qualified_name, kind, "
+                "SELECT id, file_id, gateway_id, dialect, schema_name, qualified_name, kind, "
                 "time_column, grain, config_start_line, config_end_line, description, "
                 "snapshot_hash FROM models"
             )
@@ -130,7 +130,7 @@ def test_processor_indexes_files_and_directories() -> None:
         second_models = {
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
-                "SELECT id, file_id, gateway_id, dialect, qualified_name, kind, "
+                "SELECT id, file_id, gateway_id, dialect, schema_name, qualified_name, kind, "
                 "time_column, grain, config_start_line, config_end_line, description, "
                 "snapshot_hash FROM models"
             )
@@ -323,6 +323,9 @@ def test_processor_indexes_files_and_directories() -> None:
         for row in first_models.values()
     )
     assert second_models == first_models
+    assert first_models[CUSTOMERS_FQN]["schema_name"] == "sushi"
+    assert first_models[RAW_CUSTOMERS_FQN]["schema_name"] == "raw"
+    assert first_models[RAW_SEED_FQN]["schema_name"] == "sushi"
     assert first_models[CUSTOMERS_FQN]["qualified_name"] == "sushi.customers"
     assert '"' not in first_models[CUSTOMERS_FQN]["qualified_name"]
     assert first_columns["sushi.customers/$/cte.customer_id"]["query_name"] == "sushi.customers/$"
