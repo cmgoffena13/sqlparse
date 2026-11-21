@@ -124,20 +124,6 @@ WHERE model_macros.model_id = ?
 ORDER BY files.path, model_macros.macro_name
 """
 
-_SCHEMA_SQL = """
-SELECT
-    columns.name,
-    columns.data_type,
-    columns.nullable
-FROM columns
-INNER JOIN queries
-    ON queries.id = columns.query_id
-WHERE queries.model_id = ?
-  AND queries.name = '$'
-  AND columns.is_select = 1
-ORDER BY columns.line_start, columns.line_end, columns.name
-"""
-
 _AUDITS_SQL = """
 SELECT
     model_audits.audit_name,
@@ -158,23 +144,6 @@ def _model_facts(kind: str, time_column: str | None, grain: str | None) -> list[
         lines.append(f"Time Column: {time_column}")
     if grain is not None:
         lines.append(f"Grain: {grain}")
-    return lines
-
-
-def _schema_section(db: ProjectDB, model_id: int, model_name: str) -> list[str]:
-    rows = list(db.connection.execute(_SCHEMA_SQL, (model_id,)))
-    lines: list[str] = []
-    if rows:
-        labels = [f"{model_name}.{row['name']}" for row in rows]
-        width = max(len(label) for label in labels)
-        body = [
-            bullet(
-                f"{label:<{width}} {row['data_type']}"
-                + (" NOT NULL" if row["nullable"] == 0 else "")
-            )
-            for row, label in zip(rows, labels, strict=True)
-        ]
-        lines = ["## Schema", "", *body]
     return lines
 
 
@@ -245,7 +214,6 @@ def get_model(db: ProjectDB, target: str) -> str:
                         *_query_lines(children, labels, None, ""),
                     ]
                 )
-                sections.append(_schema_section(db, model_id, str(model["qualified_name"])))
                 macros = [
                     (str(row["file_path"]), str(row["macro_name"]))
                     for row in db.connection.execute(_MACROS_SQL, (model_id,))

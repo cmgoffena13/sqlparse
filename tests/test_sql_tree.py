@@ -25,12 +25,6 @@ def test_sql_tree_by_model_name_lists_queries_with_counts() -> None:
         "$ (3 select columns)\n"
         "└── $cte (4 select columns, 1 join)\n"
         "\n"
-        "## Schema\n"
-        "\n"
-        "  • sushi.customers.customer_id INT NOT NULL\n"
-        "  • sushi.customers.amount      DOUBLE\n"
-        "  • sushi.customers.status      TEXT\n"
-        "\n"
         "## Macro Refs\n"
         "\n"
         "macros/cents_to_dollars.sql\n"
@@ -58,12 +52,6 @@ def test_sql_tree_by_file_path() -> None:
         "\n"
         "$ (3 select columns)\n"
         "└── $cte (4 select columns, 1 join)\n"
-        "\n"
-        "## Schema\n"
-        "\n"
-        "  • sushi.customers.customer_id INT NOT NULL\n"
-        "  • sushi.customers.amount      DOUBLE\n"
-        "  • sushi.customers.status      TEXT\n"
         "\n"
         "## Macro Refs\n"
         "\n"
@@ -93,11 +81,6 @@ def test_sql_tree_nests_ctes_under_the_final_query() -> None:
         "$ (2 select columns)\n"
         "├── $base (2 select columns)\n"
         "└── $filtered (2 select columns, 1 where condition)\n"
-        "\n"
-        "## Schema\n"
-        "\n"
-        "  • sushi.customer_status.customer_id INT\n"
-        "  • sushi.customer_status.status      TEXT\n"
     )
 
 
@@ -115,12 +98,6 @@ def test_sql_tree_counts_where_ands_and_one_group_by() -> None:
         "## SQL Tree\n"
         "\n"
         "$ (3 select columns, 1 join, 1 where condition, grouped by 3 columns)\n"
-        "\n"
-        "## Schema\n"
-        "\n"
-        "  • sushi.customer_orders.customer_id INT\n"
-        "  • sushi.customer_orders.status      TEXT\n"
-        "  • sushi.customer_orders.order_id    UNKNOWN\n"
     )
 
 

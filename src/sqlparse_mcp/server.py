@@ -99,7 +99,7 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
 @mcp.tool()
 def get_model(ctx: Context, target: str) -> str:
     """
-    Return a model's SQL tree, ``$`` output schema, macro refs, and audit refs.
+    Return a model's SQL tree, macro refs, and audit refs.
 
     A model name starts with ``File:``. A file path starts with ``Model:``.
 
