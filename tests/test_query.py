@@ -1,6 +1,6 @@
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
-from src.sqlparse_mcp.query import get_query, get_query_at_lines
+from src.sqlparse_mcp.query import get_query, get_span_at_lines
 from tests.conftest import FIXTURE_PROJECT
 
 _FINAL = (
@@ -114,14 +114,10 @@ def test_query_render_expands_macros_without_file_lines() -> None:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
         final = get_query(db, "sushi.customers", None, render=True)
         cte = get_query(db, "sushi.customers", "cte", render=True)
-        at_lines = get_query_at_lines(db, "models/customers.sql", 21, render=True)
     finally:
         db.close()
     assert final == _RENDERED_FINAL
     assert cte == _RENDERED_CTE
-    assert at_lines == _RENDERED_FINAL.replace(
-        "File: models/customers.sql", "Model: sushi.customers\nQuery: $", 1
-    )
 
 
 def test_query_lists_the_cte() -> None:
@@ -269,12 +265,12 @@ def test_query_python_model_has_no_sql_source() -> None:
     assert out == "No SQL source for this query."
 
 
-def test_query_at_lines_returns_the_containing_query() -> None:
+def test_span_at_lines_returns_the_containing_query() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        cte = get_query_at_lines(db, "models/customers.sql", 12)
-        final = get_query_at_lines(db, "models/customers.sql", 21)
+        cte = get_span_at_lines(db, "models/customers.sql", 12)
+        final = get_span_at_lines(db, "models/customers.sql", 21)
     finally:
         db.close()
     assert cte == _cte.replace(
@@ -285,15 +281,16 @@ def test_query_at_lines_returns_the_containing_query() -> None:
     )
 
 
-def test_query_at_lines_on_model_config_shows_the_config() -> None:
+def test_span_at_lines_on_model_config_shows_the_config() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        out = get_query_at_lines(db, "models/customers.sql", 2, 4)
+        out = get_span_at_lines(db, "models/customers.sql", 2, 4)
     finally:
         db.close()
     assert out == (
         "Model: sushi.customers\n"
+        "Query: MODEL\n"
         "\n"
         "L1 | MODEL (\n"
         "L2 |   name sushi.customers,\n"
@@ -304,11 +301,11 @@ def test_query_at_lines_on_model_config_shows_the_config() -> None:
     )
 
 
-def test_query_at_lines_lists_overlapping_query_names() -> None:
+def test_span_at_lines_lists_overlapping_query_names() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        out = get_query_at_lines(db, "models/customer_status.sql", 11, 16)
+        out = get_span_at_lines(db, "models/customer_status.sql", 11, 16)
     finally:
         db.close()
     assert out == (
@@ -318,11 +315,11 @@ def test_query_at_lines_lists_overlapping_query_names() -> None:
     )
 
 
-def test_query_at_lines_uses_the_closest_query_beside_the_range() -> None:
+def test_span_at_lines_uses_the_closest_query_beside_the_range() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        out = get_query_at_lines(db, "models/customers.sql", 8)
+        out = get_span_at_lines(db, "models/customers.sql", 8)
     finally:
         db.close()
     assert out == _cte.replace(
@@ -330,25 +327,25 @@ def test_query_at_lines_uses_the_closest_query_beside_the_range() -> None:
     )
 
 
-def test_query_at_lines_python_body_has_no_query() -> None:
+def test_span_at_lines_python_body_has_no_query() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        missing = get_query_at_lines(db, "models/missing.sql", 1)
-        python_body = get_query_at_lines(db, "models/waiters.py", 12)
-        blank = get_query_at_lines(db, " ", 1)
+        missing = get_span_at_lines(db, "models/missing.sql", 1)
+        python_body = get_span_at_lines(db, "models/waiters.py", 12)
+        blank = get_span_at_lines(db, " ", 1)
     finally:
         db.close()
     assert missing == "No model found."
     assert python_body == "No query found."
-    assert blank == "No file path given; pass a model file path."
+    assert blank == "No file path given; pass a file path."
 
 
-def test_query_at_lines_returns_an_audit() -> None:
+def test_span_at_lines_returns_an_audit() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        out = get_query_at_lines(db, "audits/not_null_customer_id.sql", 6)
+        out = get_span_at_lines(db, "audits/not_null_customer_id.sql", 6)
     finally:
         db.close()
     assert out == (
@@ -361,16 +358,20 @@ def test_query_at_lines_returns_an_audit() -> None:
         "L5 | SELECT *\n"
         "L6 | FROM @this_model\n"
         "L7 | WHERE customer_id IS NULL\n"
+        "\n"
+        "## Models\n"
+        "\n"
+        "  • sushi.customers\n"
     )
     assert "## Output" not in out
 
 
-def test_query_at_lines_returns_a_macro() -> None:
+def test_span_at_lines_returns_a_macro() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        jinja = get_query_at_lines(db, "macros/cents_to_dollars.sql", 2)
-        python = get_query_at_lines(db, "macros/identity.py", 5)
+        jinja = get_span_at_lines(db, "macros/cents_to_dollars.sql", 2)
+        python = get_span_at_lines(db, "macros/identity.py", 5)
     finally:
         db.close()
     assert jinja == (
@@ -379,6 +380,10 @@ def test_query_at_lines_returns_a_macro() -> None:
         "L1 | {% macro cents_to_dollars(column) %}\n"
         "L2 |   {{ column }} / 100\n"
         "L3 | {% endmacro %}\n"
+        "\n"
+        "## Models\n"
+        "\n"
+        "  • sushi.customers\n"
     )
     assert python == (
         "Macro: identity\n"
@@ -388,24 +393,58 @@ def test_query_at_lines_returns_a_macro() -> None:
         "L6 |     return expr\n"
     )
     assert "## Output" not in jinja
+    assert "## Models" not in python
     assert "## Output" not in python
 
 
-def test_query_at_lines_keeps_audits_and_macros_in_their_directories() -> None:
+def test_span_at_lines_returns_a_test() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        missing_audit = get_query_at_lines(db, "audits/missing.sql", 1)
-        missing_macro = get_query_at_lines(db, "macros/missing.sql", 1)
-        nested_audit = get_query_at_lines(db, "team/audits/missing.sql", 1)
-        nested_macro = get_query_at_lines(db, "team/macros/missing.py", 1)
-        named_like_audit = get_query_at_lines(db, "models/audits.sql", 1)
-        model = get_query_at_lines(db, "models/customers.sql", 12)
+        out = get_span_at_lines(db, "tests/test_orders.yaml", 6)
+    finally:
+        db.close()
+    assert out == (
+        "Test: test_orders_exist\n"
+        "\n"
+        "L1  | test_orders_exist:\n"
+        "L2  |   model: sushi.orders\n"
+        "L3  |   inputs:\n"
+        "L4  |     sushi.customers:\n"
+        "L5  |       rows:\n"
+        "L6  |         - customer_id: 1\n"
+        "L7  |           status: active\n"
+        "L8  |   outputs:\n"
+        "L9  |     query:\n"
+        "L10 |       rows:\n"
+        "L11 |         - order_id: 1\n"
+        "L12 |           customer_id: 1\n"
+        "L13 | \n"
+    )
+    assert "## Output" not in out
+
+
+def test_span_at_lines_keeps_audits_macros_and_tests_in_their_directories() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        missing_audit = get_span_at_lines(db, "audits/missing.sql", 1)
+        missing_macro = get_span_at_lines(db, "macros/missing.sql", 1)
+        missing_test = get_span_at_lines(db, "tests/missing.yaml", 1)
+        nested_audit = get_span_at_lines(db, "team/audits/missing.sql", 1)
+        nested_macro = get_span_at_lines(db, "team/macros/missing.py", 1)
+        nested_test = get_span_at_lines(db, "team/tests/missing.yaml", 1)
+        named_like_audit = get_span_at_lines(db, "models/audits.sql", 1)
+        named_like_test = get_span_at_lines(db, "models/tests.sql", 1)
+        model = get_span_at_lines(db, "models/customers.sql", 12)
     finally:
         db.close()
     assert missing_audit == "No audit found."
     assert missing_macro == "No macro found."
+    assert missing_test == "No test found."
     assert nested_audit == "No audit found."
     assert nested_macro == "No macro found."
+    assert nested_test == "No test found."
     assert named_like_audit == "No model found."
+    assert named_like_test == "No model found."
     assert model.startswith("Model: sushi.customers\nQuery: $cte")

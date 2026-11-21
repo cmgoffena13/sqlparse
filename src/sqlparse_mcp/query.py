@@ -98,6 +98,38 @@ WHERE files.path = ?
 ORDER BY macros.line_start, macros.name
 """
 
+_FILE_TESTS_SQL = """
+SELECT
+    tests.name,
+    tests.line_start,
+    tests.line_end
+FROM tests
+INNER JOIN files
+    ON files.id = tests.file_id
+WHERE files.path = ?
+ORDER BY tests.line_start, tests.name
+"""
+
+_MACRO_MODELS_SQL = """
+SELECT
+    models.qualified_name
+FROM model_macros
+INNER JOIN models
+    ON models.id = model_macros.model_id
+WHERE model_macros.macro_name = ?
+ORDER BY models.qualified_name
+"""
+
+_AUDIT_MODELS_SQL = """
+SELECT
+    models.qualified_name
+FROM model_audits
+INNER JOIN models
+    ON models.id = model_audits.model_id
+WHERE model_audits.audit_name = ?
+ORDER BY models.qualified_name
+"""
+
 _QUERY_MACROS_SQL = """
 SELECT macros.name
 FROM model_macros
@@ -408,11 +440,17 @@ def _path_kind(path: str) -> str:
             kind = "audit"
         elif part == "macros":
             kind = "macro"
+        elif part == "tests":
+            kind = "test"
     return kind
 
 
 def _stored_spans(db: ProjectDB, path: str, kind: str) -> list[_LineSpan]:
-    sql = _FILE_AUDITS_SQL if kind == "audit" else _FILE_MACROS_SQL
+    sql = {
+        "audit": _FILE_AUDITS_SQL,
+        "macro": _FILE_MACROS_SQL,
+        "test": _FILE_TESTS_SQL,
+    }[kind]
     spans: list[_LineSpan] = []
     for row in db.connection.execute(sql, (path,)):
         name = str(row["name"])
@@ -430,7 +468,7 @@ def _stored_spans(db: ProjectDB, path: str, kind: str) -> list[_LineSpan]:
 
 
 def _span_label(span: _LineSpan) -> str:
-    label = f"{span['model_name']} (model config)"
+    label = f"{span['model_name']}/MODEL"
     if span["kind"] == "query":
         label = (
             f"{span['model_name']}/{_shown_query_name(span['query_name'], span['display_name'])}"
@@ -439,6 +477,8 @@ def _span_label(span: _LineSpan) -> str:
         label = f"Audit: {span['model_name']}"
     elif span["kind"] == "macro":
         label = f"Macro: {span['model_name']}"
+    elif span["kind"] == "test":
+        label = f"Test: {span['model_name']}"
     return label
 
 
@@ -470,8 +510,15 @@ def _matching_spans(spans: list[_LineSpan], start: int, end: int) -> list[_LineS
     return chosen
 
 
-def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan, render: bool) -> str:
+def _referenced_models(db: ProjectDB, kind: str, name: str) -> list[str]:
+    sql = _AUDIT_MODELS_SQL if kind == "audit" else _MACRO_MODELS_SQL
+    return [str(row["qualified_name"]) for row in db.connection.execute(sql, (name,))]
+
+
+def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
     columns: list[tuple[str, str, int | None]] = []
+    macros: list[str] = []
+    detail = f"Model: {span['model_name']}"
     if span["kind"] == "query":
         columns = [
             (
@@ -483,33 +530,35 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan, render: bool)
                 _COLUMNS_SQL, (span["model_name"], span["query_name"])
             )
         ]
-    header = f"Model: {span['model_name']}"
-    macros: list[str] = []
-    sql = None
-    if span["kind"] == "query":
         shown = _shown_query_name(span["query_name"], span["display_name"])
-        header = f"{header}\nQuery: {shown}"
+        detail = f"{detail}\nQuery: {shown}"
         source = "\n".join(lines[span["start"] - 1 : span["end"]])
         macros = _query_macros(db, span["model_name"], source)
-        if render:
-            sql = _rendered_sql(db, span["model_name"], span["query_name"])
+    elif span["kind"] == "config":
+        detail = f"{detail}\nQuery: MODEL"
     elif span["kind"] == "audit":
-        header = f"Audit: {span['model_name']}"
+        detail = f"Audit: {span['model_name']}"
     elif span["kind"] == "macro":
-        header = f"Macro: {span['model_name']}"
-    result = "No SQL source for this query."
-    if not render or span["kind"] != "query" or sql is not None:
-        result = _format_query(
-            header,
-            lines,
-            span["start"],
-            span["end"],
-            span["display_name"],
-            columns,
-            macros,
-            sql,
-        )
-    return result
+        detail = f"Macro: {span['model_name']}"
+    elif span["kind"] == "test":
+        detail = f"Test: {span['model_name']}"
+    text = _format_query(
+        detail,
+        lines,
+        span["start"],
+        span["end"],
+        span["display_name"],
+        columns,
+        macros,
+        None,
+    )
+    referenced: list[str] = []
+    if span["kind"] in {"audit", "macro"}:
+        referenced = _referenced_models(db, span["kind"], span["model_name"])
+    if referenced:
+        footer = "\n".join(["## Models", "", *[bullet(name) for name in referenced]])
+        text = f"{text}\n{footer}\n"
+    return text
 
 
 def _render_many(spans: list[_LineSpan]) -> str:
@@ -518,35 +567,41 @@ def _render_many(spans: list[_LineSpan]) -> str:
         heading = "Multiple audits found:"
     elif spans[0]["kind"] == "macro":
         heading = "Multiple macros found:"
+    elif spans[0]["kind"] == "test":
+        heading = "Multiple tests found:"
     lines = [heading]
     for span in spans:
         lines.append(bullet(f"{_span_label(span)} L{span['start']}-L{span['end']}"))
     return "\n".join(lines) + "\n"
 
 
-def get_query_at_lines(
+def get_span_at_lines(
     db: ProjectDB,
     file_path: str,
     start_line: int,
     end_line: int | None = None,
-    render: bool = False,
 ) -> str:
     end = start_line if end_line is None else end_line
     key = file_path.strip()
-    result = "No file path given; pass a model file path."
+    result = "No file path given; pass a file path."
     if key:
         path = _normalize_file_path(key, db.root)
         kind = _path_kind(path)
         spans: list[_LineSpan] = []
         text = ""
-        result = "No model found."
+        missing = {
+            "model": "No model found.",
+            "audit": "No audit found.",
+            "macro": "No macro found.",
+            "test": "No test found.",
+        }
+        result = missing[kind]
         if kind == "model":
             models = list(db.connection.execute(_FILE_MODELS_SQL, (path,)))
             if models:
                 text = (db.root / path).read_text(encoding="utf-8")
                 spans = _file_spans(text, models)
         else:
-            result = "No audit found." if kind == "audit" else "No macro found."
             spans = _stored_spans(db, path, kind)
             if spans:
                 text = (db.root / path).read_text(encoding="utf-8")
@@ -555,7 +610,7 @@ def get_query_at_lines(
             if kind == "model" and not chosen:
                 result = "No query found."
             elif len(chosen) == 1:
-                result = _render_span(db, text.splitlines(), chosen[0], render)
+                result = _render_span(db, text.splitlines(), chosen[0])
             elif chosen:
                 result = _render_many(chosen)
     return result

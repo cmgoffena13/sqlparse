@@ -17,7 +17,7 @@ from src.sqlparse_mcp.model import get_model as run_get_model
 from src.sqlparse_mcp.model_relations import get_model_relations as run_get_model_relations
 from src.sqlparse_mcp.model_test import get_test as run_get_test
 from src.sqlparse_mcp.query import get_query as run_get_query
-from src.sqlparse_mcp.query import get_query_at_lines as run_get_query_at_lines
+from src.sqlparse_mcp.query import get_span_at_lines as run_get_span_at_lines
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.skill import DESCRIPTION, SKILL_INSTRUCTIONS
 from src.utils import get_sqlparse_config_dir
@@ -121,26 +121,24 @@ def get_query(
 
 
 @mcp.tool()
-def get_query_at_lines(
+def get_span_at_lines(
     ctx: Context,
     file_path: str,
     start_line: int,
     end_line: int | None = None,
-    render: bool = False,
 ) -> str:
     """
-    Return the query, model config, audit, or macro
-    that contains the line range ``start_line`` through ``end_line``.
+    Return the query, audit, macro, or test that contains ``start_line`` through ``end_line``.
 
     ``end_line`` defaults to ``start_line``. The tightest match that contains the
     whole range is returned. A range that crosses queries lists each query name.
-    A range on the model config returns that config instead of a query.
-    A path with an ``audits`` directory is an audit, and a ``macros`` directory is a macro.
-    Those return their source without an output section.
-    ``render`` defaults to false. When true, a query's macros are expanded and file line
-    numbers are omitted. Audits, macros, and model config stay as source.
+    ``MODEL`` is a query. A query starts with ``Model:`` and ``Query:``.
+    A macro, audit, or test starts with its name.
+    Macros and audits list referencing models under ``## Models``.
+    A path with an ``audits``, ``macros``, or ``tests`` directory returns that kind.
+    Audits, macros, and tests return source without an output section.
     """
-    return run_get_query_at_lines(_db(ctx), file_path, start_line, end_line, render)
+    return run_get_span_at_lines(_db(ctx), file_path, start_line, end_line)
 
 
 @mcp.tool()
@@ -204,11 +202,11 @@ def get_column_relations(
 ) -> str:
     """
     Return column relations for ``model_name`` / ``query_name`` / ``column_name``.
+    ``query_name`` defaults to ``$`` (final output query).
 
     ``dependencies`` lists upstream columns this column reads.
     ``dependents`` lists downstream columns that read it.
 
-    ``query_name`` defaults to ``$`` (final output query).
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
     return run_get_column_relations(

@@ -23,10 +23,11 @@ _SKILL_BODY = """\
    ``render`` defaults to false. Pass true to expand macros and drop file line numbers.
    ``render`` leaves the ``MODEL`` config as source.
    An external model returns ``EXTERNAL`` because it has no query.
-5. Use ``get_query_at_lines`` for a file path and line range. It returns the tightest query
-   that contains the range, each overlapping query name when the range crosses queries,
-   and the model config when the range is on the MODEL block. ``render`` matches ``get_query``
-   and does not render audits, macros, or model config.
+5. Use ``get_span_at_lines`` for a file path and line range. It returns the tightest query,
+   audit, macro, or test that contains the range. A query starts with ``Model:`` and ``Query:``.
+   A macro, audit, or test starts with its name. ``MODEL`` is a query. A range that crosses
+   queries lists each name. Macros and audits list referencing models under ``## Models``.
+   Audits, macros, and tests return source without an output section.
 6. Use ``get_test`` for one test in a file. Lines use ``L{n} | {source}``.
 7. Use ``get_macro`` for one macro in a file. Lines use ``L{n} | {source}``.
    Models that call it are listed under ``## Models``.

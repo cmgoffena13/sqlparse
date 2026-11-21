@@ -69,10 +69,10 @@ async def _print_tools() -> None:
             ),
         )
         _print_section(
-            "QUERY AT LINES",
+            "SPAN",
             _body(
                 await client.call_tool(
-                    "get_query_at_lines",
+                    "get_span_at_lines",
                     {"file_path": "models/customers.sql", "start_line": 12},
                 )
             ),
