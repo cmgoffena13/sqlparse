@@ -28,12 +28,6 @@ from src.utils import get_sqlparse_config_dir
 _INSTRUCTIONS = """\
 sqlparse tools read an up-to-date view of a SQLMesh project.
 
-Queries/CTEs are prefixed with ``$``. 
-A single ``$`` is the final output query.
-Model Config is treated as a query and called ``$CONFIG``.
-EXTERNAL models have no query and return an ``$EXTERNAL`` placeholder value.
-Ex. ``$``, ``$cte_name``, or ``$CONFIG``.
-
 Utilize the ``sqlparse`` skill for guided exploration workflows.
 Use the ``skill://sqlparse/SKILL.md`` resource if the skill is not found.
 """
@@ -129,6 +123,7 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
     Return the project's directory/file tree with line counts.
 
     Optional ``directory_path`` scopes to one directory tree (exact path).
+    Ex. `audits/`
     """
     return run_get_directory_tree(_db(ctx), directory_path)
 
@@ -149,7 +144,7 @@ def get_query(
     ctx: Context, target: str, query_name: str | None = None, render: bool = False
 ) -> str:
     """
-    Return a query's output schema and definition for a model name or model file path.
+    Return a query's output schema and definition.
 
     Target can be a model name or model file path.
     Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
@@ -212,9 +207,6 @@ def get_model_relations(
     """
     Return model relations for ``model_name``.
 
-    ``dependencies`` lists upstream models this model reads.
-    ``dependents`` lists downstream models that read it.
-
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
     return run_get_model_relations(_db(ctx), model_name, relation, include_tests, page)
@@ -232,12 +224,10 @@ def get_column_relations(
 ) -> str:
     """
     Return column relations for ``model_name`` / ``query_name`` / ``column_name``.
-    ``query_name`` defaults to ``$`` (final output query) if not provided.
+
+    ``query_name`` defaults to ``$`` if not provided.
     ``column_name`` should include the query (without the ``$``) or table name.
     Ex. ``cte_name.customer_id`` or ``schema.table.column``
-
-    ``dependencies`` lists upstream columns this column reads.
-    ``dependents`` lists downstream columns that read it.
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """

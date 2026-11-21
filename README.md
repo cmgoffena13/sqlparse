@@ -10,6 +10,30 @@
 
 SQLParse is a SQLMesh project indexer that gives agents fast, accurate, and compact context while reducing token usage. It parses your SQLMesh project and stores those relationships in a local SQLite database.
 
+## Tools
+
+| Tool | Description |
+| --- | --- |
+| `list_schemas` | Return every schema name. |
+| `list_models` | Return the model names in one schema. |
+| `get_directory_tree` | Return the project's directory/file tree with line counts. |
+| `search` | Full-text search model, query, and column names. |
+| `get_model` | Return a model's SQL tree, macro refs, and audit refs. |
+| `get_query` | Return a query's output schema and definition. |
+| `get_span_at_lines` | Return the query, audit, macro, or test that covers a line range. |
+| `get_test` | Return a test definition. |
+| `get_macro` | Return a macro's definition and the models that use it. |
+| `get_audit` | Return an audit's definition and the models that use it. |
+| `get_model_relations` | Return dependents or dependencies for one model. |
+| `get_column_relations` | Return dependents or dependencies for one column. |
+
+## Resources
+
+| Resource | Description |
+| --- | --- |
+| `skill://sqlparse/SKILL.md` | Guided exploration skill for navigating SQLMesh projects. |
+| `stats://sqlparse/sessions` | Per-session markdown table of files with tool calls and a tokens-saved range. |
+
 ## Commands
 
 | Command | Description |

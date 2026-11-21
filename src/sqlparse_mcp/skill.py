@@ -8,10 +8,17 @@ DESCRIPTION = "Use when navigating SQLMesh projects: models, queries, columns, a
 
 _SKILL_BODY = """\
 # IMPORTANT RULES
- - ALWAYS use sqlparse tools to read queries, model configs, audits, macros, and tests.
+ - ALWAYS use sqlparse tools to read queries, audits, macros, and tests.
  - NEVER use ``read`` or ``grep .`` on a SQL file or directory.
  - Only ``include_tests`` when making changes to the codebase. 
  - DO NOT ``include_tests`` when investigating unless explicitly asked.
+
+# Tool Inputs
+ - Query names are prefixed with ``$``. 
+ - A single ``$`` is the final output query of the model.
+ - Model Config is treated as a query and called ``$CONFIG``.
+ - EXTERNAL models have no query and return an ``$EXTERNAL`` placeholder value.
+ - Ex. ``$``, ``$cte_name``, or ``$CONFIG``.
 
 # INSTRUCTIONS
 
@@ -25,7 +32,7 @@ The information that is provided to you will determine the tool you should use.
 1. Use ``get_query`` to read the query's output schema and definition.
 
 ## You are given a file name and line numbers from ``grep`` or a ``code selection`` in Cursor.
-1. Use ``get_span_at_lines`` to read the query, model config, audit, macro, or test at a line range.
+1. Use ``get_span_at_lines`` to read the query, audit, macro, or test at a line range.
 
 ## You are NOT given a file name, model name, or query name.
 1. Investigate the project using ``list_schemas``, ``list_models``, and keywords
