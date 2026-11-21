@@ -27,7 +27,8 @@ from src.utils import get_sqlparse_config_dir
 _INSTRUCTIONS = """\
 sqlparse tools read an up-to-date view of a SQLMesh project.
 
-Queries/CTEs are prefixed with ``$``. A single ``$`` is the final output query.
+Queries/CTEs are prefixed with ``$``. 
+A single ``$`` is the final output query.
 Model Config is treated as a query and called ``MODEL``.
 EXTERNAL models have no query and return ``EXTERNAL``.
 Ex. ``$``, ``$cte_name``, ``MODEL``, or ``EXTERNAL``.

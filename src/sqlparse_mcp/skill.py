@@ -8,44 +8,11 @@ DESCRIPTION = "Use when navigating a SQLMesh project: models, queries, columns, 
 
 _SKILL_BODY = """\
 # IMPORTANT RULES
- - ALWAYS use sqlparse tools to read models, lineage, and indexed project files.
- - NEVER use ``read`` or ``grep .`` on a model file when a sqlparse tool can answer.
 
 # INSTRUCTIONS
 
-1. Use ``list_schemas`` to list schema names. An external schema is marked ``(EXTERNAL)``.
-2. Use ``list_models`` to list model names in one schema. An external schema starts with
-   ``EXTERNAL SCHEMA``.
-3. Use ``search`` to find models, queries, and columns by name.
-4. Use ``get_directory_tree`` to browse files. ``get_model`` accepts a file path.
-5. Use ``get_model`` for a model's SQL tree, macro refs, and audit refs.
-   A model name starts with ``File:``. A file path starts with ``Model:``.
-   It lists model kind. Grain and the time column are included when the model has them.
-6. Use ``get_query`` to read one query's source for a model name or model file path.
-   ``query_name`` ``MODEL`` returns the model config with file line numbers.
-   ``render`` defaults to false. Pass true to expand macros and drop file line numbers.
-   ``render`` leaves the ``MODEL`` config as source.
-   An external model returns ``EXTERNAL`` because it has no query.
-7. Use ``get_span_at_lines`` for a file path and line range. It returns the tightest query,
-   audit, macro, or test that contains the range. A query starts with ``Model:`` and ``Query:``.
-   A macro, audit, or test starts with its name. ``MODEL`` is a query. A range that crosses
-   queries lists each name. Macros and audits list referencing models under ``## Models``.
-   Audits, macros, and tests return source without an output section.
-8. Use ``get_test`` for one test in a file. Lines use ``L{n} | {source}``.
-9. Use ``get_macro`` for one macro in a file. Lines use ``L{n} | {source}``.
-   Models that call it are listed under ``## Models``.
-10. Use ``get_audit`` for one audit in a file. Lines use ``L{n} | {source}``.
-   Models that use it are listed under ``## Models``.
-11. Use ``get_model_relations`` for model dependents or dependencies; DO NOT grep for this.
-   ``include_tests`` defaults to false. On dependents, test files branch under the model they test.
-12. Use ``get_column_relations`` for column dependents or dependencies; DO NOT grep for this.
-
 # CAVEATS
- - A macro is expanded away, so column lineage does not show which macro produced a column.
- - A macro change affects columns only after rendering before and after the change.
- - ``data_type`` is ``UNKNOWN`` when a select column is ambiguous. Alias the
-   column correctly and enable SQLMesh's ``AmbiguousOrInvalidColumn`` linter
-   rule to avoid it in the future.
+ - Enable SQLMesh's ``AmbiguousOrInvalidColumn`` linter rule to to get proper column names / types.
 """
 
 
