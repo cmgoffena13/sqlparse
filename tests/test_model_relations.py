@@ -1,3 +1,6 @@
+import pytest
+
+import src.sqlparse_mcp.model_relations as model_relations_mod
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.model_relations import get_model_relations
@@ -65,3 +68,22 @@ def test_model_relations_missing_model() -> None:
     finally:
         db.close()
     assert out == "No relations."
+
+
+def test_model_relations_pages_top_level_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(model_relations_mod, "_PAGE_SIZE", 1)
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        page_one = get_model_relations(db, "sushi.customers", "dependents", page=1)
+        page_two = get_model_relations(db, "sushi.customers", "dependents", page=2)
+        missing = get_model_relations(db, "sushi.customers", "dependents", page=3)
+        invalid = get_model_relations(db, "sushi.customers", "dependents", page=0)
+    finally:
+        db.close()
+    assert page_one == ("sushi.customer_orders\n\n… page 1 of 2 (1 of 2 dependents)\n")
+    assert page_two == (
+        "sushi.orders\n└── sushi.customer_orders\n\n… page 2 of 2 (1 of 2 dependents)\n"
+    )
+    assert missing == "No more dependents; page 3 is past 2."
+    assert invalid == "Invalid page; pass page >= 1."

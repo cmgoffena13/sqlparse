@@ -191,3 +191,29 @@ def test_column_relations_join_column_uses_table_qualified_label() -> None:
     assert bare == "No column found."
     assert "sushi.customers / $ / cte.customer_id (select)" in join_col
     assert "sushi.customers / $cte / raw.customers.customer_id (select, join)" in join_col
+
+
+def test_column_relations_page_past_the_end() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        missing = get_column_relations(
+            db,
+            "sushi.customers",
+            None,
+            "cte.customer_id",
+            "dependencies",
+            page=2,
+        )
+        invalid = get_column_relations(
+            db,
+            "sushi.customers",
+            None,
+            "cte.customer_id",
+            "dependencies",
+            page=0,
+        )
+    finally:
+        db.close()
+    assert missing == "No more dependencies; page 2 is past 1."
+    assert invalid == "Invalid page; pass page >= 1."

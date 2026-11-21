@@ -58,12 +58,23 @@ def test_recreate_schema_keeps_column_lineage_shape(tmp_path: Path) -> None:
             row["name"]
             for row in db.fetch("PRAGMA index_info(column_lineage_source_column_id_index)")
         ]
+        model_edge_index = [
+            row["name"]
+            for row in db.fetch(
+                "PRAGMA index_info(column_lineage_ref_column_model_id_source_models_id_index)"
+            )
+        ]
+        test_model_index = [
+            row["name"] for row in db.fetch("PRAGMA index_info(tests_model_id_index)")
+        ]
         with pytest.raises(ValueError, match="unsupported table"):
             db.table_max_id("not_a_table")
     finally:
         db.close()
     assert ref_index == ["ref_column_id"]
     assert source_index == ["source_column_id"]
+    assert model_edge_index == ["ref_column_model_id", "source_models_id"]
+    assert test_model_index == ["model_id"]
     assert reference_columns == [
         "id",
         "ref_column_id",

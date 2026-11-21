@@ -38,11 +38,21 @@ def build_fts_query(user_input: str) -> str:
     return query
 
 
-def search(db: ProjectDB, query: str, limit: int) -> str:
+def search(
+    db: ProjectDB,
+    query: str,
+    limit: int,
+    models: bool = True,
+    queries: bool = True,
+    columns: bool = True,
+) -> str:
     stripped = query.strip().replace("-", " ")
-    fts_query = build_fts_query(stripped)
+    words = [word for word in stripped.split() if word]
     result = "No search text given; pass a non-empty query."
-    if fts_query:
+    if words == ["$"]:
+        result = "`$` is too broad; be more specific."
+    elif words:
+        fts_query = build_fts_query(stripped)
         try:
             rows = db.connection.execute(_SEARCH_SQL, (fts_query, limit)).fetchall()
             hits: OrderedDict[str, str] = OrderedDict()
@@ -52,12 +62,13 @@ def search(db: ProjectDB, query: str, limit: int) -> str:
                 if str(row["model_kind"]) == "EXTERNAL":
                     query_name = "EXTERNAL"
                 column_name = str(row["column_name"])
-                for section, label in (
-                    ("models", model_name),
-                    ("queries", f"{model_name} / {query_name}"),
-                    ("columns", f"{model_name} / {query_name} / {column_name}"),
-                ):
-                    if label not in hits:
+                candidates = (
+                    ("models", models, model_name),
+                    ("queries", queries, f"{model_name} / {query_name}"),
+                    ("columns", columns, f"{model_name} / {query_name} / {column_name}"),
+                )
+                for section, included, label in candidates:
+                    if included and label not in hits:
                         hits[label] = section
                     if len(hits) >= limit:
                         break

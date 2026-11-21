@@ -153,6 +153,8 @@ CREATE INDEX IF NOT EXISTS column_lineage_ref_column_id_index
     ON column_lineage (ref_column_id);
 CREATE INDEX IF NOT EXISTS column_lineage_source_column_id_index
     ON column_lineage (source_column_id);
+CREATE INDEX IF NOT EXISTS column_lineage_ref_column_model_id_source_models_id_index
+    ON column_lineage (ref_column_model_id, source_models_id);
 
 CREATE TABLE IF NOT EXISTS tests (
     id                  INTEGER NOT NULL PRIMARY KEY,
@@ -164,6 +166,7 @@ CREATE TABLE IF NOT EXISTS tests (
     snapshot_hash       TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS tests_file_id_name_index ON tests (file_id, name);
+CREATE INDEX IF NOT EXISTS tests_model_id_index ON tests (model_id);
 
 CREATE TABLE IF NOT EXISTS test_references (
     test_id             INTEGER NOT NULL REFERENCES tests(id),

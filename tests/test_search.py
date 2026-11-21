@@ -17,6 +17,19 @@ def test_build_fts_query_ors_each_word() -> None:
     assert build_fts_query("   ") == ""
 
 
+def test_search_rejects_a_bare_dollar() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        exact = search(db, "$", 20)
+        padded = search(db, "  $  ", 20)
+        named = search(db, "$cte", 20)
+    finally:
+        db.close()
+    assert exact == "`$` is too broad; be more specific."
+    assert padded == exact
+    assert named != exact
+
+
 def test_search_finds_models_queries_and_columns() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
@@ -65,4 +78,24 @@ def test_search_ranks_globally_across_sections() -> None:
     ranks = [int(match) for match in re.findall(r"#(\d+)\s+•", out)]
     assert ranks
     assert len(ranks) <= 20
+    assert sorted(ranks) == list(range(1, len(ranks) + 1))
+
+
+def test_search_can_keep_any_combination_of_sections() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        models = search(db, "customers", 30, queries=False, columns=False)
+        queries_and_columns = search(db, "customers", 30, models=False)
+    finally:
+        db.close()
+    assert models.startswith("## Models\n")
+    assert "## Queries" not in models
+    assert "## Columns" not in models
+    assert "sushi.customers" in models
+    assert queries_and_columns.startswith("## Queries\n")
+    assert "## Models" not in queries_and_columns
+    assert "## Columns" in queries_and_columns
+    assert "sushi.customers / $cte" in queries_and_columns
+    ranks = [int(match) for match in re.findall(r"#(\d+)\s+•", queries_and_columns)]
     assert sorted(ranks) == list(range(1, len(ranks) + 1))

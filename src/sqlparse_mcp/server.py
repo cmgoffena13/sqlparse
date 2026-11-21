@@ -81,13 +81,22 @@ def sqlparse_skill() -> str:
 
 
 @mcp.tool()
-def search(ctx: Context, query: str, limit: int = 20) -> str:
+def search(
+    ctx: Context,
+    query: str,
+    limit: int = 20,
+    models: bool = True,
+    queries: bool = True,
+    columns: bool = True,
+) -> str:
     """
     FTS model, query, and column names. Results are ordered #1, #2, #3... by relevance.
 
     Narrow with one distinctive word; Widen with extra space-separated words (OR).
+    ``models``, ``queries``, and ``columns`` choose which types to search.
+    All three are included by default.
     """
-    return run_search(_db(ctx), query, limit)
+    return run_search(_db(ctx), query, limit, models, queries, columns)
 
 
 @mcp.tool()
@@ -160,9 +169,7 @@ def get_span_at_lines(
 @mcp.tool()
 def get_test(ctx: Context, file_path: str, test_name: str) -> str:
     """
-    Return one test's source from a test file.
-
-    Lines use ``L{n} | {source}`` for the test's line span.
+    Return a test definition.
     """
     return run_get_test(_db(ctx), file_path, test_name)
 
@@ -170,10 +177,7 @@ def get_test(ctx: Context, file_path: str, test_name: str) -> str:
 @mcp.tool()
 def get_macro(ctx: Context, file_path: str, macro_name: str) -> str:
     """
-    Return one macro's source from a macro file.
-
-    Lines use ``L{n} | {source}`` for the macro's line span.
-    Models that call the macro are listed under ``## Models``.
+    Return a macro's definition and the models that use it.
     """
     return run_get_macro(_db(ctx), file_path, macro_name)
 
@@ -181,10 +185,7 @@ def get_macro(ctx: Context, file_path: str, macro_name: str) -> str:
 @mcp.tool()
 def get_audit(ctx: Context, file_path: str, audit_name: str) -> str:
     """
-    Return one audit's source from an audit file.
-
-    Lines use ``L{n} | {source}`` for the audit's line span.
-    Models that use the audit are listed under ``## Models``.
+    Return an audit's definition and the models that use it.
     """
     return run_get_audit(_db(ctx), file_path, audit_name)
 
@@ -195,6 +196,7 @@ def get_model_relations(
     model_name: str,
     relation: Literal["dependents", "dependencies"] = "dependents",
     include_tests: bool = False,
+    page: int = 1,
 ) -> str:
     """
     Return model relations for ``model_name``.
@@ -204,7 +206,7 @@ def get_model_relations(
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
-    return run_get_model_relations(_db(ctx), model_name, relation, include_tests)
+    return run_get_model_relations(_db(ctx), model_name, relation, include_tests, page)
 
 
 @mcp.tool()
@@ -215,6 +217,7 @@ def get_column_relations(
     query_name: str | None = None,
     relation: Literal["dependents", "dependencies"] = "dependents",
     include_tests: bool = False,
+    page: int = 1,
 ) -> str:
     """
     Return column relations for ``model_name`` / ``query_name`` / ``column_name``.
@@ -232,4 +235,5 @@ def get_column_relations(
         column_name,
         relation,
         include_tests=include_tests,
+        page=page,
     )

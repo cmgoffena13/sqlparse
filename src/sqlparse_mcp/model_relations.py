@@ -1,9 +1,10 @@
 from typing import Literal
 
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import tree_glyphs
+from src.sqlparse_mcp.format_utils import page_window, tree_glyphs, with_page_footer
 
 _MAX_NODES = 100
+_PAGE_SIZE = 100
 
 _MODEL_TESTS_SQL = """
 SELECT
@@ -139,28 +140,42 @@ def get_model_relations(
     model_name: str,
     relation: Literal["dependents", "dependencies"],
     include_tests: bool = False,
+    page: int = 1,
 ) -> str:
     key = model_name.strip()
     result = "No model name given; pass a non-empty model name."
     if key:
         dependencies, dependents = _load_graph(db)
         children = dependents if relation == "dependents" else dependencies
-        kinds = _model_kinds(db)
-        mark_external = relation == "dependencies"
-        tests = _model_tests(db) if include_tests and relation == "dependents" else {}
-        budget = [_MAX_NODES]
-        lines = _relation_lines(
-            children,
-            key,
-            "",
-            seen={key},
-            budget=budget,
-            kinds=kinds,
-            mark_external=mark_external,
-            nested=False,
-            tests=tests,
-        )
+        siblings = [child for child in children.get(key, ()) if child != key]
         result = "No relations."
-        if lines:
-            result = "\n".join(lines) + "\n"
+        if siblings:
+            window = page_window(len(siblings), page, _PAGE_SIZE, label=relation)
+            if isinstance(window, str):
+                result = window
+            else:
+                start, stop, page_count = window
+                children[key] = siblings[start:stop]
+                kinds = _model_kinds(db)
+                mark_external = relation == "dependencies"
+                tests = _model_tests(db) if include_tests and relation == "dependents" else {}
+                lines = _relation_lines(
+                    children,
+                    key,
+                    "",
+                    seen={key},
+                    budget=[_MAX_NODES],
+                    kinds=kinds,
+                    mark_external=mark_external,
+                    nested=False,
+                    tests=tests,
+                )
+                result = with_page_footer(
+                    "\n".join(lines) + "\n",
+                    page,
+                    page_count,
+                    stop - start,
+                    len(siblings),
+                    relation,
+                )
     return result

@@ -3,8 +3,10 @@ from typing import Literal
 
 from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_name
-from src.sqlparse_mcp.format_utils import tree_glyphs
+from src.sqlparse_mcp.format_utils import page_window, tree_glyphs, with_page_footer
 from src.sqlparse_mcp.model_relations import _load_graph
+
+_PAGE_SIZE = 100
 
 _FIND_COLUMNS_SQL = """
 SELECT columns.id
@@ -180,15 +182,20 @@ def _model_block(
     return lines
 
 
-def _dependency_tree(
-    grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]],
-    children: dict[str, list[str]],
-    tests: OrderedDict[str, OrderedDict[str, list[str]]],
-) -> list[str]:
+def _relation_roots(children: dict[str, list[str]]) -> list[str]:
     nested = {name for kids in children.values() for name in kids}
     roots = [name for name in children if name not in nested]
     if not roots and children:
         roots = [next(iter(children))]
+    return roots
+
+
+def _dependency_tree(
+    grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]],
+    children: dict[str, list[str]],
+    tests: OrderedDict[str, OrderedDict[str, list[str]]],
+    roots: list[str],
+) -> list[str]:
     lines: list[str] = []
     seen: set[str] = set()
     for name in roots:
@@ -204,6 +211,7 @@ def _format_groups(
     rows: list[tuple[str, str, str, str | None, str, str]],
     test_rows: list[tuple[str, str, str, int, int]],
     mark_external: bool,
+    page: int,
 ) -> str:
     grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]] = (
         OrderedDict()
@@ -230,10 +238,24 @@ def _format_groups(
         names = files.setdefault(file_path, [])
         if item not in names:
             names.append(item)
-    lines = _dependency_tree(grouped, _model_children(list(grouped), dependents), tests)
+    model_children = _model_children(list(grouped), dependents)
+    roots = _relation_roots(model_children)
     result = "No relations."
-    if lines:
-        result = "\n".join(lines) + "\n"
+    if roots:
+        window = page_window(len(roots), page, _PAGE_SIZE, label="dependents")
+        if isinstance(window, str):
+            result = window
+        else:
+            start, stop, page_count = window
+            lines = _dependency_tree(grouped, model_children, tests, roots[start:stop])
+            result = with_page_footer(
+                "\n".join(lines) + "\n",
+                page,
+                page_count,
+                stop - start,
+                len(roots),
+                "dependents",
+            )
     return result
 
 
@@ -367,7 +389,7 @@ def _render_dependency_nodes(nodes: list[tuple[str, list]], nested: bool) -> lis
     return lines
 
 
-def _format_dependency_tree(db: ProjectDB, column_ids: list[int]) -> str:
+def _format_dependency_tree(db: ProjectDB, column_ids: list[int], page: int) -> str:
     nodes = _dependency_nodes(db, column_ids, set(column_ids))
     roots: list[tuple[str, list]] = []
     seen_children: set[int] = set()
@@ -375,10 +397,22 @@ def _format_dependency_tree(db: ProjectDB, column_ids: list[int]) -> str:
         if id(children) not in seen_children:
             seen_children.add(id(children))
             roots.extend(children)
-    lines = _render_dependency_nodes(roots, False)
     result = "No relations."
-    if lines:
-        result = "\n".join(lines) + "\n"
+    if roots:
+        window = page_window(len(roots), page, _PAGE_SIZE, label="dependencies")
+        if isinstance(window, str):
+            result = window
+        else:
+            start, stop, page_count = window
+            lines = _render_dependency_nodes(roots[start:stop], False)
+            result = with_page_footer(
+                "\n".join(lines) + "\n",
+                page,
+                page_count,
+                stop - start,
+                len(roots),
+                "dependencies",
+            )
     return result
 
 
@@ -389,6 +423,7 @@ def get_column_relations(
     column_name: str,
     relation: Literal["dependents", "dependencies"],
     include_tests: bool = False,
+    page: int = 1,
 ) -> str:
     model_key = model_name.strip()
     column_key = column_name.strip()
@@ -408,7 +443,7 @@ def get_column_relations(
         if not column_ids:
             result = "No column found."
         elif relation == "dependencies":
-            result = _format_dependency_tree(db, column_ids)
+            result = _format_dependency_tree(db, column_ids, page)
         else:
             placeholders = ", ".join("?" for _ in column_ids)
             rows = [
@@ -440,5 +475,5 @@ def get_column_relations(
                         column_ids,
                     )
                 ]
-            result = _format_groups(db, rows, test_rows, False)
+            result = _format_groups(db, rows, test_rows, False, page)
     return result
