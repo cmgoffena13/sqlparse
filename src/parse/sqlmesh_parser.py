@@ -509,6 +509,7 @@ class SQLMeshParser:
             query_name = column["query_name"]
             from_table = column["from_table"]
             name = column["name"]
+            column_name = f"{from_table}.{name}" if from_table is not None else name
             qualified_name = column["qualified_name"]
             line_start = column["line_start"]
             line_end = column["line_end"]
@@ -526,6 +527,7 @@ class SQLMeshParser:
                     query_name,
                     from_table,
                     name,
+                    column_name,
                     qualified_name,
                     data_type,
                     nullable,
@@ -546,6 +548,7 @@ class SQLMeshParser:
                         "model_id": model_id,
                         "from_table": from_table,
                         "name": name,
+                        "column_name": column_name,
                         "qualified_name": qualified_name,
                         "data_type": data_type,
                         "nullable": nullable,
@@ -567,6 +570,7 @@ class SQLMeshParser:
                             "model_id": model_id,
                             "from_table": from_table,
                             "name": name,
+                            "column_name": column_name,
                             "qualified_name": qualified_name,
                             "data_type": data_type,
                             "nullable": nullable,

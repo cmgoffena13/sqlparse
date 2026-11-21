@@ -2,12 +2,7 @@ from collections import OrderedDict
 from typing import Literal
 
 from src.db import ProjectDB
-from src.parse.column_lineage import (
-    FINAL_QUERY,
-    _qualified_name,
-    final_query_name,
-    model_query_name,
-)
+from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_name
 from src.sqlparse_mcp.format_utils import bullet, tree_glyphs
 
 _FIND_COLUMNS_SQL = """
@@ -19,11 +14,7 @@ INNER JOIN models
     ON models.id = columns.model_id
 WHERE models.qualified_name = ?
   AND queries.name = ?
-  AND (
-    columns.name = ?
-    OR columns.from_table || '.' || columns.name = ?
-    OR columns.qualified_name = ?
-  )
+  AND columns.column_name = ?
 """
 
 _DEPENDENCIES_SQL = """
@@ -203,13 +194,11 @@ def get_column_relations(
     if model_key and column_key:
         resolved = _resolve_query_name(model_key, query_name)
         relative = _relative_query(model_key, resolved)
-        from_table, _, name = column_key.rpartition(".")
-        qualified_name = _qualified_name(resolved, from_table or None, name or column_key)
         column_ids = [
             int(row["id"])
             for row in db.connection.execute(
                 _FIND_COLUMNS_SQL,
-                (model_key, relative, column_key, column_key, qualified_name),
+                (model_key, relative, column_key),
             )
         ]
         if not column_ids:

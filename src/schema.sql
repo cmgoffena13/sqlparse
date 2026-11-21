@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS columns (
     model_id            INTEGER NOT NULL REFERENCES models(id),
     from_table          TEXT NULL,
     name                TEXT NOT NULL,
+    column_name         TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
     data_type           TEXT NOT NULL,
     nullable            BOOLEAN NULL,

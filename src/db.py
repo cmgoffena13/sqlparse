@@ -637,11 +637,11 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO columns (
-                    id, file_id, query_id, model_id, from_table, name,
+                    id, file_id, query_id, model_id, from_table, name, column_name,
                     qualified_name, data_type, nullable, line_start, line_end, context,
                     description, snapshot_hash
                 ) VALUES (
-                    :id, :file_id, :query_id, :model_id, :from_table, :name,
+                    :id, :file_id, :query_id, :model_id, :from_table, :name, :column_name,
                     :qualified_name, :data_type, :nullable, :line_start, :line_end, :context,
                     :description, :snapshot_hash
                 )

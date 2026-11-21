@@ -97,7 +97,7 @@ async def _print_tools() -> None:
                     "get_column_relations",
                     {
                         "model_name": "sushi.customers",
-                        "column_name": "customer_id",
+                        "column_name": "cte.customer_id",
                         "relation": "dependencies",
                     },
                 )
@@ -110,7 +110,7 @@ async def _print_tools() -> None:
                     "get_column_relations",
                     {
                         "model_name": "sushi.customers",
-                        "column_name": "customer_id",
+                        "column_name": "cte.customer_id",
                         "relation": "dependents",
                         "include_tests": True,
                     },

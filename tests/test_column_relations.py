@@ -24,7 +24,7 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
             db,
             "sushi.customers",
             None,
-            "customer_id",
+            "cte.customer_id",
             "dependencies",
         )
     finally:
@@ -42,7 +42,7 @@ def test_column_relations_marks_external_source_models() -> None:
             db,
             "sushi.customers",
             "cte",
-            "amount_cents",
+            "raw.orders.amount_cents",
             "dependencies",
         )
     finally:
@@ -76,7 +76,7 @@ def test_column_relations_dependents_include_downstream_models() -> None:
             db,
             "sushi.customers",
             "$",
-            "customer_id",
+            "cte.customer_id",
             "dependents",
         )
     finally:
@@ -102,7 +102,7 @@ def test_column_relations_dependents_include_tests_when_requested() -> None:
             db,
             "sushi.customers",
             "$",
-            "customer_id",
+            "cte.customer_id",
             "dependents",
             include_tests=True,
         )
@@ -150,8 +150,6 @@ def test_column_relations_join_column_uses_table_qualified_label() -> None:
         )
     finally:
         db.close()
-    assert "sushi.customers" in bare
-    assert "• customer_id (select)" in bare or "customer_id (select)" in bare
-    assert "sushi.customers" in join_col
-    assert "join" in join_col
-    assert bare != join_col
+    assert bare == "No column found."
+    assert "cte.customer_id (select)" in join_col
+    assert "cte.customer_id (join)" in join_col

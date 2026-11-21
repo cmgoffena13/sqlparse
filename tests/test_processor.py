@@ -54,6 +54,7 @@ def test_processor_indexes_files_and_directories() -> None:
             for row in db.fetch(
                 "SELECT c.id, c.model_id, c.file_id, c.query_id, "
                 "m.qualified_name || '/' || q.name AS query_name, c.from_table, c.name, "
+                "c.column_name, "
                 "c.qualified_name, c.data_type, c.nullable, c.line_start, c.line_end, "
                 "c.context, c.description, c.snapshot_hash "
                 "FROM columns AS c "
@@ -139,6 +140,7 @@ def test_processor_indexes_files_and_directories() -> None:
             for row in db.fetch(
                 "SELECT c.id, c.model_id, c.file_id, c.query_id, "
                 "m.qualified_name || '/' || q.name AS query_name, c.from_table, c.name, "
+                "c.column_name, "
                 "c.qualified_name, c.data_type, c.nullable, c.line_start, c.line_end, "
                 "c.context, c.description, c.snapshot_hash "
                 "FROM columns AS c "
@@ -353,6 +355,8 @@ def test_processor_indexes_files_and_directories() -> None:
     )
     assert first_columns["sushi.customers/cte/raw.customers.status"]["name"] == "status"
     assert first_columns["sushi.customers/$/cte.customer_id"]["from_table"] == "cte"
+    assert first_columns["sushi.customers/$/cte.customer_id"]["column_name"] == "cte.customer_id"
+    assert first_columns["raw.customers/$/customer_id"]["column_name"] == "customer_id"
     assert first_columns["sushi.customers/$/cte.customer_id"]["line_start"] == 12
     assert first_columns["sushi.customers/$/cte.customer_id"]["line_end"] == 12
     assert first_columns["sushi.customers/$/cte.amount"]["line_start"] == 14
