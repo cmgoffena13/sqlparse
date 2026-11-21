@@ -4,7 +4,7 @@ from pathlib import Path
 import xxhash
 import yaml
 
-DESCRIPTION = "Use when navigating a SQLMesh project: models, queries, columns, and lineage."
+DESCRIPTION = "Use when navigating SQLMesh projects: models, queries, columns, and lineage."
 
 _SKILL_BODY = """\
 # IMPORTANT RULES
@@ -19,18 +19,18 @@ The information that is provided to you will determine the tool you should use.
 
 ## You are given the file name or model name.
 1. Use ``get_model`` to read the model's SQL tree, macro refs, and audit refs.
-2. Use ``get_query`` to read the query's output schema and definition.
+2. Use ``get_query`` to read a query's output schema and definition.
 
 ## You are given the file name or model name and a query name.
 1. Use ``get_query`` to read the query's output schema and definition.
 
 ## You are given a file name and line numbers from ``grep`` or a ``code selection`` in Cursor.
-1. Use ``get_span_at_lines`` to read the query, audit, macro, or test at a line range.
+1. Use ``get_span_at_lines`` to read the query, model config, audit, macro, or test at a line range.
 
 ## You are NOT given a file name, model name, or query name.
 1. Investigate the project using ``list_schemas``, ``list_models``, and keywords
 2. Use ``get_model`` to read the model's SQL tree, macro refs, and audit refs.
-3. Use ``get_query`` to read the query's output schema and definition.
+3. Use ``get_query`` to read a query's output schema and definition.
 
 ### Investigate the project using keywords
 
