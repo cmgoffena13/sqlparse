@@ -79,6 +79,17 @@ WHERE files.path = ?
 ORDER BY macros.line_start, macros.name
 """
 
+_QUERY_MACROS_SQL = """
+SELECT macros.name
+FROM model_macros
+INNER JOIN macros
+    ON macros.name = model_macros.macro_name
+INNER JOIN models
+    ON models.id = model_macros.model_id
+WHERE models.qualified_name = ?
+ORDER BY macros.name
+"""
+
 _COLUMNS_SQL = """
 SELECT
     columns.name,
@@ -174,6 +185,17 @@ def _source_span(
     return span
 
 
+def _called_macros(text: str, names: list[str]) -> list[str]:
+    return [
+        name for name in names if re.search(r"(?:@|\{\{|\{%)\s*" + re.escape(name) + r"\b", text)
+    ]
+
+
+def _query_macros(db: ProjectDB, model_name: str, text: str) -> list[str]:
+    names = [str(row["name"]) for row in db.connection.execute(_QUERY_MACROS_SQL, (model_name,))]
+    return _called_macros(text, names)
+
+
 def _output_label(name: str, data_type: str, nullable: int | None, width: int) -> str:
     constraint = " NOT NULL" if nullable == 0 else ""
     return f"{name:<{width}} {data_type}{constraint}"
@@ -186,11 +208,15 @@ def _format_query(
     end: int,
     qualifier: str,
     columns: list[tuple[str, str, int | None]],
+    macros: list[str],
 ) -> str:
     chunk = lines[start - 1 : end]
     gutter = len(str(end))
     body = [f"L{lineno:<{gutter}} | {line}" for lineno, line in enumerate(chunk, start)]
     rendered = [header, "", *body]
+    if macros:
+        rendered.extend(["", "## Macros Rendered", ""])
+        rendered.extend(bullet(name) for name in macros)
     if columns:
         rendered.extend(["", "## Output", ""])
         labels = [f"{qualifier}.{name}" for name, _data_type, _nullable in columns]
@@ -229,6 +255,8 @@ def get_query(db: ProjectDB, target: str, query_name: str | None) -> str:
                 result = "No SQL source for this query."
                 if span is not None:
                     header = f"Model: {model_name}" if from_file else f"File: {path}"
+                    query_lines = text.splitlines()
+                    source = "\n".join(query_lines[span[0] - 1 : span[1]])
                     columns = [
                         (
                             str(column["name"]),
@@ -238,7 +266,13 @@ def get_query(db: ProjectDB, target: str, query_name: str | None) -> str:
                         for column in db.connection.execute(_COLUMNS_SQL, (model_name, relative))
                     ]
                     result = _format_query(
-                        header, text.splitlines(), span[0], span[1], span[2], columns
+                        header,
+                        query_lines,
+                        span[0],
+                        span[1],
+                        span[2],
+                        columns,
+                        _query_macros(db, model_name, source),
                     )
     return result
 
@@ -401,9 +435,12 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
             )
         ]
     header = f"Model: {span['model_name']}"
+    macros: list[str] = []
     if span["kind"] == "query":
         shown = _shown_query_name(span["query_name"], span["display_name"])
         header = f"{header}\nQuery: {shown}"
+        source = "\n".join(lines[span["start"] - 1 : span["end"]])
+        macros = _query_macros(db, span["model_name"], source)
     elif span["kind"] == "audit":
         header = f"Audit: {span['model_name']}"
     elif span["kind"] == "macro":
@@ -415,6 +452,7 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
         span["end"],
         span["display_name"],
         columns,
+        macros,
     )
 
 
