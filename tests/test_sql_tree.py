@@ -18,19 +18,25 @@ def test_sql_tree_by_model_name_lists_queries_with_counts() -> None:
         db.close()
     assert out == (
         "File: models/customers.sql\n"
+        "Kind: FULL\n"
         "\n"
         "## SQL Tree\n"
         "\n"
-        "sushi.customers\n"
-        "└── $ (3 select columns)\n"
-        "    └── $cte (4 select columns, 1 join)\n"
+        "$ (3 select columns)\n"
+        "└── $cte (4 select columns, 1 join)\n"
         "\n"
-        "## Macros\n"
+        "## Schema\n"
+        "\n"
+        "  • sushi.customers.customer_id INT NOT NULL\n"
+        "  • sushi.customers.amount      DOUBLE\n"
+        "  • sushi.customers.status      TEXT\n"
+        "\n"
+        "## Macro Refs\n"
         "\n"
         "macros/cents_to_dollars.sql\n"
         "  • cents_to_dollars\n"
         "\n"
-        "## Audits\n"
+        "## Audit Refs\n"
         "\n"
         "audits/not_null_customer_id.sql\n"
         "  • not_null_customer_id\n"
@@ -46,19 +52,25 @@ def test_sql_tree_by_file_path() -> None:
         db.close()
     assert out == (
         "Model: sushi.customers\n"
+        "Kind: FULL\n"
         "\n"
         "## SQL Tree\n"
         "\n"
-        "sushi.customers\n"
-        "└── $ (3 select columns)\n"
-        "    └── $cte (4 select columns, 1 join)\n"
+        "$ (3 select columns)\n"
+        "└── $cte (4 select columns, 1 join)\n"
         "\n"
-        "## Macros\n"
+        "## Schema\n"
+        "\n"
+        "  • sushi.customers.customer_id INT NOT NULL\n"
+        "  • sushi.customers.amount      DOUBLE\n"
+        "  • sushi.customers.status      TEXT\n"
+        "\n"
+        "## Macro Refs\n"
         "\n"
         "macros/cents_to_dollars.sql\n"
         "  • cents_to_dollars\n"
         "\n"
-        "## Audits\n"
+        "## Audit Refs\n"
         "\n"
         "audits/not_null_customer_id.sql\n"
         "  • not_null_customer_id\n"
@@ -74,13 +86,18 @@ def test_sql_tree_nests_ctes_under_the_final_query() -> None:
         db.close()
     assert out == (
         "File: models/customer_status.sql\n"
+        "Kind: FULL\n"
         "\n"
         "## SQL Tree\n"
         "\n"
-        "sushi.customer_status\n"
-        "└── $ (2 select columns)\n"
-        "    ├── $base (2 select columns)\n"
-        "    └── $filtered (2 select columns, 1 where condition)\n"
+        "$ (2 select columns)\n"
+        "├── $base (2 select columns)\n"
+        "└── $filtered (2 select columns, 1 where condition)\n"
+        "\n"
+        "## Schema\n"
+        "\n"
+        "  • sushi.customer_status.customer_id INT\n"
+        "  • sushi.customer_status.status      TEXT\n"
     )
 
 
@@ -93,11 +110,17 @@ def test_sql_tree_counts_where_ands_and_one_group_by() -> None:
         db.close()
     assert out == (
         "File: models/customer_orders.sql\n"
+        "Kind: FULL\n"
         "\n"
         "## SQL Tree\n"
         "\n"
-        "sushi.customer_orders\n"
-        "└── $ (3 select columns, 1 join, 1 where condition, grouped by 3 columns)\n"
+        "$ (3 select columns, 1 join, 1 where condition, grouped by 3 columns)\n"
+        "\n"
+        "## Schema\n"
+        "\n"
+        "  • sushi.customer_orders.customer_id INT\n"
+        "  • sushi.customer_orders.status      TEXT\n"
+        "  • sushi.customer_orders.order_id    UNKNOWN\n"
     )
 
 
@@ -111,27 +134,22 @@ def test_where_and_is_another_clause_and_group_by_is_one() -> None:
     assert _query_counts(select) == (1, 2, 1, 2)
 
 
-def test_model_includes_the_config_block_when_requested() -> None:
+def test_model_lists_kind_and_time_column_when_present() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        out = get_model(db, "sushi.customers", include_config=True)
+        orders = get_model(db, "sushi.orders")
+        customers = get_model(db, "sushi.customers")
     finally:
         db.close()
-    assert out.startswith(
-        "File: models/customers.sql\n"
-        "\n"
-        "## Config\n"
-        "\n"
-        "L1 | MODEL (\n"
-        "L2 |   name sushi.customers,\n"
-        "L3 |   kind FULL,\n"
-        "L4 |   audits [not_null_customer_id],\n"
-        "L5 |   description 'Customer grain with order amounts'\n"
-        "L6 | );\n"
+    assert orders.startswith(
+        "File: models/orders.sql\n"
+        "Kind: INCREMENTAL_BY_TIME_RANGE\n"
+        "Time Column: order_id\n"
         "\n"
         "## SQL Tree\n"
     )
+    assert "Time Column:" not in customers
 
 
 def test_sql_tree_missing_target() -> None:

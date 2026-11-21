@@ -48,11 +48,7 @@ async def _print_tools() -> None:
         )
         _print_section(
             "MODEL",
-            _body(
-                await client.call_tool(
-                    "get_model", {"target": "sushi.customers", "include_config": True}
-                )
-            ),
+            _body(await client.call_tool("get_model", {"target": "sushi.customers"})),
         )
         _print_section(
             "SQL QUERY",

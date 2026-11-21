@@ -36,7 +36,7 @@ from src.parse.column_lineage import (
     model_query_name,
 )
 from src.parse.macro_utils import macro_locations
-from src.parse.model_utils import model_config_lines
+from src.parse.model_utils import model_config_lines, model_grain, model_time_column
 from src.parse.test_utils import fixture_column_names, test_line_span
 from src.utils import snapshot_hash
 
@@ -306,6 +306,8 @@ class SQLMeshParser:
     ) -> None:
         qualified_name = model.name
         kind = model.kind.name
+        time_column = model_time_column(model)
+        grain = model_grain(model)
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
         project_name = self._project_name_for_model(model)
         gateway_name = model.gateway or self._project_defaults[project_name]
@@ -320,6 +322,8 @@ class SQLMeshParser:
                 dialect,
                 qualified_name,
                 kind,
+                time_column,
+                grain,
                 config_start_line,
                 config_end_line,
                 description,
@@ -336,6 +340,8 @@ class SQLMeshParser:
                     "dialect": dialect,
                     "qualified_name": qualified_name,
                     "kind": kind,
+                    "time_column": time_column,
+                    "grain": grain,
                     "config_start_line": config_start_line,
                     "config_end_line": config_end_line,
                     "description": description,
@@ -353,6 +359,8 @@ class SQLMeshParser:
                         "dialect": dialect,
                         "qualified_name": qualified_name,
                         "kind": kind,
+                        "time_column": time_column,
+                        "grain": grain,
                         "config_start_line": config_start_line,
                         "config_end_line": config_end_line,
                         "description": description,
@@ -517,6 +525,7 @@ class SQLMeshParser:
             line_start = column["line_start"]
             line_end = column["line_end"]
             context = column["context"]
+            is_select = column["is_select"]
             is_final = query_name == final_query
             description = column_descriptions.get(name) if is_final else None
             nullable = None if not is_final else name not in not_null_columns
@@ -538,6 +547,7 @@ class SQLMeshParser:
                     line_end,
                     context,
                     description,
+                    is_select,
                 ]
             )
             prior = columns_snapshot.get(qualified_name)
@@ -559,6 +569,7 @@ class SQLMeshParser:
                         "line_end": line_end,
                         "context": context,
                         "description": description,
+                        "is_select": is_select,
                         "snapshot_hash": digest,
                     }
                 )
@@ -581,6 +592,7 @@ class SQLMeshParser:
                             "line_end": line_end,
                             "context": context,
                             "description": description,
+                            "is_select": is_select,
                             "snapshot_hash": digest,
                         }
                     )

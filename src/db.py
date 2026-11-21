@@ -572,10 +572,12 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO models (
                     id, file_id, gateway_id, dialect, qualified_name, kind,
-                    config_start_line, config_end_line, description, snapshot_hash
+                    time_column, grain, config_start_line, config_end_line, description,
+                    snapshot_hash
                 ) VALUES (
                     :id, :file_id, :gateway_id, :dialect, :qualified_name, :kind,
-                    :config_start_line, :config_end_line, :description, :snapshot_hash
+                    :time_column, :grain, :config_start_line, :config_end_line, :description,
+                    :snapshot_hash
                 )
                 """,
                 batches["models"],
@@ -639,11 +641,11 @@ class ProjectDB:
                 INSERT OR REPLACE INTO columns (
                     id, file_id, query_id, model_id, from_table, name, column_name,
                     qualified_name, data_type, nullable, line_start, line_end, context,
-                    description, snapshot_hash
+                    description, is_select, snapshot_hash
                 ) VALUES (
                     :id, :file_id, :query_id, :model_id, :from_table, :name, :column_name,
                     :qualified_name, :data_type, :nullable, :line_start, :line_end, :context,
-                    :description, :snapshot_hash
+                    :description, :is_select, :snapshot_hash
                 )
                 """,
                 batches["columns"],

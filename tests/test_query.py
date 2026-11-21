@@ -12,7 +12,7 @@ _FINAL = (
     "L22 |   status -- Customer status\n"
     "L23 | FROM cte\n"
     "\n"
-    "## Macros\n"
+    "## Macro Refs\n"
     "\n"
     "  • cents_to_dollars\n"
     "\n"

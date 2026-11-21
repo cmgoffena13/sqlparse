@@ -97,16 +97,15 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
 
 
 @mcp.tool()
-def get_model(ctx: Context, target: str, include_config: bool = False) -> str:
+def get_model(ctx: Context, target: str) -> str:
     """
-    Return a model's SQL tree, macros, and audits.
+    Return a model's SQL tree, ``$`` output schema, macro refs, and audit refs.
 
     A model name starts with ``File:``. A file path starts with ``Model:``.
 
-    ``include_config`` defaults to false. When true, the MODEL block is included
-    with file line numbers.
+    Lists model kind. Grain and the time column are included when the model has them.
     """
-    return run_get_model(_db(ctx), target, include_config)
+    return run_get_model(_db(ctx), target)
 
 
 @mcp.tool()

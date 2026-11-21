@@ -7,8 +7,9 @@ _MODELS_BY_NAME_SQL = """
 SELECT
     models.id,
     models.qualified_name,
-    models.config_start_line,
-    models.config_end_line,
+    models.kind,
+    models.time_column,
+    models.grain,
     files.path AS file_path
 FROM models
 INNER JOIN files
@@ -21,8 +22,9 @@ _MODELS_BY_FILE_SQL = """
 SELECT
     models.id,
     models.qualified_name,
-    models.config_start_line,
-    models.config_end_line,
+    models.kind,
+    models.time_column,
+    models.grain,
     files.path AS file_path
 FROM models
 INNER JOIN files
@@ -77,7 +79,9 @@ def _query_lines(
     kids = children.get(parent, [])
     last_index = len(kids) - 1
     for index, child in enumerate(kids):
-        connector, continuation = tree_glyphs(index == last_index, wide=True)
+        connector, continuation = (
+            ("", "") if parent is None else tree_glyphs(index == last_index, wide=True)
+        )
         lines.append(f"{prefix}{connector}{labels[child]}")
         lines.extend(_query_lines(children, labels, child, prefix + continuation))
     return lines
@@ -120,6 +124,20 @@ WHERE model_macros.model_id = ?
 ORDER BY files.path, model_macros.macro_name
 """
 
+_SCHEMA_SQL = """
+SELECT
+    columns.name,
+    columns.data_type,
+    columns.nullable
+FROM columns
+INNER JOIN queries
+    ON queries.id = columns.query_id
+WHERE queries.model_id = ?
+  AND queries.name = '$'
+  AND columns.is_select = 1
+ORDER BY columns.line_start, columns.line_end, columns.name
+"""
+
 _AUDITS_SQL = """
 SELECT
     model_audits.audit_name,
@@ -134,14 +152,30 @@ ORDER BY files.path, model_audits.audit_name
 """
 
 
-def _config_lines(db: ProjectDB, path: str, start: int, end: int) -> list[str]:
-    text = (db.root / path).read_text(encoding="utf-8")
-    gutter = len(str(end))
-    body = [
-        f"L{lineno:<{gutter}} | {line}"
-        for lineno, line in enumerate(text.splitlines()[start - 1 : end], start)
-    ]
-    return ["## Config", "", *body]
+def _model_facts(kind: str, time_column: str | None, grain: str | None) -> list[str]:
+    lines = [f"Kind: {kind}"]
+    if time_column is not None:
+        lines.append(f"Time Column: {time_column}")
+    if grain is not None:
+        lines.append(f"Grain: {grain}")
+    return lines
+
+
+def _schema_section(db: ProjectDB, model_id: int, model_name: str) -> list[str]:
+    rows = list(db.connection.execute(_SCHEMA_SQL, (model_id,)))
+    lines: list[str] = []
+    if rows:
+        labels = [f"{model_name}.{row['name']}" for row in rows]
+        width = max(len(label) for label in labels)
+        body = [
+            bullet(
+                f"{label:<{width}} {row['data_type']}"
+                + (" NOT NULL" if row["nullable"] == 0 else "")
+            )
+            for row, label in zip(rows, labels, strict=True)
+        ]
+        lines = ["## Schema", "", *body]
+    return lines
 
 
 def _named_section(title: str, rows: list[tuple[str, str]]) -> list[str]:
@@ -157,7 +191,7 @@ def _named_section(title: str, rows: list[tuple[str, str]]) -> list[str]:
     return lines
 
 
-def get_model(db: ProjectDB, target: str, include_config: bool = False) -> str:
+def get_model(db: ProjectDB, target: str) -> str:
     key = target.strip()
     result = "No target given; pass a model name or file path."
     if key:
@@ -196,24 +230,22 @@ def get_model(db: ProjectDB, target: str, include_config: bool = False) -> str:
                     if from_file
                     else f"File: {model['file_path']}"
                 )
-                sections: list[list[str]] = [[header]]
-                if include_config:
-                    sections.append(
-                        _config_lines(
-                            db,
-                            str(model["file_path"]),
-                            int(model["config_start_line"]),
-                            int(model["config_end_line"]),
-                        )
-                    )
+                time_column = model["time_column"]
+                grain = model["grain"]
+                facts = _model_facts(
+                    str(model["kind"]),
+                    None if time_column is None else str(time_column),
+                    None if grain is None else str(grain),
+                )
+                sections: list[list[str]] = [[header, *facts]]
                 sections.append(
                     [
                         "## SQL Tree",
                         "",
-                        str(model["qualified_name"]),
                         *_query_lines(children, labels, None, ""),
                     ]
                 )
+                sections.append(_schema_section(db, model_id, str(model["qualified_name"])))
                 macros = [
                     (str(row["file_path"]), str(row["macro_name"]))
                     for row in db.connection.execute(_MACROS_SQL, (model_id,))
@@ -222,8 +254,8 @@ def get_model(db: ProjectDB, target: str, include_config: bool = False) -> str:
                     (str(row["file_path"]), str(row["audit_name"]))
                     for row in db.connection.execute(_AUDITS_SQL, (model_id,))
                 ]
-                sections.append(_named_section("Macros", macros))
-                sections.append(_named_section("Audits", audits))
+                sections.append(_named_section("Macro Refs", macros))
+                sections.append(_named_section("Audit Refs", audits))
                 lines: list[str] = []
                 for section in sections:
                     if section and lines:

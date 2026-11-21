@@ -15,9 +15,9 @@ _SKILL_BODY = """\
 
 1. Use ``search`` to find models, queries, and columns by name.
 2. Use ``get_directory_tree`` to browse files and see model names per file.
-3. Use ``get_model`` for a model's SQL tree, macros, and audits.
+3. Use ``get_model`` for a model's SQL tree, ``$`` output schema, macro refs, and audit refs.
    A model name starts with ``File:``. A file path starts with ``Model:``.
-   ``include_config`` defaults to false. Pass true to include the MODEL block.
+   It lists model kind. Grain and the time column are included when the model has them.
 4. Use ``get_query`` to read one query's source for a model name or model file path.
    ``query_name`` ``MODEL`` returns the model config with file line numbers.
    ``render`` defaults to false. Pass true to expand macros and drop file line numbers.

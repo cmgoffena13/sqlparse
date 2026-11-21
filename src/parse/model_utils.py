@@ -7,6 +7,19 @@ from sqlmesh.core.dialect import parse as sqlmesh_parse
 from sqlmesh.core.model import Model, PythonModel
 
 
+def model_time_column(model: Model) -> str | None:
+    column = getattr(model.kind, "time_column", None)
+    name = None
+    if column is not None:
+        name = column.column.name
+    return name
+
+
+def model_grain(model: Model) -> str | None:
+    names = [grain.name or grain.sql(dialect=model.dialect) for grain in model.grains]
+    return ", ".join(names) if names else None
+
+
 def model_config_lines(model: Model) -> tuple[int, int]:
     text = Path(str(model._path)).read_text(encoding="utf-8")
     source_type = model.source_type

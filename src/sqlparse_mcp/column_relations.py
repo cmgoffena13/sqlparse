@@ -9,9 +9,9 @@ from src.sqlparse_mcp.model_relations import _load_graph
 _FIND_COLUMNS_SQL = """
 SELECT columns.id
 FROM columns
-INNER JOIN queries 
+INNER JOIN queries
     ON queries.id = columns.query_id
-INNER JOIN models 
+INNER JOIN models
     ON models.id = columns.model_id
 WHERE models.qualified_name = ?
   AND queries.name = ?
@@ -52,9 +52,9 @@ SELECT
     columns.name AS column_name,
     lineage.ref_kind AS ref_kind
 FROM column_lineage AS lineage
-INNER JOIN columns 
+INNER JOIN columns
     ON columns.id = lineage.ref_column_id
-INNER JOIN models 
+INNER JOIN models
     ON models.id = lineage.ref_column_model_id
 WHERE lineage.source_column_id IN ({placeholders})
 ORDER BY model_name, query_name, column_name, from_table, ref_kind

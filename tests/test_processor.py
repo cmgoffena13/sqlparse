@@ -45,8 +45,8 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, file_id, gateway_id, dialect, qualified_name, kind, "
-                "config_start_line, config_end_line, description, snapshot_hash "
-                "FROM models"
+                "time_column, grain, config_start_line, config_end_line, description, "
+                "snapshot_hash FROM models"
             )
         }
         first_columns = {
@@ -56,7 +56,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "m.qualified_name || '/' || q.name AS query_name, c.from_table, c.name, "
                 "c.column_name, "
                 "c.qualified_name, c.data_type, c.nullable, c.line_start, c.line_end, "
-                "c.context, c.description, c.snapshot_hash "
+                "c.context, c.description, c.is_select, c.snapshot_hash "
                 "FROM columns AS c "
                 "INNER JOIN queries AS q ON q.id = c.query_id "
                 "INNER JOIN models AS m ON m.id = c.model_id"
@@ -131,8 +131,8 @@ def test_processor_indexes_files_and_directories() -> None:
             str(row["qualified_name"]): dict(row)
             for row in db.fetch(
                 "SELECT id, file_id, gateway_id, dialect, qualified_name, kind, "
-                "config_start_line, config_end_line, description, snapshot_hash "
-                "FROM models"
+                "time_column, grain, config_start_line, config_end_line, description, "
+                "snapshot_hash FROM models"
             )
         }
         second_columns = {
@@ -142,7 +142,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "m.qualified_name || '/' || q.name AS query_name, c.from_table, c.name, "
                 "c.column_name, "
                 "c.qualified_name, c.data_type, c.nullable, c.line_start, c.line_end, "
-                "c.context, c.description, c.snapshot_hash "
+                "c.context, c.description, c.is_select, c.snapshot_hash "
                 "FROM columns AS c "
                 "INNER JOIN queries AS q ON q.id = c.query_id "
                 "INNER JOIN models AS m ON m.id = c.model_id"
@@ -280,6 +280,8 @@ def test_processor_indexes_files_and_directories() -> None:
         RAW_ORDERS_FQN,
     }
     assert first_models[CUSTOMERS_FQN]["kind"] == "FULL"
+    assert first_models[CUSTOMERS_FQN]["time_column"] is None
+    assert first_models[CUSTOMERS_FQN]["grain"] is None
     assert first_models[CUSTOMERS_FQN]["file_id"] == customer["id"]
     assert first_models[CUSTOMERS_FQN]["gateway_id"] == first_gateways["local"]["id"]
     assert first_models[CUSTOMERS_FQN]["dialect"] == "duckdb"
@@ -288,6 +290,8 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[CUSTOMERS_FQN]["description"] == "Customer grain with order amounts"
     assert first_models[CUSTOMERS_FQN]["snapshot_hash"]
     assert first_models[ORDERS_FQN]["kind"] == "INCREMENTAL_BY_TIME_RANGE"
+    assert first_models[ORDERS_FQN]["time_column"] == "order_id"
+    assert first_models[ORDERS_FQN]["grain"] is None
     assert first_models[ORDERS_FQN]["description"] is None
     assert first_models[ORDERS_FQN]["file_id"] == orders["id"]
     assert first_models[ORDERS_FQN]["gateway_id"] == first_gateways["local"]["id"]
@@ -328,6 +332,8 @@ def test_processor_indexes_files_and_directories() -> None:
     )
     assert first_columns["sushi.customers/$/cte.customer_id"]["data_type"] == "INT"
     assert first_columns["sushi.customers/$/cte.customer_id"]["nullable"] == 0
+    assert first_columns["sushi.customers/$/cte.customer_id"]["is_select"] == 1
+    assert first_columns["sushi.orders/$/sushi.customers.customer_id"]["is_select"] == 0
     assert first_columns["sushi.customers/$/cte.customer_id"]["snapshot_hash"]
     assert first_columns["sushi.customers/$/cte.amount"]["description"] == "Order amount in dollars"
     assert first_columns["sushi.customers/$/cte.amount"]["data_type"] == "DOUBLE"

@@ -23,7 +23,8 @@ SELECT
     models.config_end_line,
     files.path AS file_path
 FROM models
-INNER JOIN files ON files.id = models.file_id
+INNER JOIN files
+    ON files.id = models.file_id
 WHERE models.qualified_name = ?
 """
 
@@ -36,7 +37,8 @@ SELECT
     models.config_end_line,
     files.path AS file_path
 FROM models
-INNER JOIN files ON files.id = models.file_id
+INNER JOIN files
+    ON files.id = models.file_id
 WHERE files.path = ?
 ORDER BY models.qualified_name
 """
@@ -44,7 +46,8 @@ ORDER BY models.qualified_name
 _RENDERED_SQL = """
 SELECT queries.rendered_sql
 FROM queries
-INNER JOIN models ON models.id = queries.model_id
+INNER JOIN models
+    ON models.id = queries.model_id
 WHERE models.qualified_name = ?
   AND queries.name = ?
 """
@@ -52,7 +55,8 @@ WHERE models.qualified_name = ?
 _QUERY_SQL = """
 SELECT queries.name
 FROM queries
-INNER JOIN models ON models.id = queries.model_id
+INNER JOIN models
+    ON models.id = queries.model_id
 WHERE models.qualified_name = ?
   AND queries.name = ?
 """
@@ -64,7 +68,8 @@ SELECT
     models.config_start_line,
     models.config_end_line
 FROM models
-INNER JOIN files ON files.id = models.file_id
+INNER JOIN files
+    ON files.id = models.file_id
 WHERE files.path = ?
 ORDER BY models.config_start_line, models.qualified_name
 """
@@ -75,7 +80,7 @@ SELECT
     audits.line_start,
     audits.line_end
 FROM audits
-INNER JOIN files 
+INNER JOIN files
     ON files.id = audits.file_id
 WHERE files.path = ?
 ORDER BY audits.line_start, audits.name
@@ -87,7 +92,7 @@ SELECT
     macros.line_start,
     macros.line_end
 FROM macros
-INNER JOIN files 
+INNER JOIN files
     ON files.id = macros.file_id
 WHERE files.path = ?
 ORDER BY macros.line_start, macros.name
@@ -110,9 +115,9 @@ SELECT
     columns.data_type,
     columns.nullable
 FROM columns
-INNER JOIN queries 
+INNER JOIN queries
     ON queries.id = columns.query_id
-INNER JOIN models 
+INNER JOIN models
     ON models.id = columns.model_id
 WHERE models.qualified_name = ?
   AND queries.name = ?
@@ -238,7 +243,7 @@ def _format_query(
         body = sql.splitlines()
     rendered = [header, "", *body]
     if macros:
-        heading = "## Macros Rendered" if sql is not None else "## Macros"
+        heading = "## Macros Rendered" if sql is not None else "## Macro Refs"
         rendered.extend(["", heading, ""])
         rendered.extend(bullet(name) for name in macros)
     if columns:

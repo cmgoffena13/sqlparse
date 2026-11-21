@@ -35,6 +35,7 @@ class ExtractedColumn(TypedDict):
     line_start: int
     line_end: int
     context: str
+    is_select: bool
 
 
 class ExtractedColumnReference(TypedDict):
@@ -170,6 +171,7 @@ def _columns_from_types(model: Model) -> list[ExtractedColumn]:
                 "line_start": 0,
                 "line_end": 0,
                 "context": type_sql,
+                "is_select": True,
             }
         )
     return columns
@@ -204,6 +206,7 @@ def _columns_from_query(
                     "line_start": line_start,
                     "line_end": line_end,
                     "context": expression.sql(dialect=dialect),
+                    "is_select": True,
                 }
             )
         seen = {column["qualified_name"] for column in columns}
@@ -466,6 +469,7 @@ def _columns_from_clauses(
                         "line_start": line_start,
                         "line_end": line_end,
                         "context": column.sql(dialect=dialect),
+                        "is_select": False,
                     }
                 )
     return columns

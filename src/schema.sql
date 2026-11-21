@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS models (
     dialect             TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
     kind                TEXT NOT NULL,
+    time_column         TEXT NULL,
+    grain               TEXT NULL,
     config_start_line   INTEGER NOT NULL,
     config_end_line     INTEGER NOT NULL,
     description         TEXT NULL,
@@ -124,6 +126,7 @@ CREATE TABLE IF NOT EXISTS columns (
     line_end            INTEGER NOT NULL,
     context             TEXT NOT NULL,
     description         TEXT NULL,
+    is_select           BOOLEAN NOT NULL,
     snapshot_hash       TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS columns_qualified_name_index ON columns (qualified_name);
