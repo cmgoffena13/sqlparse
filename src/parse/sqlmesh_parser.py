@@ -677,17 +677,13 @@ class SQLMeshParser:
                 if prefix and len(name) > len(matched_name):
                     matched_name = name
                     source_models_id = mid
-            ref_query_id = self._query_ids[ref_query_name]
-            source_query_id = self._query_ids[source_query_name]
             digest = snapshot_hash(
                 [
                     ref_column_id,
-                    ref_query_id,
                     model_id,
                     ref_query_name,
                     ref_qn,
                     source_column_id,
-                    source_query_id,
                     source_models_id,
                     source_query_name,
                     source_qn,
@@ -705,12 +701,10 @@ class SQLMeshParser:
                     {
                         "id": lineage_id,
                         "ref_column_id": ref_column_id,
-                        "ref_query_id": ref_query_id,
                         "ref_column_model_id": model_id,
                         "ref_column_query_name": ref_query_name,
                         "ref_column_qualified_name": ref_qn,
                         "source_column_id": source_column_id,
-                        "source_query_id": source_query_id,
                         "source_models_id": source_models_id,
                         "source_query_name": source_query_name,
                         "source_column_qualified_name": source_qn,
@@ -733,12 +727,10 @@ class SQLMeshParser:
                     {
                         "id": lineage_id,
                         "ref_column_id": ref_column_id,
-                        "ref_query_id": ref_query_id,
                         "ref_column_model_id": model_id,
                         "ref_column_query_name": ref_query_name,
                         "ref_column_qualified_name": ref_qn,
                         "source_column_id": source_column_id,
-                        "source_query_id": source_query_id,
                         "source_models_id": source_models_id,
                         "source_query_name": source_query_name,
                         "source_column_qualified_name": source_qn,

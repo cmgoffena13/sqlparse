@@ -143,31 +143,24 @@ def get_model_relations(
     key = model_name.strip()
     result = "No model name given; pass a non-empty model name."
     if key:
-        exists = db.connection.execute(
-            "SELECT 1 AS ok FROM models WHERE qualified_name = ?",
-            (key,),
-        ).fetchone()
-        if exists is None:
-            result = "No model found."
-        else:
-            dependencies, dependents = _load_graph(db)
-            children = dependents if relation == "dependents" else dependencies
-            kinds = _model_kinds(db)
-            mark_external = relation == "dependencies"
-            tests = _model_tests(db) if include_tests and relation == "dependents" else {}
-            budget = [_MAX_NODES]
-            lines = _relation_lines(
-                children,
-                key,
-                "",
-                seen={key},
-                budget=budget,
-                kinds=kinds,
-                mark_external=mark_external,
-                nested=False,
-                tests=tests,
-            )
-            result = "No relations."
-            if lines:
-                result = "\n".join(lines) + "\n"
+        dependencies, dependents = _load_graph(db)
+        children = dependents if relation == "dependents" else dependencies
+        kinds = _model_kinds(db)
+        mark_external = relation == "dependencies"
+        tests = _model_tests(db) if include_tests and relation == "dependents" else {}
+        budget = [_MAX_NODES]
+        lines = _relation_lines(
+            children,
+            key,
+            "",
+            seen={key},
+            budget=budget,
+            kinds=kinds,
+            mark_external=mark_external,
+            nested=False,
+            tests=tests,
+        )
+        result = "No relations."
+        if lines:
+            result = "\n".join(lines) + "\n"
     return result

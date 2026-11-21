@@ -64,4 +64,4 @@ def test_model_relations_missing_model() -> None:
         out = get_model_relations(db, "missing.model", "dependencies")
     finally:
         db.close()
-    assert out == "No model found."
+    assert out == "No relations."

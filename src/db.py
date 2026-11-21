@@ -656,15 +656,14 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO column_lineage (
-                    id, ref_column_id, ref_query_id, ref_column_model_id, ref_column_query_name,
-                    ref_column_qualified_name, source_column_id, source_query_id, source_models_id,
+                    id, ref_column_id, ref_column_model_id, ref_column_query_name,
+                    ref_column_qualified_name, source_column_id, source_models_id,
                     source_query_name, source_column_qualified_name,
                     source_line, ref_line, ref_kind, ref_context, snapshot_hash
                 ) VALUES (
-                    :id, :ref_column_id, :ref_query_id, :ref_column_model_id,
-                    :ref_column_query_name,
-                    :ref_column_qualified_name, :source_column_id, :source_query_id,
-                    :source_models_id, :source_query_name, :source_column_qualified_name,
+                    :id, :ref_column_id, :ref_column_model_id, :ref_column_query_name,
+                    :ref_column_qualified_name, :source_column_id, :source_models_id,
+                    :source_query_name, :source_column_qualified_name,
                     :source_line, :ref_line, :ref_kind, :ref_context, :snapshot_hash
                 )
                 """,
