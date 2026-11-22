@@ -30,10 +30,19 @@ uv run --no-dev -- nuitka \
   --include-package=jinja2.ext \
   --include-package=certifi \
   --include-package-data=certifi \
+  --include-package=dateparser.data.date_translation_data \
   --include-distribution-metadata=caio \
   --include-distribution-metadata=aiofile \
   --nofollow-import-to=pytest \
   --nofollow-import-to=fastmcp.cli \
+  --nofollow-import-to=certifi.tests \
+  --nofollow-import-to=sqlmesh.magics \
+  --nofollow-import-to=ipywidgets \
+  --nofollow-import-to=tkinter \
+  --nofollow-import-to=_tkinter \
+  --disable-plugin=tk-inter \
+  --noinclude-unittest-mode=warning \
+  --noinclude-IPython-mode=nofollow \
   --include-data-files=pyproject.toml=pyproject.toml \
   --include-data-files=src/schema.sql=src/schema.sql \
   --include-data-files=src/drop_schema.sql=src/drop_schema.sql \
