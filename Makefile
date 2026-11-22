@@ -3,7 +3,7 @@
 install:
 	uv sync --all-extras
 	uv run -- prek install
-	cp .env.example .env
+	test -f .env || cp .env.example .env
 
 clean:
 	rm -rf dist/ __pycache__/ .ruff_cache/ .pytest_cache/ .sqlparse/ src/__pycache__/
