@@ -1,0 +1,11 @@
+gateways:
+  production:
+    connection:
+      type: bigquery
+      project: fake-project
+      method: oauth
+default_gateway: production
+model_defaults:
+  dialect: bigquery
+  start: "2025-01-01"
+  cron: "@daily"

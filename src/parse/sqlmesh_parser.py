@@ -37,6 +37,7 @@ from src.parse.column_lineage import (
 )
 from src.parse.macro_utils import macro_locations
 from src.parse.model_utils import model_config_lines, model_grain, model_time_column
+from src.parse.parse_only import install_parse_only_engine_support
 from src.parse.test_utils import fixture_column_names, test_line_span
 from src.utils import snapshot_hash
 
@@ -61,6 +62,7 @@ class SQLMeshParser:
         self.db = db
         self.assigner = assigner
         self.root = root
+        install_parse_only_engine_support()
         self.context = Context(paths=self.root, load=False)
         self.context.load(update_schemas=True)
         self.batches = self._new_batches()
