@@ -77,6 +77,24 @@ async def _print_tools() -> None:
             ),
         )
         _print_section(
+            "EXTERNAL QUERY",
+            _body(
+                await client.call_tool(
+                    "get_query",
+                    {"target": "raw.customers", "query_name": "$"},
+                )
+            ),
+        )
+        _print_section(
+            "EXTERNAL CONFIG",
+            _body(
+                await client.call_tool(
+                    "get_query",
+                    {"target": "raw.customers", "query_name": "$CONFIG"},
+                )
+            ),
+        )
+        _print_section(
             "SPAN",
             _body(
                 await client.call_tool(

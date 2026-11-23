@@ -17,7 +17,7 @@ _SKILL_BODY = """\
  - Query names are prefixed with ``$``. 
  - A single ``$`` is the final output query of the model.
  - Model Config is treated as a query and called ``$CONFIG``.
- - EXTERNAL models have no query and return an ``$EXTERNAL`` placeholder value.
+ - EXTERNAL models have an $EXTERNAL placeholder value for query text.
  - Ex. ``$``, ``$cte_name``, or ``$CONFIG``.
 
 # INSTRUCTIONS

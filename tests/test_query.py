@@ -210,14 +210,7 @@ def test_query_named_model_returns_the_config() -> None:
     assert by_name == f"File: models/customers.sql\n\n{config}"
     assert by_file == f"Model: sushi.customers\n\n{config}"
     assert rendered == by_name
-    assert external == (
-        "File: external_models.yaml\n"
-        "\n"
-        "L1 | - name: raw.customers\n"
-        "L2 |   columns:\n"
-        "L3 |     customer_id: int\n"
-        "L4 |     status: text\n"
-    )
+    assert external == "$EXTERNAL"
     assert python == (
         "File: models/waiters.py\n"
         "\n"
@@ -230,6 +223,18 @@ def test_query_named_model_returns_the_config() -> None:
         "L10 | )\n"
     )
     assert "## Output" not in by_name
+
+
+_EXTERNAL_FINAL = (
+    "File: external_models.yaml\n"
+    "\n"
+    "$EXTERNAL\n"
+    "\n"
+    "## Output Schema\n"
+    "\n"
+    "  • raw.customers.customer_id INT\n"
+    "  • raw.customers.status      TEXT\n"
+)
 
 
 def test_query_external_model_has_no_query() -> None:
@@ -250,8 +255,8 @@ def test_query_external_model_has_no_query() -> None:
         ).fetchone()
     finally:
         db.close()
-    assert out == "$EXTERNAL"
-    assert rendered == "$EXTERNAL"
+    assert out == _EXTERNAL_FINAL
+    assert rendered == _EXTERNAL_FINAL
     assert stored["rendered_sql"] is None
 
 

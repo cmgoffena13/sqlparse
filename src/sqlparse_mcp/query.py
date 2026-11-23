@@ -9,7 +9,7 @@ from sqlglot.optimizer.scope import traverse_scope
 from sqlmesh.core.dialect import parse as parse_sql
 
 from src.db import ProjectDB
-from src.parse.column_lineage import _query_line_span, stored_query_name
+from src.parse.column_lineage import FINAL_QUERY, _query_line_span, stored_query_name
 from src.sqlparse_mcp.column_relations import _resolve_query_name
 from src.sqlparse_mcp.format_utils import bullet
 from src.sqlparse_mcp.model import _normalize_file_path
@@ -313,7 +313,9 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
             header = f"Model: {model_name}" if from_file else f"File: {path}"
             asked = "" if query_name is None else query_name.strip()
             result = _EXTERNAL_QUERY
-            if asked == _CONFIG_QUERY:
+            if asked == _CONFIG_QUERY and str(model_row["kind"]) == "EXTERNAL":
+                result = _EXTERNAL_QUERY
+            elif asked == _CONFIG_QUERY:
                 text = (db.root / path).read_text(encoding="utf-8")
                 result = _format_query(
                     header,
@@ -325,7 +327,29 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                     [],
                     None,
                 )
-            elif str(model_row["kind"]) != "EXTERNAL":
+            elif str(model_row["kind"]) == "EXTERNAL":
+                relative = _relative_query(model_name, query_name)
+                columns: list[tuple[str, str, int | None]] = []
+                if relative == FINAL_QUERY:
+                    columns = [
+                        (
+                            str(column["name"]),
+                            str(column["data_type"]),
+                            None if column["nullable"] is None else int(column["nullable"]),
+                        )
+                        for column in db.connection.execute(_COLUMNS_SQL, (model_name, relative))
+                    ]
+                result = _format_query(
+                    header,
+                    [],
+                    1,
+                    1,
+                    model_name,
+                    columns,
+                    [],
+                    _EXTERNAL_QUERY,
+                )
+            else:
                 relative = _relative_query(model_name, query_name)
                 query_row = db.connection.execute(_QUERY_SQL, (model_name, relative)).fetchone()
                 if query_row is None:
