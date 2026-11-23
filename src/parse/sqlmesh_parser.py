@@ -1,7 +1,9 @@
+import site
+import sys
 from pathlib import Path
 
 from sqlmesh.core.config import Config
-from sqlmesh.core.config.loader import ALL_CONFIG_FILENAMES, load_config_from_paths
+from sqlmesh.core.config.loader import load_configs
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
 from sqlmesh.utils.errors import ConfigError
@@ -42,14 +44,34 @@ from src.parse.test_utils import fixture_column_names, test_line_span
 from src.utils import snapshot_hash
 
 
-def is_sqlmesh_project(root: Path) -> bool:
-    try:
-        load_config_from_paths(
-            Config,
-            project_paths=[root / name for name in ALL_CONFIG_FILENAMES],
-            personal_paths=[],
-            load_from_env=False,
+def project_site_packages(root: Path) -> list[Path]:
+    candidates = [
+        root / name for name in (".venv", "venv") if (root / name / "pyvenv.cfg").is_file()
+    ]
+    venv_root = candidates[0] if candidates else None
+    tag = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    direct = (
+        []
+        if venv_root is None
+        else [venv_root / "lib" / tag / "site-packages", venv_root / "Lib" / "site-packages"]
+    )
+    packages = [path for path in direct if path.is_dir()]
+    if venv_root is not None and not packages:
+        packages = sorted(
+            path for path in (venv_root / "lib").glob("python*/site-packages") if path.is_dir()
         )
+    return packages
+
+
+def use_project_venv(root: Path) -> None:
+    for package in project_site_packages(root):
+        site.addsitedir(str(package.absolute()))
+
+
+def is_sqlmesh_project(root: Path) -> bool:
+    use_project_venv(root)
+    try:
+        load_configs("config", Config, root)
     except ConfigError:
         project = False
     else:
@@ -62,6 +84,7 @@ class SQLMeshParser:
         self.db = db
         self.assigner = assigner
         self.root = root
+        use_project_venv(self.root)
         install_parse_only_engine_support()
         self.context = Context(paths=self.root, load=False)
         self.context.load(update_schemas=True)
