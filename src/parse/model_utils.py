@@ -28,7 +28,7 @@ def model_config_lines(model: Model) -> tuple[int, int]:
     if source_type in ("sql", "seed"):
         model_sql = next(
             expression.meta["sql"]
-            for expression in sqlmesh_parse(text)
+            for expression in sqlmesh_parse(text, default_dialect=model.dialect)
             if isinstance(expression, ModelExpr)
         )
         offset = text.find(model_sql)
