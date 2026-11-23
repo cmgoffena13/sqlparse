@@ -3,7 +3,12 @@ from typing import Literal
 
 from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_name
-from src.sqlparse_mcp.format_utils import page_window, tree_glyphs, with_page_footer
+from src.sqlparse_mcp.format_utils import (
+    page_window,
+    path_label,
+    tree_glyphs,
+    with_page_footer,
+)
 from src.sqlparse_mcp.model_relations import _load_graph
 
 _PAGE_SIZE = 100
@@ -152,9 +157,9 @@ def _model_block(
     seen.add(name)
     header, hide_query, queries = grouped.get(name, (name, False, OrderedDict()))
     entries = [
-        f"{header} / {label}{_use_label(kinds)}"
+        f"{path_label(header, label)}{_use_label(kinds)}"
         if hide_query
-        else f"{header} / {query_name} / {label}{_use_label(kinds)}"
+        else f"{path_label(header, query_name, label)}{_use_label(kinds)}"
         for query_name, columns in queries.items()
         for label, kinds in columns.items()
     ]
@@ -291,10 +296,10 @@ def _relation_text(
     column: str,
     ref_kinds: list[str],
 ) -> str:
-    text = f"{model_name} / $EXTERNAL / {column}"
+    text = path_label(model_name, "$EXTERNAL", column)
     if kind != "EXTERNAL":
         text = (
-            f"{model_name} / {_relative_query(model_name, query_name)} / {column}"
+            f"{path_label(model_name, _relative_query(model_name, query_name), column)}"
             f"{_use_label(ref_kinds)}"
         )
     return text

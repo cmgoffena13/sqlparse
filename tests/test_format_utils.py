@@ -1,4 +1,11 @@
-from src.sqlparse_mcp.format_utils import bullet, file_label, gutter_width, line_span, tree_glyphs
+from src.sqlparse_mcp.format_utils import (
+    bullet,
+    file_label,
+    gutter_width,
+    line_span,
+    path_label,
+    tree_glyphs,
+)
 
 
 def test_bullet_default_lead() -> None:
@@ -6,7 +13,13 @@ def test_bullet_default_lead() -> None:
 
 
 def test_bullet_with_rank_lead() -> None:
-    assert bullet("sushi.customers / cte", "#1 ") == "  #1 • sushi.customers / cte"
+    assert bullet("sushi.customers/$cte", "#1 ") == "  #1 • sushi.customers/$cte"
+
+
+def test_path_label_joins_model_query_column() -> None:
+    assert path_label("sushi.customers", "$cte", "raw.orders.amount_cents") == (
+        "sushi.customers/$cte/raw.orders.amount_cents"
+    )
 
 
 def test_gutter_width_pads_to_widest_rank() -> None:

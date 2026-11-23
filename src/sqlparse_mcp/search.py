@@ -2,7 +2,7 @@ import sqlite3
 from collections import OrderedDict
 
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import bullet, gutter_width
+from src.sqlparse_mcp.format_utils import bullet, gutter_width, path_label
 
 _SEARCH_SQL = """
 SELECT
@@ -64,8 +64,12 @@ def search(
                 column_name = str(row["column_name"])
                 candidates = (
                     ("models", search_models, model_name),
-                    ("queries", search_queries, f"{model_name} / {query_name}"),
-                    ("columns", search_columns, f"{model_name} / {query_name} / {column_name}"),
+                    ("queries", search_queries, path_label(model_name, query_name)),
+                    (
+                        "columns",
+                        search_columns,
+                        path_label(model_name, query_name, column_name),
+                    ),
                 )
                 for section, included, label in candidates:
                     if included and label not in hits:

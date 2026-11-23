@@ -99,7 +99,7 @@ def search(
 ) -> str:
     """
     FTS model, query, and column names. Results are ordered #1, #2, #3... by relevance.
-    Full result format is: data_model / query_name / column_name.
+    Full result format is: data_model/query_name/column_name.
 
     Narrow with one distinctive word; Widen with extra space-separated words (OR).
 
@@ -232,7 +232,7 @@ def get_column_relations(
     page: int = 1,
 ) -> str:
     """
-    Return column relations for ``model_name`` / ``query_name`` / ``column_name``.
+    Return column relations for ``model_name/query_name/column_name``.
 
     ``query_name`` defaults to ``$`` if not provided.
     ``column_name`` should include the source query name or table name.

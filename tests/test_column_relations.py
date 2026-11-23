@@ -30,8 +30,8 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
     finally:
         db.close()
     assert out == (
-        "sushi.customers / $cte / raw.customers.customer_id (select, join)\n"
-        "└── raw.customers / $EXTERNAL / customer_id\n"
+        "sushi.customers/$cte/raw.customers.customer_id (select, join)\n"
+        "└── raw.customers/$EXTERNAL/customer_id\n"
     )
 
 
@@ -48,7 +48,7 @@ def test_column_relations_marks_external_source_models() -> None:
         )
     finally:
         db.close()
-    assert "raw.orders / $EXTERNAL" in out
+    assert "raw.orders/$EXTERNAL" in out
     assert "raw.orders\n" not in out
 
 
@@ -83,8 +83,8 @@ def test_column_relations_dependents_include_downstream_models() -> None:
     finally:
         db.close()
     assert out == (
-        "sushi.orders / $ / sushi.customers.customer_id (join)\n"
-        "└── sushi.customer_orders / $ / sushi.customers.customer_id (select, join, group)\n"
+        "sushi.orders/$/sushi.customers.customer_id (join)\n"
+        "└── sushi.customer_orders/$/sushi.customers.customer_id (select, join, group)\n"
     )
 
 
@@ -103,12 +103,12 @@ def test_column_relations_dependents_include_tests_when_requested() -> None:
     finally:
         db.close()
     assert (
-        "sushi.orders / $ / sushi.customers.customer_id (join)\n"
+        "sushi.orders/$/sushi.customers.customer_id (join)\n"
         "├── tests/test_orders.yaml\n"
         "│   • test_orders_exist\n"
         "│   • test_orders_csv\n"
         "│   • test_orders_query\n"
-        "└── sushi.customer_orders / $ / sushi.customers.customer_id (select, join, group)\n"
+        "└── sushi.customer_orders/$/sushi.customers.customer_id (select, join, group)\n"
     ) in out
     assert "## Tests" not in out
 
@@ -157,15 +157,15 @@ def test_column_relations_customer_status_walks_each_query() -> None:
     finally:
         db.close()
     assert final == (
-        "sushi.customer_status / $filtered / $base.customer_id (alias)\n"
-        "└── sushi.customer_status / $base / raw.customers.id (alias)\n"
-        "    └── raw.customers / $EXTERNAL / customer_id\n"
+        "sushi.customer_status/$filtered/$base.customer_id (alias)\n"
+        "└── sushi.customer_status/$base/raw.customers.id (alias)\n"
+        "    └── raw.customers/$EXTERNAL/customer_id\n"
     )
     assert filtered == (
-        "sushi.customer_status / $base / raw.customers.id (alias)\n"
-        "└── raw.customers / $EXTERNAL / customer_id\n"
+        "sushi.customer_status/$base/raw.customers.id (alias)\n"
+        "└── raw.customers/$EXTERNAL/customer_id\n"
     )
-    assert base == ("raw.customers / $EXTERNAL / customer_id\n")
+    assert base == ("raw.customers/$EXTERNAL/customer_id\n")
 
 
 def test_column_relations_join_column_uses_table_qualified_label() -> None:
@@ -189,8 +189,8 @@ def test_column_relations_join_column_uses_table_qualified_label() -> None:
     finally:
         db.close()
     assert bare == "No column found."
-    assert "sushi.customers / $ / $cte.customer_id (select)" in join_col
-    assert "sushi.customers / $cte / raw.customers.customer_id (select, join)" in join_col
+    assert "sushi.customers/$/$cte.customer_id (select)" in join_col
+    assert "sushi.customers/$cte/raw.customers.customer_id (select, join)" in join_col
 
 
 def test_column_relations_page_past_the_end() -> None:

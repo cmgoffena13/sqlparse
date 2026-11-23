@@ -5,6 +5,10 @@ def line_span(start_line: int, end_line: int) -> str:
     return loc
 
 
+def path_label(*parts: str) -> str:
+    return "/".join(parts)
+
+
 def bullet(text: str, lead: str = "") -> str:
     return f"  {lead}• {text}"
 
