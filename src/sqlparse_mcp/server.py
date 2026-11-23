@@ -125,7 +125,7 @@ def list_models(ctx: Context, schema: str) -> str:
 @mcp.tool()
 def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
     """
-    Return the project's directory/file tree with line counts.
+    Return the project's directory/file tree with line counts (L).
 
     Optional ``directory_path`` scopes to one directory tree (exact path).
     Ex. `audits/`
@@ -140,6 +140,16 @@ def get_model(ctx: Context, target: str) -> str:
 
     Target can be a model name or model file path.
     Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
+
+    SQL Tree Legend:
+     - Join Statements = J
+     - Where Conditions = W
+     - Grouped By Columns = G
+     - Having Conditions = H
+     - Select Expressions = E
+     - Select Aliases = A
+     - Total Select Columns = S
+     - Order By Columns = O
     """
     return _processor(ctx).run_query(lambda db: run_get_model(db, target))
 
@@ -239,6 +249,16 @@ def get_column_relations(
     Ex. ``$cte_name.customer_id`` or ``schema.table.column``
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
+
+    Reference Kind Legend:
+     - Join = J
+     - Where = W
+     - Group By = G
+     - Having = H
+     - Expression = E
+     - Alias = A
+     - Select = S
+     - Order By = O
     """
     return _processor(ctx).run_query(
         lambda db: run_get_column_relations(

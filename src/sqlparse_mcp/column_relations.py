@@ -4,6 +4,7 @@ from typing import Literal
 from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_name
 from src.sqlparse_mcp.format_utils import (
+    kind_label,
     page_window,
     path_label,
     tree_glyphs,
@@ -118,13 +119,8 @@ def _column_label(from_table: str | None, column_name: str) -> str:
     return label
 
 
-_KIND_ORDER = ("select", "join", "where", "group", "alias", "expression")
-
-
 def _use_label(kinds: list[str]) -> str:
-    ordered = [kind for kind in _KIND_ORDER if kind in kinds]
-    ordered.extend(kind for kind in kinds if kind not in ordered)
-    return f" ({', '.join(ordered)})"
+    return f" ({kind_label(kinds)})"
 
 
 def _relation_kinds(ref_kind: str, kinds: list[str]) -> list[str]:

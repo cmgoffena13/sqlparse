@@ -463,9 +463,13 @@ class SQLMeshParser:
             line_end = query["line_end"]
             depth = query["depth"]
             select_col_count = query["select_col_count"]
+            select_expr_count = query["select_expr_count"]
+            select_alias_count = query["select_alias_count"]
             where_condition_count = query["where_condition_count"]
             join_statement_count = query["join_statement_count"]
             group_by_col_count = query["group_by_col_count"]
+            having_condition_count = query["having_condition_count"]
+            order_by_col_count = query["order_by_col_count"]
             rendered_sql = query["rendered_sql"]
             digest = snapshot_hash(
                 [
@@ -476,9 +480,13 @@ class SQLMeshParser:
                     line_end,
                     depth,
                     select_col_count,
+                    select_expr_count,
+                    select_alias_count,
                     where_condition_count,
                     join_statement_count,
                     group_by_col_count,
+                    having_condition_count,
+                    order_by_col_count,
                     rendered_sql,
                 ]
             )
@@ -492,9 +500,13 @@ class SQLMeshParser:
                 "depth": depth,
                 "file_id": file_id,
                 "select_col_count": select_col_count,
+                "select_expr_count": select_expr_count,
+                "select_alias_count": select_alias_count,
                 "where_condition_count": where_condition_count,
                 "join_statement_count": join_statement_count,
                 "group_by_col_count": group_by_col_count,
+                "having_condition_count": having_condition_count,
+                "order_by_col_count": order_by_col_count,
                 "rendered_sql": rendered_sql,
                 "snapshot_hash": digest,
             }

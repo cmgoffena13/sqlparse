@@ -1,3 +1,48 @@
+KIND_ORDER = (
+    "join",
+    "where",
+    "group",
+    "having",
+    "expression",
+    "alias",
+    "select",
+    "order",
+)
+KIND_LETTER = {
+    "join": "J",
+    "where": "W",
+    "group": "G",
+    "having": "H",
+    "select": "S",
+    "alias": "A",
+    "expression": "E",
+    "order": "O",
+}
+
+
+def kind_label(kinds: list[str]) -> str:
+    present = set(kinds)
+    parts = [KIND_LETTER[kind] for kind in KIND_ORDER if kind in present]
+    parts.extend(kind for kind in kinds if kind not in KIND_LETTER)
+    return ", ".join(parts)
+
+
+def kind_counts_label(
+    counts: dict[str, int],
+    *,
+    always: frozenset[str] = frozenset(),
+) -> str:
+    parts: list[str] = []
+    for kind in KIND_ORDER:
+        count = counts.get(kind, 0)
+        if count or kind in always:
+            parts.append(f"{count}{KIND_LETTER[kind]}")
+    for kind, count in counts.items():
+        if kind not in KIND_LETTER and count:
+            parts.append(f"{count}{kind}")
+    return ", ".join(parts)
+
+
 def line_span(start_line: int, end_line: int) -> str:
     loc = f"L{start_line}-{end_line}"
     if start_line == end_line:

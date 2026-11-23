@@ -56,9 +56,13 @@ class ExtractedQuery(TypedDict):
     line_end: int
     depth: int
     select_col_count: int
+    select_expr_count: int
+    select_alias_count: int
     where_condition_count: int
     join_statement_count: int
     group_by_col_count: int
+    having_condition_count: int
+    order_by_col_count: int
     rendered_sql: str | None
 
 
@@ -281,9 +285,13 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                 "line_end": 0,
                 "depth": 0,
                 "select_col_count": len(model.columns_to_types or {}),
+                "select_expr_count": 0,
+                "select_alias_count": 0,
                 "where_condition_count": 0,
                 "join_statement_count": 0,
                 "group_by_col_count": 0,
+                "having_condition_count": 0,
+                "order_by_col_count": 0,
                 "rendered_sql": None if model.kind.name == "EXTERNAL" else "",
             }
         )
@@ -311,9 +319,13 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                 line_start, line_end = _query_line_span(scope.expression)
                 (
                     select_col_count,
+                    select_expr_count,
+                    select_alias_count,
                     where_condition_count,
                     join_statement_count,
                     group_by_col_count,
+                    having_condition_count,
+                    order_by_col_count,
                 ) = _query_counts(scope.expression)
                 queries.append(
                     {
@@ -323,9 +335,13 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                         "line_end": line_end,
                         "depth": _query_depth(scope),
                         "select_col_count": select_col_count,
+                        "select_expr_count": select_expr_count,
+                        "select_alias_count": select_alias_count,
                         "where_condition_count": where_condition_count,
                         "join_statement_count": join_statement_count,
                         "group_by_col_count": group_by_col_count,
+                        "having_condition_count": having_condition_count,
+                        "order_by_col_count": order_by_col_count,
                         "rendered_sql": None if external else sql_by_name[name],
                     }
                 )
@@ -407,13 +423,23 @@ def _table_column_qn(
     return resolved
 
 
-def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int]:
+def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, int, int]:
     select_col_count = 0
+    select_expr_count = 0
+    select_alias_count = 0
     where_condition_count = 0
     join_statement_count = 0
     group_by_col_count = 0
+    having_condition_count = 0
+    order_by_col_count = 0
     if isinstance(expression, exp.Select):
         select_col_count = len(expression.expressions)
+        for projection in expression.expressions:
+            kind = _ref_kind(cast(exp.Expression, projection))
+            if kind == "expression":
+                select_expr_count += 1
+            if kind == "alias":
+                select_alias_count += 1
         join_statement_count = len(expression.args.get("joins") or [])
         where = expression.args.get("where")
         if where is not None:
@@ -421,11 +447,21 @@ def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int]:
         group = expression.args.get("group")
         if group is not None:
             group_by_col_count = len(group.expressions)
+        having = expression.args.get("having")
+        if having is not None:
+            having_condition_count = len(_and_predicates(having.this))
+        order = expression.args.get("order")
+        if order is not None:
+            order_by_col_count = len(order.expressions)
     return (
         select_col_count,
+        select_expr_count,
+        select_alias_count,
         where_condition_count,
         join_statement_count,
         group_by_col_count,
+        having_condition_count,
+        order_by_col_count,
     )
 
 

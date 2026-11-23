@@ -2,6 +2,8 @@ from src.sqlparse_mcp.format_utils import (
     bullet,
     file_label,
     gutter_width,
+    kind_counts_label,
+    kind_label,
     line_span,
     path_label,
     tree_glyphs,
@@ -44,3 +46,20 @@ def test_line_span_collapses_a_single_line() -> None:
 def test_tree_glyphs_wide() -> None:
     assert tree_glyphs(False, wide=True) == ("├── ", "│   ")
     assert tree_glyphs(True, wide=True) == ("└── ", "    ")
+
+
+def test_kind_label_orders_by_sql_logical_order() -> None:
+    assert (
+        kind_label(["order", "expression", "alias", "select", "having", "group", "where", "join"])
+        == "J, W, G, H, E, A, S, O"
+    )
+
+
+def test_kind_counts_label_keeps_required_select() -> None:
+    assert (
+        kind_counts_label(
+            {"select": 3, "expression": 1, "join": 1, "where": 0},
+            always=frozenset({"select"}),
+        )
+        == "1J, 1E, 3S"
+    )

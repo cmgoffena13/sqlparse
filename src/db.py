@@ -629,12 +629,14 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO queries (
                     id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash,
-                    select_col_count, where_condition_count, join_statement_count,
-                    group_by_col_count, rendered_sql
+                    select_col_count, select_expr_count, select_alias_count,
+                    where_condition_count, join_statement_count, group_by_col_count,
+                    having_condition_count, order_by_col_count, rendered_sql
                 ) VALUES (
                     :id, :model_id, :name, :line_start, :line_end, :depth, :file_id, :snapshot_hash,
-                    :select_col_count, :where_condition_count, :join_statement_count,
-                    :group_by_col_count, :rendered_sql
+                    :select_col_count, :select_expr_count, :select_alias_count,
+                    :where_condition_count, :join_statement_count, :group_by_col_count,
+                    :having_condition_count, :order_by_col_count, :rendered_sql
                 )
                 """,
                 batches["queries"],

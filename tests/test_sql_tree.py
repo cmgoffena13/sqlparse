@@ -22,8 +22,8 @@ def test_sql_tree_by_model_name_lists_queries_with_counts() -> None:
         "\n"
         "## SQL Tree\n"
         "\n"
-        "$ (3 select columns)\n"
-        "└── $cte (4 select columns, 1 join)\n"
+        "$ (1E, 3S)\n"
+        "└── $cte (1J, 4S)\n"
         "\n"
         "## Macro Refs\n"
         "\n"
@@ -50,8 +50,8 @@ def test_sql_tree_by_file_path() -> None:
         "\n"
         "## SQL Tree\n"
         "\n"
-        "$ (3 select columns)\n"
-        "└── $cte (4 select columns, 1 join)\n"
+        "$ (1E, 3S)\n"
+        "└── $cte (1J, 4S)\n"
         "\n"
         "## Macro Refs\n"
         "\n"
@@ -78,9 +78,9 @@ def test_sql_tree_nests_ctes_under_the_final_query() -> None:
         "\n"
         "## SQL Tree\n"
         "\n"
-        "$ (2 select columns)\n"
-        "├── $base (2 select columns)\n"
-        "└── $filtered (2 select columns, 1 where condition)\n"
+        "$ (2S)\n"
+        "├── $base (1A, 2S)\n"
+        "└── $filtered (1W, 1A, 2S)\n"
     )
 
 
@@ -92,12 +92,7 @@ def test_sql_tree_counts_where_ands_and_one_group_by() -> None:
     finally:
         db.close()
     assert out == (
-        "File: models/customer_orders.sql\n"
-        "Kind: FULL\n"
-        "\n"
-        "## SQL Tree\n"
-        "\n"
-        "$ (3 select columns, 1 join, 1 where condition, grouped by 3 columns)\n"
+        "File: models/customer_orders.sql\nKind: FULL\n\n## SQL Tree\n\n$ (1J, 1W, 3G, 3S)\n"
     )
 
 
@@ -108,7 +103,18 @@ def test_where_and_is_another_clause_and_group_by_is_one() -> None:
     )
     kinds = [kind for kind, _node in _clause_nodes(select)]
     assert kinds == ["join", "where", "where", "group"]
-    assert _query_counts(select) == (1, 2, 1, 2)
+    assert _query_counts(select) == (1, 0, 0, 2, 1, 2, 0, 0)
+
+
+def test_query_counts_splits_select_kinds_and_having_order() -> None:
+    select = cast(
+        exp.Select,
+        parse_one(
+            "SELECT a, b AS id, a + 1 AS c FROM t "
+            "GROUP BY a HAVING COUNT(*) > 1 AND x = 2 ORDER BY a, b"
+        ),
+    )
+    assert _query_counts(select) == (3, 1, 1, 0, 0, 1, 2, 2)
 
 
 def test_model_lists_kind_and_time_column_when_present() -> None:

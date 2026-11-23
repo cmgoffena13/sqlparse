@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import bullet, tree_glyphs
+from src.sqlparse_mcp.format_utils import bullet, kind_counts_label, tree_glyphs
 
 _MODELS_BY_NAME_SQL = """
 SELECT
@@ -39,9 +39,13 @@ SELECT
     depth,
     line_start,
     select_col_count,
+    select_expr_count,
+    select_alias_count,
     join_statement_count,
     where_condition_count,
-    group_by_col_count
+    group_by_col_count,
+    having_condition_count,
+    order_by_col_count
 FROM queries
 WHERE model_id = ?
 """
@@ -85,20 +89,6 @@ def _query_lines(
         lines.append(f"{prefix}{connector}{labels[child]}")
         lines.extend(_query_lines(children, labels, child, prefix + continuation))
     return lines
-
-
-def _count_label(column_count: int, join_count: int, where_count: int, group_count: int) -> str:
-    column_label = "1 select column" if column_count == 1 else f"{column_count} select columns"
-    parts = [column_label]
-    if join_count:
-        parts.append("1 join" if join_count == 1 else f"{join_count} joins")
-    if where_count:
-        where_label = "1 where condition" if where_count == 1 else f"{where_count} where conditions"
-        parts.append(where_label)
-    if group_count:
-        grouped = "1 column" if group_count == 1 else f"{group_count} columns"
-        parts.append(f"grouped by {grouped}")
-    return ", ".join(parts)
 
 
 def _normalize_file_path(target: str, root: Path) -> str:
@@ -183,11 +173,18 @@ def get_model(db: ProjectDB, target: str) -> str:
                 nodes: list[tuple[int, int]] = []
                 for row in fetched:
                     relative = str(row["name"])
-                    label = _count_label(
-                        int(row["select_col_count"]),
-                        int(row["join_statement_count"]),
-                        int(row["where_condition_count"]),
-                        int(row["group_by_col_count"]),
+                    label = kind_counts_label(
+                        {
+                            "select": int(row["select_col_count"]),
+                            "alias": int(row["select_alias_count"]),
+                            "expression": int(row["select_expr_count"]),
+                            "join": int(row["join_statement_count"]),
+                            "where": int(row["where_condition_count"]),
+                            "group": int(row["group_by_col_count"]),
+                            "having": int(row["having_condition_count"]),
+                            "order": int(row["order_by_col_count"]),
+                        },
+                        always=frozenset({"select"}),
                     )
                     labels.append(f"{relative} ({label})")
                     nodes.append((int(row["depth"]), int(row["line_start"])))
