@@ -149,7 +149,7 @@ def get_query(
     ctx: Context, target: str, query_name: str | None = None, render: bool = False
 ) -> str:
     """
-    Return a query's output schema and definition.
+    Return a query's definition and output schema.
 
     Target can be a model name or model file path.
     Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
@@ -235,8 +235,8 @@ def get_column_relations(
     Return column relations for ``model_name`` / ``query_name`` / ``column_name``.
 
     ``query_name`` defaults to ``$`` if not provided.
-    ``column_name`` should include the query (without the ``$``) or table name.
-    Ex. ``cte_name.customer_id`` or ``schema.table.column``
+    ``column_name`` should include the source query name or table name.
+    Ex. ``$cte_name.customer_id`` or ``schema.table.column``
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """

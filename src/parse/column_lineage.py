@@ -104,7 +104,11 @@ def _resolved_source(scope: Scope, table_alias: str | None) -> str | None:
     source_name = None
     if table_alias is not None:
         source = scope.sources[table_alias]
-        source_name = _table_source_name(source) if isinstance(source, exp.Table) else table_alias
+        source_name = (
+            _table_source_name(source)
+            if isinstance(source, exp.Table)
+            else stored_query_name(table_alias)
+        )
     return source_name
 
 
@@ -396,7 +400,7 @@ def _table_column_qn(
             e for e in source.expression.expressions if e.alias_or_name == column.name
         )
         resolved = (
-            query_name,
+            stored_query_name(cte_name),
             query_name,
             _cte_projection_qn(model_name, cte_name, source, expression),
         )

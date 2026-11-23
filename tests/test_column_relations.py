@@ -24,7 +24,7 @@ def test_column_relations_dependencies_groups_by_model_and_query() -> None:
             db,
             "sushi.customers",
             None,
-            "cte.customer_id",
+            "$cte.customer_id",
             "dependencies",
         )
     finally:
@@ -77,7 +77,7 @@ def test_column_relations_dependents_include_downstream_models() -> None:
             db,
             "sushi.customers",
             "$",
-            "cte.customer_id",
+            "$cte.customer_id",
             "dependents",
         )
     finally:
@@ -96,7 +96,7 @@ def test_column_relations_dependents_include_tests_when_requested() -> None:
             db,
             "sushi.customers",
             "$",
-            "cte.customer_id",
+            "$cte.customer_id",
             "dependents",
             include_tests=True,
         )
@@ -137,14 +137,14 @@ def test_column_relations_customer_status_walks_each_query() -> None:
             db,
             "sushi.customer_status",
             "$",
-            "filtered.customer_id",
+            "$filtered.customer_id",
             "dependencies",
         )
         filtered = get_column_relations(
             db,
             "sushi.customer_status",
             "filtered",
-            "base.customer_id",
+            "$base.customer_id",
             "dependencies",
         )
         base = get_column_relations(
@@ -157,7 +157,7 @@ def test_column_relations_customer_status_walks_each_query() -> None:
     finally:
         db.close()
     assert final == (
-        "sushi.customer_status / $filtered / base.customer_id (alias)\n"
+        "sushi.customer_status / $filtered / $base.customer_id (alias)\n"
         "└── sushi.customer_status / $base / raw.customers.id (alias)\n"
         "    └── raw.customers / $EXTERNAL / customer_id\n"
     )
@@ -189,7 +189,7 @@ def test_column_relations_join_column_uses_table_qualified_label() -> None:
     finally:
         db.close()
     assert bare == "No column found."
-    assert "sushi.customers / $ / cte.customer_id (select)" in join_col
+    assert "sushi.customers / $ / $cte.customer_id (select)" in join_col
     assert "sushi.customers / $cte / raw.customers.customer_id (select, join)" in join_col
 
 
@@ -201,7 +201,7 @@ def test_column_relations_page_past_the_end() -> None:
             db,
             "sushi.customers",
             None,
-            "cte.customer_id",
+            "$cte.customer_id",
             "dependencies",
             page=2,
         )
@@ -209,7 +209,7 @@ def test_column_relations_page_past_the_end() -> None:
             db,
             "sushi.customers",
             None,
-            "cte.customer_id",
+            "$cte.customer_id",
             "dependencies",
             page=0,
         )

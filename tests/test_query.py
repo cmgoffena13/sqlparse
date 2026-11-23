@@ -39,10 +39,10 @@ _cte = (
     "\n"
     "## Output Schema\n"
     "\n"
-    "  • cte.customer_id  INT\n"
-    "  • cte.customer_id  INT\n"
-    "  • cte.status       TEXT\n"
-    "  • cte.amount_cents INT\n"
+    "  • $cte.customer_id  INT\n"
+    "  • $cte.customer_id  INT\n"
+    "  • $cte.status       TEXT\n"
+    "  • $cte.amount_cents INT\n"
 )
 
 
@@ -80,10 +80,10 @@ _RENDERED_CTE = (
     "\n"
     "## Output Schema\n"
     "\n"
-    "  • cte.customer_id  INT\n"
-    "  • cte.customer_id  INT\n"
-    "  • cte.status       TEXT\n"
-    "  • cte.amount_cents INT\n"
+    "  • $cte.customer_id  INT\n"
+    "  • $cte.customer_id  INT\n"
+    "  • $cte.status       TEXT\n"
+    "  • $cte.amount_cents INT\n"
 )
 
 
@@ -170,10 +170,10 @@ def test_query_header_follows_the_input_kind() -> None:
         "\n"
         "## Output Schema\n"
         "\n"
-        "  • cte.customer_id  INT\n"
-        "  • cte.customer_id  INT\n"
-        "  • cte.status       TEXT\n"
-        "  • cte.amount_cents INT\n"
+        "  • $cte.customer_id  INT\n"
+        "  • $cte.customer_id  INT\n"
+        "  • $cte.status       TEXT\n"
+        "  • $cte.amount_cents INT\n"
     )
     assert "File:" not in by_file
 

@@ -235,7 +235,7 @@ def _source_span(
                     start, end = _query_line_span(scope.expression)
                     if start:
                         expanded = _expand_query_span(lines, start, end)
-                        shown = model_name if name == "$" else name
+                        shown = model_name if name == "$" else stored_query_name(name)
                         span = (expanded[0], expanded[1], shown)
     return span
 
@@ -573,12 +573,15 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
         detail = f"Macro: {span['model_name']}\nType: {span['query_name']}"
     elif span["kind"] == "test":
         detail = f"Test: {span['model_name']}"
+    qualifier = span["display_name"]
+    if span["kind"] == "query" and span["query_name"] != FINAL_QUERY:
+        qualifier = stored_query_name(span["display_name"])
     text = _format_query(
         detail,
         lines,
         span["start"],
         span["end"],
-        span["display_name"],
+        qualifier,
         columns,
         macros,
         None,

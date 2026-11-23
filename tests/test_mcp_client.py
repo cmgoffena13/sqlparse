@@ -79,7 +79,7 @@ def test_client_lists_tools_and_reads_the_project(
                     "get_column_relations",
                     {
                         "model_name": "sushi.customers",
-                        "column_name": "cte.customer_id",
+                        "column_name": "$cte.customer_id",
                         "relation": "dependencies",
                     },
                 )
