@@ -11,7 +11,7 @@ import xxhash
 from src.assigner import GlobalIDAssigner
 from src.db import BATCH_TABLES, ProjectDB
 from src.git_utils import path_spec_for_indexing, relative_path_is_ignored
-from src.parse.sqlmesh_parser import SQLMeshParser
+from src.parse.sqlmesh_parser import SQLMeshParser, project_cwd
 
 T = TypeVar("T")
 
@@ -231,7 +231,8 @@ class ProjectProcessor:
         self._reset_run_state()
         reloaded = any(loader.reload_needed() for loader in self.parser.context._loaders)
         if reloaded:
-            self.parser.context.load(update_schemas=True)
+            with project_cwd(self.root):
+                self.parser.context.load(update_schemas=True)
         root_s = str(self.root)
         for directory_path, directory_names, file_names in os.walk(root_s):
             dir_rel = (

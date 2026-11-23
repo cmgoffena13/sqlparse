@@ -98,6 +98,27 @@ def test_plain_config_yaml_is_not_a_sqlmesh_project(tmp_path: Path) -> None:
     assert is_sqlmesh_project(tmp_path) is False
 
 
+def test_config_py_relative_credential_file_loads_from_other_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "project"
+    elsewhere = tmp_path / "elsewhere"
+    project.mkdir()
+    elsewhere.mkdir()
+    (project / "gcp_service_account.json").write_text("{}", encoding="utf-8")
+    (project / "config.py").write_text(
+        "from pathlib import Path\n"
+        "from sqlmesh.core.config import Config, ModelDefaultsConfig\n"
+        "path = Path('gcp_service_account.json')\n"
+        "if not path.is_file():\n"
+        "    raise FileNotFoundError(f'File {path} was not found')\n"
+        "config = Config(model_defaults=ModelDefaultsConfig(dialect='duckdb'))\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(elsewhere)
+    assert is_sqlmesh_project(project) is True
+
+
 def test_config_py_that_reads_dotenv_is_a_sqlmesh_project(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text("SQLPARSE_FIXTURE_DIALECT=duckdb\n", encoding="utf-8")
     (tmp_path / "config.py").write_text(

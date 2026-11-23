@@ -105,14 +105,12 @@ def _table_source_name(table: exp.Table) -> str:
 
 
 def _resolved_source(scope: Scope, table_alias: str | None) -> str | None:
+    source = None if table_alias is None else scope.sources.get(table_alias)
     source_name = None
-    if table_alias is not None:
-        source = scope.sources[table_alias]
-        source_name = (
-            _table_source_name(source)
-            if isinstance(source, exp.Table)
-            else stored_query_name(table_alias)
-        )
+    if isinstance(source, exp.Table):
+        source_name = _table_source_name(source)
+    if table_alias is not None and isinstance(source, Scope):
+        source_name = stored_query_name(table_alias)
     return source_name
 
 
@@ -396,6 +394,16 @@ def _cte_projection_qn(
     return _qualified_name(model_query_name(model_name, cte_name), from_table, name)
 
 
+def _select_projections(expression: exp.Expression) -> list[exp.Expression]:
+    current = expression
+    while isinstance(current, exp.Union):
+        current = current.this
+    projections: list[exp.Expression] = []
+    if isinstance(current, exp.Select):
+        projections = list(current.expressions)
+    return projections
+
+
 def _table_column_qn(
     scope: Scope, column: exp.Column, *, model_name: str
 ) -> tuple[str, str, str] | None:
@@ -413,13 +421,19 @@ def _table_column_qn(
         cte_name = column.table
         query_name = model_query_name(model_name, cte_name)
         expression = next(
-            e for e in source.expression.expressions if e.alias_or_name == column.name
+            (
+                e
+                for e in _select_projections(cast(exp.Expression, source.expression))
+                if e.alias_or_name == column.name
+            ),
+            None,
         )
-        resolved = (
-            stored_query_name(cte_name),
-            query_name,
-            _cte_projection_qn(model_name, cte_name, source, expression),
-        )
+        if expression is not None:
+            resolved = (
+                stored_query_name(cte_name),
+                query_name,
+                _cte_projection_qn(model_name, cte_name, source, expression),
+            )
     return resolved
 
 
@@ -550,7 +564,7 @@ def _emit_cte_projection_refs(
     dialect: str,
 ) -> None:
     ref_query_name = model_query_name(model_name, cte_name)
-    for expression in scope.expression.expressions:
+    for expression in _select_projections(cast(exp.Expression, scope.expression)):
         ref_qn = _cte_projection_qn(model_name, cte_name, scope, expression)
         inner = _unwrap(expression)
         if isinstance(inner, exp.Column):

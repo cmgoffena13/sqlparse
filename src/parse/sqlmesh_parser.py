@@ -1,5 +1,8 @@
+import os
 import site
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 from sqlmesh.core.config import Config
@@ -68,14 +71,25 @@ def use_project_venv(root: Path) -> None:
         site.addsitedir(str(package.absolute()))
 
 
+@contextmanager
+def project_cwd(root: Path) -> Generator[None]:
+    previous = Path.cwd()
+    os.chdir(root.resolve())
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
 def is_sqlmesh_project(root: Path) -> bool:
     use_project_venv(root)
-    try:
-        load_configs("config", Config, root)
-    except ConfigError:
-        project = False
-    else:
-        project = True
+    with project_cwd(root):
+        try:
+            load_configs("config", Config, root)
+        except ConfigError:
+            project = False
+        else:
+            project = True
     return project
 
 
@@ -86,8 +100,9 @@ class SQLMeshParser:
         self.root = root
         use_project_venv(self.root)
         install_parse_only_engine_support()
-        self.context = Context(paths=self.root, load=False)
-        self.context.load(update_schemas=True)
+        with project_cwd(self.root):
+            self.context = Context(paths=self.root, load=False)
+            self.context.load(update_schemas=True)
         self.batches = self._new_batches()
         self._gateway_ids: dict[tuple[str, str], int] = {}
         self._project_defaults: dict[str, str] = {}
