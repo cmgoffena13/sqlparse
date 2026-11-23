@@ -1,9 +1,14 @@
 import os
 import shutil
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import pytest
+
+from src.assigner import GlobalIDAssigner
 from src.db import ProjectDB
+from src.parse.sqlmesh_parser import SQLMeshParser
 from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
 
@@ -50,6 +55,37 @@ def test_processor_reuses_context_across_process_calls() -> None:
             (CUSTOMERS_FQN,),
         )
         assert rows[0]["qualified_name"] == CUSTOMERS_FQN
+    finally:
+        processor.close()
+        db.close()
+
+
+def test_processor_start_time_covers_sqlmesh_init(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parser_started: list[float] = []
+    real_init = SQLMeshParser.__init__
+
+    def tracking_init(
+        self: SQLMeshParser,
+        db: ProjectDB,
+        assigner: GlobalIDAssigner,
+        root: Path,
+    ) -> None:
+        parser_started.append(time.perf_counter())
+        real_init(self, db, assigner, root)
+
+    monkeypatch.setattr(SQLMeshParser, "__init__", tracking_init)
+    db = ProjectDB(FIXTURE_PROJECT)
+    processor = ProjectProcessor(db, FIXTURE_PROJECT)
+    try:
+        assert len(parser_started) == 1
+        assert processor.start_time is not None
+        assert processor.start_time <= parser_started[0]
+        processor.process(full=True)
+        assert processor.start_time is None
+        processor.process()
+        assert processor.start_time is None
     finally:
         processor.close()
         db.close()

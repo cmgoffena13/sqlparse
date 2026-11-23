@@ -42,6 +42,7 @@ def _join_rel(dir_rel: str, name: str) -> str:
 
 class ProjectProcessor:
     def __init__(self, db: ProjectDB, root: Path):
+        self.start_time: float | None = time.perf_counter()
         self.db = db
         self.assigner = GlobalIDAssigner(db)
         self.root = root.resolve()
@@ -204,6 +205,7 @@ class ProjectProcessor:
         self.db_batches = self._new_batches()
 
     def _reset_run_state(self) -> None:
+        self.start_time = None
         self.files_skipped = 0
         self.files_indexed = 0
         for entry in self.directories_snapshot.values():
@@ -225,8 +227,8 @@ class ProjectProcessor:
             self.parser.context.close()
 
     def _process_unlocked(self, full: bool = False) -> None:
+        start_time = time.perf_counter() if self.start_time is None else self.start_time
         self._reset_run_state()
-        start_time = time.perf_counter()
         reloaded = any(loader.reload_needed() for loader in self.parser.context._loaders)
         if reloaded:
             self.parser.context.load(update_schemas=True)
