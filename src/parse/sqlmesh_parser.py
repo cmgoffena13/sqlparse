@@ -499,6 +499,7 @@ class SQLMeshParser:
             having_condition_count = query["having_condition_count"]
             order_by_col_count = query["order_by_col_count"]
             rendered_sql = query["rendered_sql"]
+            models_read_count = query["models_read_count"]
             digest = snapshot_hash(
                 [
                     model_id,
@@ -516,6 +517,7 @@ class SQLMeshParser:
                     having_condition_count,
                     order_by_col_count,
                     rendered_sql,
+                    models_read_count,
                 ]
             )
             key = f"{model_id}:{name}"
@@ -536,6 +538,7 @@ class SQLMeshParser:
                 "having_condition_count": having_condition_count,
                 "order_by_col_count": order_by_col_count,
                 "rendered_sql": rendered_sql,
+                "models_read_count": models_read_count,
                 "snapshot_hash": digest,
             }
             if prior is None:

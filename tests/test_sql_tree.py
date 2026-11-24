@@ -23,7 +23,7 @@ def test_sql_tree_by_model_name_lists_queries_with_counts() -> None:
         "## SQL Tree\n"
         "\n"
         "$ (1E, 3S)\n"
-        "└── $cte (1J, 4S)\n"
+        "└── $cte (1J, 4S, 2M)\n"
         "\n"
         "## Macro Refs\n"
         "\n"
@@ -51,7 +51,7 @@ def test_sql_tree_by_file_path() -> None:
         "## SQL Tree\n"
         "\n"
         "$ (1E, 3S)\n"
-        "└── $cte (1J, 4S)\n"
+        "└── $cte (1J, 4S, 2M)\n"
         "\n"
         "## Macro Refs\n"
         "\n"
@@ -79,7 +79,7 @@ def test_sql_tree_nests_ctes_under_the_final_query() -> None:
         "## SQL Tree\n"
         "\n"
         "$ (2S)\n"
-        "├── $base (1A, 2S)\n"
+        "├── $base (1A, 2S, 1M)\n"
         "└── $filtered (1W, 1A, 2S)\n"
     )
 
@@ -92,7 +92,7 @@ def test_sql_tree_counts_where_ands_and_one_group_by() -> None:
     finally:
         db.close()
     assert out == (
-        "File: models/customer_orders.sql\nKind: FULL\n\n## SQL Tree\n\n$ (1J, 1W, 3G, 3S)\n"
+        "File: models/customer_orders.sql\nKind: FULL\n\n## SQL Tree\n\n$ (1J, 1W, 3G, 3S, 2M)\n"
     )
 
 

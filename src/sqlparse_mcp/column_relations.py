@@ -4,12 +4,14 @@ from typing import Literal
 from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_name
 from src.sqlparse_mcp.format_utils import (
+    from_table_reads_models,
     kind_label,
     model_display_label,
     page_window,
     path_label,
     tree_glyphs,
     with_page_footer,
+    with_reads_models_flag,
 )
 from src.sqlparse_mcp.model_relations import _load_graph
 
@@ -123,8 +125,9 @@ def _column_label(from_table: str | None, column_name: str) -> str:
     return label
 
 
-def _use_label(kinds: list[str]) -> str:
-    return f" ({kind_label(kinds)})"
+def _use_label(kinds: list[str], *, reads_models: bool = False) -> str:
+    label = with_reads_models_flag(kind_label(kinds), reads_models)
+    return f" ({label})" if label else ""
 
 
 def _relation_kinds(ref_kind: str, kinds: list[str]) -> list[str]:
@@ -149,7 +152,9 @@ def _model_children(direct: list[str], dependents: dict[str, list[str]]) -> dict
 
 def _model_block(
     name: str,
-    grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]],
+    grouped: OrderedDict[
+        str, tuple[str, bool, OrderedDict[str, OrderedDict[str, tuple[list[str], bool]]]]
+    ],
     children: dict[str, list[str]],
     tests: OrderedDict[str, OrderedDict[str, list[str]]],
     seen: set[str],
@@ -157,11 +162,16 @@ def _model_block(
     seen.add(name)
     header, hide_query, queries = grouped.get(name, (name, False, OrderedDict()))
     entries = [
-        f"{path_label(header, label)}{_use_label(kinds)}"
-        if hide_query
-        else f"{path_label(header, query_name, label)}{_use_label(kinds)}"
+        (
+            f"{path_label(header, label)}{_use_label(kinds, reads_models=reads_models)}"
+            if hide_query
+            else (
+                f"{path_label(header, query_name, label)}"
+                f"{_use_label(kinds, reads_models=reads_models)}"
+            )
+        )
         for query_name, columns in queries.items()
-        for label, kinds in columns.items()
+        for label, (kinds, reads_models) in columns.items()
     ]
     if not entries:
         entries = [header]
@@ -196,7 +206,9 @@ def _relation_roots(children: dict[str, list[str]]) -> list[str]:
 
 
 def _dependency_tree(
-    grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]],
+    grouped: OrderedDict[
+        str, tuple[str, bool, OrderedDict[str, OrderedDict[str, tuple[list[str], bool]]]]
+    ],
     children: dict[str, list[str]],
     tests: OrderedDict[str, OrderedDict[str, list[str]]],
     roots: list[str],
@@ -218,9 +230,9 @@ def _format_groups(
     mark_external: bool,
     page: int,
 ) -> str:
-    grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]] = (
-        OrderedDict()
-    )
+    grouped: OrderedDict[
+        str, tuple[str, bool, OrderedDict[str, OrderedDict[str, tuple[list[str], bool]]]]
+    ] = OrderedDict()
     for model_name, kind, is_blueprint, query_name, from_table, column_name, ref_kind in rows:
         _header, _hide_query, queries = grouped.setdefault(
             model_name,
@@ -232,7 +244,7 @@ def _format_groups(
         )
         columns = queries.setdefault(_relative_query(model_name, query_name), OrderedDict())
         label = _column_label(from_table, column_name)
-        kinds = columns.setdefault(label, [])
+        kinds, _reads = columns.setdefault(label, ([], from_table_reads_models(from_table)))
         if ref_kind not in kinds:
             kinds.append(ref_kind)
     _dependencies, dependents = _load_graph(db)
@@ -295,12 +307,14 @@ def _relation_text(
     query_name: str,
     column: str,
     ref_kinds: list[str],
+    *,
+    reads_models: bool = False,
 ) -> str:
     text = path_label(model_name, "$EXTERNAL", column)
     if kind != "EXTERNAL":
         text = (
             f"{path_label(model_name, _relative_query(model_name, query_name), column)}"
-            f"{_use_label(ref_kinds)}"
+            f"{_use_label(ref_kinds, reads_models=reads_models)}"
         )
     return text
 
@@ -315,7 +329,9 @@ def _dependency_nodes(
     result: list[tuple[str, list]] = []
     first = True
     while pending:
-        grouped: OrderedDict[tuple[int, str, str, str, str, int], list[str]] = OrderedDict()
+        grouped: OrderedDict[tuple[int, str, str, str, str, int], tuple[list[str], bool]] = (
+            OrderedDict()
+        )
         sources: dict[int, tuple[str, str, str]] = {}
         for (
             ref_column_id,
@@ -331,12 +347,15 @@ def _dependency_nodes(
             source_name,
         ) in _fetch_dependencies(db, pending):
             column = name
+            reads_models = False
             if kind != "EXTERNAL":
                 column = _column_label(from_table, name)
+                reads_models = from_table_reads_models(from_table)
             if kind == "EXTERNAL":
                 ref_kind = ""
             key = (ref_column_id, model_name, kind, query_name, column, source_id)
-            grouped[key] = _relation_kinds(ref_kind, grouped.get(key, []))
+            prior_kinds, _prior_reads = grouped.get(key, ([], False))
+            grouped[key] = (_relation_kinds(ref_kind, prior_kinds), reads_models)
             sources[source_id] = (source_model_name, source_model_kind, source_name)
         level_children: dict[int, list[tuple[str, list]]] = {}
         next_ids: list[int] = []
@@ -347,7 +366,7 @@ def _dependency_nodes(
             query_name,
             column,
             source_id,
-        ), ref_kinds in grouped.items():
+        ), (ref_kinds, reads_models) in grouped.items():
             if source_id not in level_children and source_id not in seen and len(seen) < 100:
                 seen.add(source_id)
                 source_model_name, source_model_kind, source_name = sources[source_id]
@@ -365,7 +384,14 @@ def _dependency_nodes(
                     owned[source_id] = level_children[source_id]
                     next_ids.append(source_id)
             node = (
-                _relation_text(model_name, kind, query_name, column, ref_kinds),
+                _relation_text(
+                    model_name,
+                    kind,
+                    query_name,
+                    column,
+                    ref_kinds,
+                    reads_models=reads_models,
+                ),
                 level_children.get(source_id, []),
             )
             if first:

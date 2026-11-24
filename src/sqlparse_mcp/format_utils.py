@@ -18,6 +18,7 @@ KIND_LETTER = {
     "expression": "E",
     "order": "O",
 }
+READS_MODELS_LETTER = "M"
 
 
 def kind_label(kinds: list[str]) -> str:
@@ -41,6 +42,25 @@ def kind_counts_label(
         if kind not in KIND_LETTER and count:
             parts.append(f"{count}{kind}")
     return ", ".join(parts)
+
+
+def from_table_reads_models(from_table: str | None) -> bool:
+    return from_table is not None and not from_table.startswith("$")
+
+
+def with_reads_models_flag(label: str, reads_models: bool) -> str:
+    result = label
+    if reads_models:
+        result = f"{label}, {READS_MODELS_LETTER}" if label else READS_MODELS_LETTER
+    return result
+
+
+def with_reads_models_count(label: str, reads_models: int) -> str:
+    result = label
+    if reads_models:
+        marker = f"{reads_models}{READS_MODELS_LETTER}"
+        result = f"{label}, {marker}" if label else marker
+    return result
 
 
 def line_span(start_line: int, end_line: int) -> str:

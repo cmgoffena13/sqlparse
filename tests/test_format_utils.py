@@ -1,12 +1,15 @@
 from src.sqlparse_mcp.format_utils import (
     bullet,
     file_label,
+    from_table_reads_models,
     gutter_width,
     kind_counts_label,
     kind_label,
     line_span,
     path_label,
     tree_glyphs,
+    with_reads_models_count,
+    with_reads_models_flag,
 )
 
 
@@ -63,3 +66,22 @@ def test_kind_counts_label_keeps_required_select() -> None:
         )
         == "1J, 1E, 3S"
     )
+
+
+def test_from_table_reads_models_ignores_query_sources() -> None:
+    assert from_table_reads_models("raw.customers") is True
+    assert from_table_reads_models("$cte") is False
+    assert from_table_reads_models(None) is False
+
+
+def test_with_reads_models_flag_appends_m() -> None:
+    assert with_reads_models_flag("1J, 4S", True) == "1J, 4S, M"
+    assert with_reads_models_flag("J, S", True) == "J, S, M"
+    assert with_reads_models_flag("", True) == "M"
+    assert with_reads_models_flag("1E, 3S", False) == "1E, 3S"
+
+
+def test_with_reads_models_count_appends_count() -> None:
+    assert with_reads_models_count("1J, 4S", 2) == "1J, 4S, 2M"
+    assert with_reads_models_count("", 1) == "1M"
+    assert with_reads_models_count("1E, 3S", 0) == "1E, 3S"

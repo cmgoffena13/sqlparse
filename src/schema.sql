@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS models (
     schema_name         TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
     kind                TEXT NOT NULL,
-    is_blueprint        BOOLEAN NOT NULL DEFAULT FALSE,
+    is_blueprint        BOOLEAN NOT NULL,
     time_column         TEXT NULL,
     grain               TEXT NULL,
     config_start_line   INTEGER NOT NULL,
@@ -114,7 +114,8 @@ CREATE TABLE IF NOT EXISTS queries (
     group_by_col_count  INTEGER NULL,
     having_condition_count INTEGER NULL,
     order_by_col_count INTEGER NULL,
-    rendered_sql        TEXT NULL
+    rendered_sql        TEXT NULL,
+    models_read_count   INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS queries_model_id_name_index ON queries (model_id, name);
 

@@ -1,7 +1,12 @@
 from pathlib import Path
 
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import bullet, kind_counts_label, tree_glyphs
+from src.sqlparse_mcp.format_utils import (
+    bullet,
+    kind_counts_label,
+    tree_glyphs,
+    with_reads_models_count,
+)
 
 _MODELS_BY_NAME_SQL = """
 SELECT
@@ -45,7 +50,8 @@ SELECT
     where_condition_count,
     group_by_col_count,
     having_condition_count,
-    order_by_col_count
+    order_by_col_count,
+    models_read_count
 FROM queries
 WHERE model_id = ?
 """
@@ -173,18 +179,21 @@ def get_model(db: ProjectDB, target: str) -> str:
                 nodes: list[tuple[int, int]] = []
                 for row in fetched:
                     relative = str(row["name"])
-                    label = kind_counts_label(
-                        {
-                            "select": int(row["select_col_count"]),
-                            "alias": int(row["select_alias_count"]),
-                            "expression": int(row["select_expr_count"]),
-                            "join": int(row["join_statement_count"]),
-                            "where": int(row["where_condition_count"]),
-                            "group": int(row["group_by_col_count"]),
-                            "having": int(row["having_condition_count"]),
-                            "order": int(row["order_by_col_count"]),
-                        },
-                        always=frozenset({"select"}),
+                    label = with_reads_models_count(
+                        kind_counts_label(
+                            {
+                                "select": int(row["select_col_count"]),
+                                "alias": int(row["select_alias_count"]),
+                                "expression": int(row["select_expr_count"]),
+                                "join": int(row["join_statement_count"]),
+                                "where": int(row["where_condition_count"]),
+                                "group": int(row["group_by_col_count"]),
+                                "having": int(row["having_condition_count"]),
+                                "order": int(row["order_by_col_count"]),
+                            },
+                            always=frozenset({"select"}),
+                        ),
+                        int(row["models_read_count"]),
                     )
                     labels.append(f"{relative} ({label})")
                     nodes.append((int(row["depth"]), int(row["line_start"])))

@@ -152,7 +152,7 @@ def get_model(ctx: Context, target: str) -> str:
     Target can be a model name or model file path.
     Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
 
-    SQL Tree Legend:
+    SQL TREE LEGEND:
      - Join Statements = J
      - Where Conditions = W
      - Grouped By Columns = G
@@ -161,6 +161,7 @@ def get_model(ctx: Context, target: str) -> str:
      - Select Aliases = A
      - Total Select Columns = S
      - Order By Columns = O
+     - Models Read = M
     """
     return _processor(ctx).run_query(lambda db: run_get_model(db, target))
 
@@ -261,7 +262,7 @@ def get_column_relations(
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
 
-    Reference Kind Legend:
+    REFERENCE KIND LEGEND:
      - Join = J
      - Where = W
      - Group By = G
@@ -270,6 +271,7 @@ def get_column_relations(
      - Alias = A
      - Select = S
      - Order By = O
+     - From Model = M
     """
     return _processor(ctx).run_query(
         lambda db: run_get_column_relations(

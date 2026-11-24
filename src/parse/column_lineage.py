@@ -64,6 +64,7 @@ class ExtractedQuery(TypedDict):
     having_condition_count: int
     order_by_col_count: int
     rendered_sql: str | None
+    models_read_count: int
 
 
 def _line_span(expression: exp.Expression) -> tuple[int, int]:
@@ -251,6 +252,14 @@ def _query_depth(scope: Scope) -> int:
     return depth
 
 
+def _query_models_read_count(scope: Scope) -> int:
+    tables: set[str] = set()
+    for source in scope.sources.values():
+        if isinstance(source, exp.Table):
+            tables.add(_table_source_name(source))
+    return len(tables)
+
+
 def _rendered_query_sql(expression: exp.Query, dialect: str) -> dict[str, str]:
     sql_by_name: dict[str, str] = {}
     for scope in traverse_scope(expression):
@@ -291,6 +300,7 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                 "having_condition_count": 0,
                 "order_by_col_count": 0,
                 "rendered_sql": None if model.kind.name == "EXTERNAL" else "",
+                "models_read_count": 0,
             }
         )
     else:
@@ -341,6 +351,7 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                         "having_condition_count": having_condition_count,
                         "order_by_col_count": order_by_col_count,
                         "rendered_sql": None if external else sql_by_name[name],
+                        "models_read_count": _query_models_read_count(scope),
                     }
                 )
     return queries
