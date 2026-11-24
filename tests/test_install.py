@@ -57,7 +57,10 @@ def test_install_registers_the_binary(
     assert claude["mcpServers"]["sqlparse"]["command"] == command
     assert claude["mcpServers"]["sqlparse"]["args"] == ["mcp"]
     assert cli_calls == [
+        ["/usr/bin/claude", "mcp", "remove", "sqlparse", "--scope", "user"],
+        ["/usr/bin/claude", "mcp", "remove", "sqlparse", "--scope", "local"],
         ["/usr/bin/claude", "mcp", "add", "sqlparse", "--", command, "mcp"],
+        ["/usr/bin/gemini", "mcp", "remove", "sqlparse"],
         ["/usr/bin/gemini", "mcp", "add", "sqlparse", command, "--", "mcp"],
     ]
     assert any(url.startswith("goose://") for url in deeplinks)
@@ -96,6 +99,37 @@ def test_install_exits_one_when_nothing_written(
     monkeypatch.setattr(sys, "argv", ["sqlparse", "install"])
     monkeypatch.setattr("src.cli.install_mcp.install_mcp", list)
     assert main() == 1
+
+
+def test_install_replaces_existing_claude_code_server(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    binary = tmp_path / "sqlparse"
+    binary.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr("src.cli.install_mcp.find_claude_command", lambda: "/usr/bin/claude")
+    monkeypatch.setattr("src.cli.install_mcp.find_gemini_command", lambda: None)
+    monkeypatch.setattr("src.cli.install_mcp.open_deeplink", lambda *_args, **_kwargs: False)
+    calls: list[list[str]] = []
+
+    def run_cli(command: list[str]) -> None:
+        calls.append(command)
+        if command[:3] == ["/usr/bin/claude", "mcp", "remove"]:
+            raise subprocess.CalledProcessError(1, command, stderr="not found")
+
+    monkeypatch.setattr("src.cli.install_mcp.run_cli_command", run_cli)
+    monkeypatch.setattr(sys, "argv", [str(binary), "install"])
+    assert main() == 0
+    assert calls == [
+        ["/usr/bin/claude", "mcp", "remove", "sqlparse", "--scope", "user"],
+        ["/usr/bin/claude", "mcp", "remove", "sqlparse", "--scope", "local"],
+        ["/usr/bin/claude", "mcp", "add", "sqlparse", "--", str(binary.resolve()), "mcp"],
+    ]
+    assert "Installed MCP server → Claude Code" in capsys.readouterr().out
 
 
 def test_invalid_claude_config_is_reported(
