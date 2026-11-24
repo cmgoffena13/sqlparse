@@ -1,3 +1,6 @@
+import shutil
+from pathlib import Path
+
 import pytest
 
 import src.sqlparse_mcp.model_relations as model_relations_mod
@@ -5,6 +8,9 @@ from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.model_relations import get_model_relations
 from tests.conftest import FIXTURE_PROJECT
+
+BLUEPRINT_MODEL = Path(__file__).resolve().parent / "fixtures" / "blueprint_items.sql"
+BLUEPRINT_CONSUMER = Path(__file__).resolve().parent / "fixtures" / "blueprint_consumer.sql"
 
 
 def test_model_relations_dependencies_tree() -> None:
@@ -25,6 +31,20 @@ def test_model_relations_dependencies_tree() -> None:
         "    ├── raw.customers (EXTERNAL)\n"
         "    └── raw.orders (EXTERNAL)\n"
     )
+
+
+def test_model_relations_marks_blueprints(tmp_path: Path) -> None:
+    root = tmp_path / "sushi"
+    shutil.copytree(FIXTURE_PROJECT, root)
+    shutil.copy(BLUEPRINT_MODEL, root / "models" / "blueprint_items.sql")
+    shutil.copy(BLUEPRINT_CONSUMER, root / "models" / "blueprint_consumer.sql")
+    db = ProjectDB(root)
+    try:
+        ProjectProcessor(db, root).process(full=True)
+        out = get_model_relations(db, "sushi.bp_consumer", "dependencies")
+    finally:
+        db.close()
+    assert out == "bp1.bp_items (BLUEPRINT)\n"
 
 
 def test_model_relations_dependents_tree() -> None:

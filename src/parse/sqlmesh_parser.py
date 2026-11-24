@@ -41,7 +41,12 @@ from src.parse.column_lineage import (
     model_query_name,
 )
 from src.parse.macro_utils import macro_locations
-from src.parse.model_utils import model_config_lines, model_grain, model_time_column
+from src.parse.model_utils import (
+    model_config_lines,
+    model_grain,
+    model_is_blueprint,
+    model_time_column,
+)
 from src.parse.parse_only import install_parse_only_engine_support
 from src.parse.test_utils import fixture_column_names, test_line_span
 from src.utils import snapshot_hash
@@ -363,6 +368,7 @@ class SQLMeshParser:
         dialect = model.dialect
         config_start_line, config_end_line = model_config_lines(model)
         description = model.description
+        is_blueprint = model_is_blueprint(model)
         digest = snapshot_hash(
             [
                 file_id,
@@ -371,6 +377,7 @@ class SQLMeshParser:
                 schema_name,
                 qualified_name,
                 kind,
+                is_blueprint,
                 time_column,
                 grain,
                 config_start_line,
@@ -379,45 +386,28 @@ class SQLMeshParser:
             ]
         )
         prior = models_snapshot.get(qualified_name)
+        row = {
+            "file_id": file_id,
+            "gateway_id": gateway_id,
+            "dialect": dialect,
+            "schema_name": schema_name,
+            "qualified_name": qualified_name,
+            "kind": kind,
+            "is_blueprint": is_blueprint,
+            "time_column": time_column,
+            "grain": grain,
+            "config_start_line": config_start_line,
+            "config_end_line": config_end_line,
+            "description": description,
+            "snapshot_hash": digest,
+        }
         if prior is None:
             model_id = self.assigner.reserve("models", 1)[0]
-            self.batches["models"].append(
-                {
-                    "id": model_id,
-                    "file_id": file_id,
-                    "gateway_id": gateway_id,
-                    "dialect": dialect,
-                    "schema_name": schema_name,
-                    "qualified_name": qualified_name,
-                    "kind": kind,
-                    "time_column": time_column,
-                    "grain": grain,
-                    "config_start_line": config_start_line,
-                    "config_end_line": config_end_line,
-                    "description": description,
-                    "snapshot_hash": digest,
-                }
-            )
+            self.batches["models"].append({"id": model_id, **row})
         else:
             model_id = prior["id"]
             if prior["snapshot_hash"] != digest:
-                self.batches["models"].append(
-                    {
-                        "id": model_id,
-                        "file_id": file_id,
-                        "gateway_id": gateway_id,
-                        "dialect": dialect,
-                        "schema_name": schema_name,
-                        "qualified_name": qualified_name,
-                        "kind": kind,
-                        "time_column": time_column,
-                        "grain": grain,
-                        "config_start_line": config_start_line,
-                        "config_end_line": config_end_line,
-                        "description": description,
-                        "snapshot_hash": digest,
-                    }
-                )
+                self.batches["models"].append({"id": model_id, **row})
         models_snapshot[qualified_name] = {
             "id": model_id,
             "snapshot_hash": digest,

@@ -58,6 +58,21 @@ def bullet(text: str, lead: str = "") -> str:
     return f"  {lead}• {text}"
 
 
+def model_display_label(
+    name: str,
+    *,
+    kind: str | None = None,
+    is_blueprint: bool = False,
+    mark_external: bool = False,
+) -> str:
+    label = name
+    if mark_external and kind == "EXTERNAL":
+        label = f"{name} (EXTERNAL)"
+    elif is_blueprint:
+        label = f"{name} (BLUEPRINT)"
+    return label
+
+
 def gutter_width(numbers: list[int]) -> int:
     return max((len(str(number)) for number in numbers), default=1)
 

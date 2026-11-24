@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS models (
     schema_name         TEXT NOT NULL,
     qualified_name      TEXT NOT NULL,
     kind                TEXT NOT NULL,
+    is_blueprint        BOOLEAN NOT NULL DEFAULT FALSE,
     time_column         TEXT NULL,
     grain               TEXT NULL,
     config_start_line   INTEGER NOT NULL,

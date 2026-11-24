@@ -1,7 +1,12 @@
 from typing import Literal
 
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import page_window, tree_glyphs, with_page_footer
+from src.sqlparse_mcp.format_utils import (
+    model_display_label,
+    page_window,
+    tree_glyphs,
+    with_page_footer,
+)
 
 _MAX_NODES = 100
 _PAGE_SIZE = 100
@@ -55,18 +60,21 @@ def _load_graph(
     return dependencies, dependents
 
 
-def _model_kinds(db: ProjectDB) -> dict[str, str]:
+def _model_meta(db: ProjectDB) -> dict[str, tuple[str, bool]]:
     return {
-        str(row["qualified_name"]): str(row["kind"])
-        for row in db.connection.execute("SELECT qualified_name, kind FROM models")
+        str(row["qualified_name"]): (str(row["kind"]), bool(row["is_blueprint"]))
+        for row in db.connection.execute("SELECT qualified_name, kind, is_blueprint FROM models")
     }
 
 
-def _labeled_model(name: str, kinds: dict[str, str], mark_external: bool) -> str:
-    label = name
-    if mark_external and kinds.get(name) == "EXTERNAL":
-        label = f"{name} (EXTERNAL)"
-    return label
+def _labeled_model(name: str, meta: dict[str, tuple[str, bool]], mark_external: bool) -> str:
+    kind, is_blueprint = meta.get(name, ("", False))
+    return model_display_label(
+        name,
+        kind=kind,
+        is_blueprint=is_blueprint,
+        mark_external=mark_external,
+    )
 
 
 def _relation_lines(
@@ -76,7 +84,7 @@ def _relation_lines(
     *,
     seen: set[str],
     budget: list[int],
-    kinds: dict[str, str],
+    meta: dict[str, tuple[str, bool]],
     mark_external: bool,
     nested: bool,
     tests: dict[str, dict[str, list[str]]],
@@ -100,7 +108,7 @@ def _relation_lines(
             break
         budget[0] -= 1
         seen.add(child)
-        label = _labeled_model(child, kinds, mark_external)
+        label = _labeled_model(child, meta, mark_external)
         prefix = ""
         continuation = ""
         if nested:
@@ -115,7 +123,7 @@ def _relation_lines(
                 branch_prefix + continuation,
                 seen=seen,
                 budget=budget,
-                kinds=kinds,
+                meta=meta,
                 mark_external=mark_external,
                 nested=True,
                 tests=tests,
@@ -156,7 +164,7 @@ def get_model_relations(
             else:
                 start, stop, page_count = window
                 children[key] = siblings[start:stop]
-                kinds = _model_kinds(db)
+                meta = _model_meta(db)
                 mark_external = relation == "dependencies"
                 tests = _model_tests(db) if include_tests and relation == "dependents" else {}
                 lines = _relation_lines(
@@ -165,7 +173,7 @@ def get_model_relations(
                     "",
                     seen={key},
                     budget=[_MAX_NODES],
-                    kinds=kinds,
+                    meta=meta,
                     mark_external=mark_external,
                     nested=False,
                     tests=tests,

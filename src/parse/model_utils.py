@@ -2,9 +2,18 @@ import ast
 from pathlib import Path
 from typing import cast
 
+from sqlmesh.core import constants as sqlmesh_constants
 from sqlmesh.core.dialect import Model as ModelExpr
 from sqlmesh.core.dialect import parse as sqlmesh_parse
 from sqlmesh.core.model import Model, PythonModel
+
+
+def model_is_blueprint(model: Model) -> bool:
+    env = model.python_env or {}
+    return (
+        sqlmesh_constants.SQLMESH_BLUEPRINT_VARS in env
+        or sqlmesh_constants.SQLMESH_BLUEPRINT_VARS_METADATA in env
+    )
 
 
 def model_time_column(model: Model) -> str | None:

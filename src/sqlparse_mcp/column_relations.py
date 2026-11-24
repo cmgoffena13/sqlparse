@@ -5,6 +5,7 @@ from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_name
 from src.sqlparse_mcp.format_utils import (
     kind_label,
+    model_display_label,
     page_window,
     path_label,
     tree_glyphs,
@@ -56,6 +57,7 @@ _DEPENDENTS_SQL = """
 SELECT
     models.qualified_name AS model_name,
     models.kind AS model_kind,
+    models.is_blueprint AS model_is_blueprint,
     lineage.ref_column_query_name AS query_name,
     columns.from_table AS from_table,
     columns.name AS column_name,
@@ -105,11 +107,13 @@ def _relative_query(model_name: str, query_name: str) -> str:
     return relative
 
 
-def _model_label(model_name: str, kind: str, mark_external: bool) -> str:
-    label = model_name
-    if mark_external and kind == "EXTERNAL":
-        label = f"{model_name} (EXTERNAL)"
-    return label
+def _model_label(model_name: str, kind: str, is_blueprint: bool, mark_external: bool) -> str:
+    return model_display_label(
+        model_name,
+        kind=kind,
+        is_blueprint=is_blueprint,
+        mark_external=mark_external,
+    )
 
 
 def _column_label(from_table: str | None, column_name: str) -> str:
@@ -209,7 +213,7 @@ def _dependency_tree(
 
 def _format_groups(
     db: ProjectDB,
-    rows: list[tuple[str, str, str, str | None, str, str]],
+    rows: list[tuple[str, str, bool, str, str | None, str, str]],
     test_rows: list[tuple[str, str, str, int, int]],
     mark_external: bool,
     page: int,
@@ -217,11 +221,11 @@ def _format_groups(
     grouped: OrderedDict[str, tuple[str, bool, OrderedDict[str, OrderedDict[str, list[str]]]]] = (
         OrderedDict()
     )
-    for model_name, kind, query_name, from_table, column_name, ref_kind in rows:
+    for model_name, kind, is_blueprint, query_name, from_table, column_name, ref_kind in rows:
         _header, _hide_query, queries = grouped.setdefault(
             model_name,
             (
-                _model_label(model_name, kind, mark_external),
+                _model_label(model_name, kind, is_blueprint, mark_external),
                 mark_external and kind == "EXTERNAL",
                 OrderedDict(),
             ),
@@ -451,6 +455,7 @@ def get_column_relations(
                 (
                     str(row["model_name"]),
                     str(row["model_kind"]),
+                    bool(row["model_is_blueprint"]),
                     str(row["query_name"]),
                     str(row["from_table"]) if row["from_table"] is not None else None,
                     str(row["column_name"]),

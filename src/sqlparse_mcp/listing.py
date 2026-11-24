@@ -1,5 +1,5 @@
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import bullet
+from src.sqlparse_mcp.format_utils import bullet, model_display_label
 
 _SCHEMAS_SQL = """
 SELECT
@@ -13,7 +13,8 @@ ORDER BY models.schema_name
 _MODELS_SQL = """
 SELECT
     models.qualified_name,
-    models.kind
+    models.kind,
+    models.is_blueprint
 FROM models
 WHERE models.schema_name = ?
 ORDER BY models.qualified_name
@@ -43,7 +44,13 @@ def list_models(db: ProjectDB, schema: str) -> str:
     result = "No schema given; pass a schema name."
     if key:
         rows = list(db.connection.execute(_MODELS_SQL, (key,)))
-        names = [str(row["qualified_name"]) for row in rows]
+        names = [
+            model_display_label(
+                str(row["qualified_name"]),
+                is_blueprint=bool(row["is_blueprint"]),
+            )
+            for row in rows
+        ]
         result = _bullets(names, "Model", "No models found.")
         if rows and all(row["kind"] == "EXTERNAL" for row in rows):
             count, body = result.split("\n\n", 1)

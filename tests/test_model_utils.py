@@ -1,12 +1,49 @@
+import shutil
 from pathlib import Path
 
 import pytest
 from sqlmesh.core.context import Context
 
-from src.parse.model_utils import model_config_lines
+from src.db import ProjectDB
+from src.parse.model_utils import model_config_lines, model_is_blueprint
 from src.parse.parse_only import install_parse_only_engine_support
+from src.processor import ProjectProcessor
+from tests.conftest import FIXTURE_PROJECT
 
 BIGQUERY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "bigquery_project"
+BLUEPRINT_MODEL = Path(__file__).resolve().parent / "fixtures" / "blueprint_items.sql"
+
+
+def test_model_is_blueprint_from_python_env(tmp_path: Path) -> None:
+    root = tmp_path / "sushi"
+    shutil.copytree(FIXTURE_PROJECT, root)
+    shutil.copy(BLUEPRINT_MODEL, root / "models" / "blueprint_items.sql")
+    install_parse_only_engine_support()
+    context = Context(paths=root, load=False)
+    context.load(update_schemas=True)
+    blueprints = [model for model in context.models.values() if "bp_items" in model.name]
+    customers = next(model for model in context.models.values() if model.name == "sushi.customers")
+    assert len(blueprints) == 2
+    assert all(model_is_blueprint(model) for model in blueprints)
+    assert model_is_blueprint(customers) is False
+
+
+def test_processor_stores_is_blueprint(tmp_path: Path) -> None:
+    root = tmp_path / "sushi"
+    shutil.copytree(FIXTURE_PROJECT, root)
+    shutil.copy(BLUEPRINT_MODEL, root / "models" / "blueprint_items.sql")
+    db = ProjectDB(root)
+    try:
+        ProjectProcessor(db, root).process(full=True)
+        rows = {
+            str(row["qualified_name"]): bool(row["is_blueprint"])
+            for row in db.fetch("SELECT qualified_name, is_blueprint FROM models")
+        }
+    finally:
+        db.close()
+    assert rows["bp1.bp_items"] is True
+    assert rows["bp2.bp_items"] is True
+    assert rows["sushi.customers"] is False
 
 
 def test_model_config_lines_parses_with_the_model_dialect(
