@@ -30,6 +30,7 @@ sqlparse tools read an up-to-date view of a SQLMesh project.
 
 Utilize the ``sqlparse`` skill for guided exploration workflows.
 Use the ``skill://sqlparse/SKILL.md`` resource if the skill is not found.
+Read ``workspace://sqlparse/root`` when the indexed tree may not match the project.
 """
 
 
@@ -86,6 +87,16 @@ def sqlparse_skill() -> str:
 )
 def session_stats_resource() -> str:
     return format_session_stats_report(index_root())
+
+
+@mcp.resource(
+    "workspace://sqlparse/root",
+    name="sqlparse/root",
+    description="Absolute path of the workspace this MCP server is indexing.",
+    mime_type="text/plain",
+)
+def workspace_root_resource() -> str:
+    return f"{index_root()}\n"
 
 
 @mcp.tool()

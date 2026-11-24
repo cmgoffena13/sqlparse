@@ -37,6 +37,7 @@ SQLParse is a SQLMesh project indexer that gives agents fast, accurate, and comp
 | Resource | Description |
 | --- | --- |
 | `skill://sqlparse/SKILL.md` | Guided exploration skill for navigating SQLMesh projects. |
+| `workspace://sqlparse/root` | Absolute path of the workspace this MCP server is indexing. |
 | `stats://sqlparse/sessions` | Per-session markdown table of files with tool calls and a tokens-saved range. |
 
 ## Commands

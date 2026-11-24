@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -50,3 +51,13 @@ def test_materialize_skill_writes_skill_md(tmp_path: Path) -> None:
     written = materialize_skill(config)
     assert written == config / "SKILL.md"
     assert written.read_text(encoding="utf-8") == SKILL_INSTRUCTIONS
+
+
+def test_server_exposes_workspace_root_resource() -> None:
+    from src.sqlparse_mcp.server import mcp
+
+    resources = asyncio.run(mcp.list_resources())
+    uris = {str(resource.uri) for resource in resources}
+    assert "skill://sqlparse/SKILL.md" in uris
+    assert "stats://sqlparse/sessions" in uris
+    assert "workspace://sqlparse/root" in uris

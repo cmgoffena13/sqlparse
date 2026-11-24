@@ -55,6 +55,10 @@ The information that is provided to you will determine the tool you should use.
 
 # RESOURCES
 
+## ``workspace://sqlparse/root``
+ - Absolute path of the workspace this MCP server is indexing.
+ - If the path doesn't match the project, stop and tell the user to restart the sqlparse MCP server.
+
 ## ``stats://sqlparse/sessions``
  - Only use when the question is about sqlparse sessions, cost, or decision quality.
 

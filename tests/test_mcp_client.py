@@ -55,6 +55,8 @@ def test_client_lists_tools_and_reads_the_project(
             assert {tool.name for tool in tools} == _TOOLS
             skill = _resource_text(await mcp_client.read_resource("skill://sqlparse/SKILL.md"))
             assert skill == SKILL_INSTRUCTIONS
+            root = _resource_text(await mcp_client.read_resource("workspace://sqlparse/root"))
+            assert root.strip() == str(FIXTURE_PROJECT.resolve())
             search_out = _text(
                 await mcp_client.call_tool("search", {"query": "customers", "limit": 30})
             )
