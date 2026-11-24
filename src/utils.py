@@ -16,6 +16,10 @@ else:
     load_dotenv()
 
 
+def silence_grpc_logs() -> None:
+    os.environ.setdefault("GRPC_VERBOSITY", "ERROR")
+
+
 def snapshot_hash(values: Sequence[object]) -> str:
     payload = "|".join("" if value is None else str(value) for value in values)
     return xxhash.xxh128(payload.encode()).hexdigest()

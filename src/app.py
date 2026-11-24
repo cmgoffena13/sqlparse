@@ -5,7 +5,7 @@ from pathlib import Path
 from src.cli.commands import build_arg_parser, make_parser
 from src.db import cleanup_orphan_indexes, remove_index_files
 from src.git_utils import is_git_controlled
-from src.utils import get_sqlparse_config_dir, get_version
+from src.utils import get_sqlparse_config_dir, get_version, silence_grpc_logs
 
 
 def _require_dir(path: Path) -> Path | None:
@@ -54,6 +54,7 @@ def _run_mcp(root: Path) -> int:
 
 
 def main() -> int:
+    silence_grpc_logs()
     if len(sys.argv) > 1 and sys.argv[1] == "sync":
         from src.sqlparse_mcp.skill import sync_skill
 

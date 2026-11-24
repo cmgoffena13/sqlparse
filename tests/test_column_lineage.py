@@ -78,6 +78,21 @@ def test_unnest_source_is_not_a_synthetic_query_name() -> None:
     )
 
 
+def test_extract_tolerates_unknown_table_qualified_columns() -> None:
+    install_parse_only_engine_support()
+    context = Context(paths=BIGQUERY_FIXTURE, load=False)
+    context.load(update_schemas=True)
+    model = next(model for model in context.models.values() if model.name == "fake.unknown_column")
+    queries = extract_model_queries(model)
+    columns = extract_model_columns(model)
+    references = extract_model_column_references(model)
+    assert any(query["name"] == "$" for query in queries)
+    assert any(column["name"] == "missing_col" for column in columns)
+    assert any(
+        reference["ref_column_qualified_name"].endswith("missing_col") for reference in references
+    )
+
+
 def test_union_cte_column_lineage_does_not_raise(tmp_path: Path) -> None:
     root = tmp_path / "sushi"
     shutil.copytree(FIXTURE_PROJECT, root)

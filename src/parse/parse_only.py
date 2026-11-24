@@ -6,6 +6,8 @@ from sqlmesh.core.config.connection import ConnectionConfig
 from sqlmesh.core.config.scheduler import BuiltInSchedulerConfig
 from sqlmesh.core.context import GenericContext
 
+from src.utils import silence_grpc_logs
+
 _ENGINE_IMPORT_NAMES = (
     "snowflake.connector.network",
     "databricks",
@@ -73,5 +75,6 @@ def _default_catalog_per_gateway(
 
 
 def install_parse_only_engine_support() -> None:
+    silence_grpc_logs()
     _install_missing_engine_stubs()
     BuiltInSchedulerConfig.get_default_catalog_per_gateway = _default_catalog_per_gateway

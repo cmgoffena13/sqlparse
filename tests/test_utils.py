@@ -6,7 +6,19 @@ from pathlib import Path
 import pytest
 import xxhash
 
-from src.utils import get_version, is_compiled, snapshot_hash
+from src.utils import get_version, is_compiled, silence_grpc_logs, snapshot_hash
+
+
+def test_silence_grpc_logs_sets_error_verbosity(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GRPC_VERBOSITY", raising=False)
+    silence_grpc_logs()
+    assert os.environ["GRPC_VERBOSITY"] == "ERROR"
+
+
+def test_silence_grpc_logs_keeps_existing_verbosity(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GRPC_VERBOSITY", "DEBUG")
+    silence_grpc_logs()
+    assert os.environ["GRPC_VERBOSITY"] == "DEBUG"
 
 
 def test_snapshot_hash_joins_values_and_blank_nones() -> None:

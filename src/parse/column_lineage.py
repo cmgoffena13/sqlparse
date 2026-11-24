@@ -11,6 +11,16 @@ from sqlmesh.core.model import Model
 FINAL_QUERY = "$"
 
 
+def _qualify_query(query: exp.Query, dialect: str, schema: dict | None) -> exp.Query:
+    return qualify(
+        query,
+        dialect=dialect,
+        schema=schema,
+        validate_qualify_columns=False,
+        allow_partial_qualification=True,
+    )
+
+
 def stored_query_name(name: str) -> str:
     stored = name
     if not name.startswith(FINAL_QUERY):
@@ -188,7 +198,7 @@ def _columns_from_query(
     model_name: str, query: exp.Query, dialect: str, schema: dict | None
 ) -> list[ExtractedColumn]:
     columns: list[ExtractedColumn] = []
-    qualified = qualify(query, dialect=dialect, schema=schema, validate_qualify_columns=False)
+    qualified = _qualify_query(query, dialect, schema)
     annotate_types(qualified, schema=schema, dialect=dialect)
     for scope in traverse_scope(qualified):
         if not (scope.is_cte or scope.is_root):
@@ -306,12 +316,7 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
     else:
         external = model.kind.name == "EXTERNAL"
         sql_by_name = {} if external else _rendered_query_sql(rendered.copy(), str(model.dialect))
-        qualified = qualify(
-            rendered,
-            dialect=model.dialect,
-            schema=model.mapping_schema,
-            validate_qualify_columns=False,
-        )
+        qualified = _qualify_query(rendered, str(model.dialect), model.mapping_schema)
         annotate_types(qualified, schema=model.mapping_schema, dialect=model.dialect)
         seen: set[str] = set()
         for scope in traverse_scope(qualified):
@@ -649,7 +654,14 @@ def _emit_root_lineage_refs(
     for expression in root_scope.expression.expressions:
         name = expression.alias_or_name
         ref_qn = _qualified_name(query_name, _projection_from_table(root_scope, expression), name)
-        node = lineage(name, query, dialect=dialect, schema=schema, copy=False)
+        node = lineage(
+            name,
+            query,
+            dialect=dialect,
+            schema=schema,
+            copy=False,
+            allow_partial_qualification=True,
+        )
         kind = _ref_kind(cast(exp.Expression, node.expression))
         for child in node.downstream:
             source = _lineage_node_qn(model_name, root_scope, child)
@@ -679,7 +691,7 @@ def extract_model_column_references(model: Model) -> list[ExtractedColumnReferen
         dialect = model.dialect
         model_name = model.name
         schema = model.mapping_schema
-        qualified = qualify(query, dialect=dialect, schema=schema, validate_qualify_columns=False)
+        qualified = _qualify_query(query, str(dialect), schema)
         for scope in traverse_scope(qualified):
             if not (scope.is_cte or scope.is_root):
                 continue
