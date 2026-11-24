@@ -50,9 +50,13 @@ def _seed(root: Path, paths: dict[str, str]) -> None:
         """
         INSERT INTO models (
             id, file_id, gateway_id, dialect, schema_name, qualified_name, kind,
-            is_blueprint, config_start_line, config_end_line, snapshot_hash
+            is_blueprint, config_start_line, config_end_line, snapshot_hash,
+            data_hash, metadata_hash
         )
-        VALUES (1, 1, 1, 'duckdb', 'sushi', 'sushi.customers', 'FULL', FALSE, 1, 1, 'hash')
+        VALUES (
+            1, 1, 1, 'duckdb', 'sushi', 'sushi.customers', 'FULL', FALSE, 1, 1, 'hash',
+            'data', 'meta'
+        )
         """
     )
     db.connection.commit()

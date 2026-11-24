@@ -69,11 +69,14 @@ class ProjectGatewaySnapshot(TypedDict):
 class ModelSnapshot(TypedDict):
     id: int
     snapshot_hash: str
+    data_hash: str
+    metadata_hash: str
     seen: bool
 
 
 class QuerySnapshot(TypedDict):
     id: int
+    model_id: int
     query_name: str
     snapshot_hash: str
     seen: bool
@@ -81,6 +84,7 @@ class QuerySnapshot(TypedDict):
 
 class ColumnSnapshot(TypedDict):
     id: int
+    model_id: int
     snapshot_hash: str
     seen: bool
 
@@ -111,6 +115,7 @@ class ModelAuditSnapshot(TypedDict):
 
 class ColumnLineageSnapshot(TypedDict):
     id: int
+    ref_column_model_id: int
     snapshot_hash: str
     seen: bool
 
@@ -129,6 +134,7 @@ class TestReferenceSnapshot(TypedDict):
 
 class SearchDocSnapshot(TypedDict):
     id: int
+    model_name: str
     snapshot_hash: str
     seen: bool
 
@@ -269,7 +275,9 @@ class ProjectDB:
         self.delete_ids("project_gateways", gateway_ids)
 
     def get_models_snapshot(self) -> dict[str, ModelSnapshot]:
-        cursor = self.connection.execute("SELECT id, qualified_name, snapshot_hash FROM models")
+        cursor = self.connection.execute(
+            "SELECT id, qualified_name, snapshot_hash, data_hash, metadata_hash FROM models"
+        )
         return {str(row["qualified_name"]): self._model_snapshot(row) for row in cursor}
 
     def delete_models(self, models: dict[str, ModelSnapshot]) -> None:
@@ -289,7 +297,9 @@ class ProjectDB:
         self.delete_ids("queries", query_ids)
 
     def get_columns_snapshot(self) -> dict[str, ColumnSnapshot]:
-        cursor = self.connection.execute("SELECT id, qualified_name, snapshot_hash FROM columns")
+        cursor = self.connection.execute(
+            "SELECT id, model_id, qualified_name, snapshot_hash FROM columns"
+        )
         return {str(row["qualified_name"]): self._column_snapshot(row) for row in cursor}
 
     def delete_columns(self, columns: dict[str, ColumnSnapshot]) -> None:
@@ -297,7 +307,7 @@ class ProjectDB:
         self.delete_ids("columns", column_ids)
 
     def get_search_docs_snapshot(self) -> dict[str, SearchDocSnapshot]:
-        cursor = self.connection.execute("SELECT id, snapshot_hash FROM search_docs")
+        cursor = self.connection.execute("SELECT id, model_name, snapshot_hash FROM search_docs")
         return {str(row["id"]): self._search_doc_snapshot(row) for row in cursor}
 
     def delete_search_docs(self, search_docs: dict[str, SearchDocSnapshot]) -> None:
@@ -367,8 +377,9 @@ class ProjectDB:
 
     def get_column_lineage_snapshot(self) -> dict[str, ColumnLineageSnapshot]:
         cursor = self.connection.execute(
-            "SELECT id, ref_column_qualified_name, source_column_qualified_name, "
-            "source_line, ref_line, ref_kind, snapshot_hash FROM column_lineage"
+            "SELECT id, ref_column_model_id, ref_column_qualified_name, "
+            "source_column_qualified_name, source_line, ref_line, ref_kind, snapshot_hash "
+            "FROM column_lineage"
         )
         return {
             self._column_lineage_key(
@@ -456,12 +467,15 @@ class ProjectDB:
         return {
             "id": int(row["id"]),
             "snapshot_hash": str(row["snapshot_hash"]),
+            "data_hash": str(row["data_hash"]),
+            "metadata_hash": str(row["metadata_hash"]),
             "seen": False,
         }
 
     def _query_snapshot(self, row: sqlite3.Row) -> QuerySnapshot:
         return {
             "id": int(row["id"]),
+            "model_id": int(row["model_id"]),
             "query_name": f"{row['qualified_name']}/{row['name']}",
             "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
@@ -470,6 +484,7 @@ class ProjectDB:
     def _column_snapshot(self, row: sqlite3.Row) -> ColumnSnapshot:
         return {
             "id": int(row["id"]),
+            "model_id": int(row["model_id"]),
             "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
@@ -505,6 +520,7 @@ class ProjectDB:
     def _column_lineage_snapshot(self, row: sqlite3.Row) -> ColumnLineageSnapshot:
         return {
             "id": int(row["id"]),
+            "ref_column_model_id": int(row["ref_column_model_id"]),
             "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
@@ -526,6 +542,7 @@ class ProjectDB:
     def _search_doc_snapshot(self, row: sqlite3.Row) -> SearchDocSnapshot:
         return {
             "id": int(row["id"]),
+            "model_name": str(row["model_name"]),
             "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
@@ -576,11 +593,11 @@ class ProjectDB:
                 INSERT OR REPLACE INTO models (
                     id, file_id, gateway_id, dialect, schema_name, qualified_name, kind,
                     is_blueprint, time_column, grain, config_start_line, config_end_line,
-                    description, snapshot_hash
+                    description, snapshot_hash, data_hash, metadata_hash
                 ) VALUES (
                     :id, :file_id, :gateway_id, :dialect, :schema_name, :qualified_name, :kind,
                     :is_blueprint, :time_column, :grain, :config_start_line, :config_end_line,
-                    :description, :snapshot_hash
+                    :description, :snapshot_hash, :data_hash, :metadata_hash
                 )
                 """,
                 batches["models"],

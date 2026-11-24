@@ -42,6 +42,51 @@ def test_processor_releases_sqlmesh_before_the_next_index() -> None:
         db.close()
 
 
+def test_second_full_sync_skips_prepare_when_model_hashes_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlmesh.core.model import Model
+
+    from src.parse import column_lineage
+    from src.parse.column_lineage import PreparedModelQuery
+
+    prepared_names: list[str] = []
+    real_prepare = column_lineage.prepare_model_query
+
+    def tracking_prepare(model: Model) -> PreparedModelQuery:
+        prepared_names.append(model.name)
+        return real_prepare(model)
+
+    monkeypatch.setattr(
+        "src.parse.sqlmesh_parser.prepare_model_query",
+        tracking_prepare,
+    )
+    db = ProjectDB(FIXTURE_PROJECT)
+    processor = ProjectProcessor(db, FIXTURE_PROJECT)
+    try:
+        processor.process(full=True)
+        rows = {
+            str(row["qualified_name"]): dict(row)
+            for row in db.fetch("SELECT qualified_name, data_hash, metadata_hash FROM models")
+        }
+        customers = next(
+            model
+            for model in processor.parser.context.models.values()
+            if model.name == CUSTOMERS_FQN
+        )
+        assert rows[CUSTOMERS_FQN]["data_hash"] == customers.data_hash
+        assert rows[CUSTOMERS_FQN]["metadata_hash"] == customers.metadata_hash
+        first_prepare_count = len(prepared_names)
+        assert first_prepare_count > 0
+        lineage_before = db.fetch("SELECT COUNT(*) AS c FROM column_lineage")[0]["c"]
+        processor.process(full=True)
+        assert len(prepared_names) == first_prepare_count
+        assert db.fetch("SELECT COUNT(*) AS c FROM column_lineage")[0]["c"] == lineage_before
+    finally:
+        processor.close()
+        db.close()
+
+
 def test_processor_reuses_context_across_process_calls() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     processor = ProjectProcessor(db, FIXTURE_PROJECT)
@@ -134,7 +179,7 @@ def test_processor_indexes_files_and_directories() -> None:
             for row in db.fetch(
                 "SELECT id, file_id, gateway_id, dialect, schema_name, qualified_name, kind, "
                 "time_column, grain, config_start_line, config_end_line, description, "
-                "snapshot_hash FROM models"
+                "snapshot_hash, data_hash, metadata_hash FROM models"
             )
         }
         first_columns = {
@@ -223,7 +268,7 @@ def test_processor_indexes_files_and_directories() -> None:
             for row in db.fetch(
                 "SELECT id, file_id, gateway_id, dialect, schema_name, qualified_name, kind, "
                 "time_column, grain, config_start_line, config_end_line, description, "
-                "snapshot_hash FROM models"
+                "snapshot_hash, data_hash, metadata_hash FROM models"
             )
         }
         second_columns = {
@@ -383,6 +428,8 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[CUSTOMERS_FQN]["config_end_line"] == 6
     assert first_models[CUSTOMERS_FQN]["description"] == "Customer grain with order amounts"
     assert first_models[CUSTOMERS_FQN]["snapshot_hash"]
+    assert first_models[CUSTOMERS_FQN]["data_hash"]
+    assert first_models[CUSTOMERS_FQN]["metadata_hash"]
     assert first_models[ORDERS_FQN]["kind"] == "INCREMENTAL_BY_TIME_RANGE"
     assert first_models[ORDERS_FQN]["time_column"] == "order_id"
     assert first_models[ORDERS_FQN]["grain"] is None

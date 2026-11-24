@@ -58,7 +58,9 @@ CREATE TABLE IF NOT EXISTS models (
     config_start_line   INTEGER NOT NULL,
     config_end_line     INTEGER NOT NULL,
     description         TEXT NULL,
-    snapshot_hash       TEXT NOT NULL
+    snapshot_hash       TEXT NOT NULL,
+    data_hash           TEXT NOT NULL,
+    metadata_hash       TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS models_qualified_name_index ON models (qualified_name);
 

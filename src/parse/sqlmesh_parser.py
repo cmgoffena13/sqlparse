@@ -142,23 +142,35 @@ class SQLMeshParser:
         columns_snapshot = self.db.get_columns_snapshot()
         search_docs_snapshot = self.db.get_search_docs_snapshot()
         queries_snapshot = self.db.get_queries_snapshot()
+        self._prepared_queries = {}
         for prior_query in queries_snapshot.values():
             self._query_ids[prior_query["query_name"]] = prior_query["id"]
         for model in self.context.models.values():
-            prepared = prepare_model_query(model)
-            self._prepared_queries[model.name] = prepared
-            self._sync_model(model, files_snapshot, models_snapshot)
+            need_extract = self._sync_model(model, files_snapshot, models_snapshot)
             self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
             self._sync_model_audits(model, models_snapshot, audits_snapshot, model_audits_snapshot)
-            self._sync_queries(model, files_snapshot, models_snapshot, queries_snapshot, prepared)
-            self._sync_columns(
-                model,
-                files_snapshot,
-                models_snapshot,
-                columns_snapshot,
-                search_docs_snapshot,
-                prepared,
-            )
+            if need_extract:
+                prepared = prepare_model_query(model)
+                self._prepared_queries[model.name] = prepared
+                self._sync_queries(
+                    model, files_snapshot, models_snapshot, queries_snapshot, prepared
+                )
+                self._sync_columns(
+                    model,
+                    files_snapshot,
+                    models_snapshot,
+                    columns_snapshot,
+                    search_docs_snapshot,
+                    prepared,
+                )
+            else:
+                self._retain_model_extracts(
+                    models_snapshot[model.name]["id"],
+                    model.name,
+                    queries_snapshot,
+                    columns_snapshot,
+                    search_docs_snapshot,
+                )
             self._flush()
 
         self.db.delete_model_macros(model_macros_snapshot)
@@ -183,14 +195,20 @@ class SQLMeshParser:
         column_lineage_snapshot = self.db.get_column_lineage_snapshot()
         column_name_index = build_column_name_index(columns_snapshot)
         for model in self.context.models.values():
-            self._sync_column_lineage(
-                model,
-                models_snapshot,
-                columns_snapshot,
-                column_lineage_snapshot,
-                self._prepared_queries[model.name],
-                column_name_index,
-            )
+            if model.name in self._prepared_queries:
+                self._sync_column_lineage(
+                    model,
+                    models_snapshot,
+                    columns_snapshot,
+                    column_lineage_snapshot,
+                    self._prepared_queries[model.name],
+                    column_name_index,
+                )
+            else:
+                self._retain_model_lineage(
+                    models_snapshot[model.name]["id"],
+                    column_lineage_snapshot,
+                )
             self._flush()
 
         self.db.delete_column_lineage(column_lineage_snapshot)
@@ -372,7 +390,7 @@ class SQLMeshParser:
         model: Model,
         files_snapshot: dict[str, FileSnapshot],
         models_snapshot: dict[str, ModelSnapshot],
-    ) -> None:
+    ) -> bool:
         qualified_name = model.name
         schema_name = model.schema_name
         kind = model.kind.name
@@ -386,6 +404,8 @@ class SQLMeshParser:
         config_start_line, config_end_line = model_config_lines(model)
         description = model.description
         is_blueprint = model_is_blueprint(model)
+        data_hash = model.data_hash
+        metadata_hash = model.metadata_hash
         digest = snapshot_hash(
             [
                 file_id,
@@ -400,9 +420,16 @@ class SQLMeshParser:
                 config_start_line,
                 config_end_line,
                 description,
+                data_hash,
+                metadata_hash,
             ]
         )
         prior = models_snapshot.get(qualified_name)
+        need_extract = (
+            prior is None
+            or prior["data_hash"] != data_hash
+            or prior["metadata_hash"] != metadata_hash
+        )
         row = {
             "file_id": file_id,
             "gateway_id": gateway_id,
@@ -417,6 +444,8 @@ class SQLMeshParser:
             "config_end_line": config_end_line,
             "description": description,
             "snapshot_hash": digest,
+            "data_hash": data_hash,
+            "metadata_hash": metadata_hash,
         }
         if prior is None:
             model_id = self.assigner.reserve("models", 1)[0]
@@ -428,8 +457,38 @@ class SQLMeshParser:
         models_snapshot[qualified_name] = {
             "id": model_id,
             "snapshot_hash": digest,
+            "data_hash": data_hash,
+            "metadata_hash": metadata_hash,
             "seen": True,
         }
+        return need_extract
+
+    def _retain_model_extracts(
+        self,
+        model_id: int,
+        model_name: str,
+        queries_snapshot: dict[str, QuerySnapshot],
+        columns_snapshot: dict[str, ColumnSnapshot],
+        search_docs_snapshot: dict[str, SearchDocSnapshot],
+    ) -> None:
+        for prior in queries_snapshot.values():
+            if prior["model_id"] == model_id:
+                prior["seen"] = True
+        for prior in columns_snapshot.values():
+            if prior["model_id"] == model_id:
+                prior["seen"] = True
+        for prior in search_docs_snapshot.values():
+            if prior["model_name"] == model_name:
+                prior["seen"] = True
+
+    def _retain_model_lineage(
+        self,
+        model_id: int,
+        column_lineage_snapshot: dict[str, ColumnLineageSnapshot],
+    ) -> None:
+        for prior in column_lineage_snapshot.values():
+            if prior["ref_column_model_id"] == model_id:
+                prior["seen"] = True
 
     def _sync_model_macros(
         self,
@@ -570,6 +629,7 @@ class SQLMeshParser:
                     self.batches["queries"].append(row)
             queries_snapshot[key] = {
                 "id": query_id,
+                "model_id": model_id,
                 "query_name": query["query_name"],
                 "snapshot_hash": digest,
                 "seen": True,
@@ -673,6 +733,7 @@ class SQLMeshParser:
                     )
             columns_snapshot[qualified_name] = {
                 "id": column_id,
+                "model_id": model_id,
                 "snapshot_hash": digest,
                 "seen": True,
             }
@@ -698,6 +759,7 @@ class SQLMeshParser:
                 )
             search_docs_snapshot[str(column_id)] = {
                 "id": column_id,
+                "model_name": model_name,
                 "snapshot_hash": doc_digest,
                 "seen": True,
             }
@@ -787,6 +849,7 @@ class SQLMeshParser:
                 )
                 column_lineage_snapshot[key] = {
                     "id": lineage_id,
+                    "ref_column_model_id": model_id,
                     "snapshot_hash": digest,
                     "seen": True,
                 }
@@ -813,6 +876,7 @@ class SQLMeshParser:
                 )
             column_lineage_snapshot[key] = {
                 "id": lineage_id,
+                "ref_column_model_id": model_id,
                 "snapshot_hash": digest,
                 "seen": True,
             }
