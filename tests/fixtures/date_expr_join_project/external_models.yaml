@@ -1,0 +1,7 @@
+- name: marketing.page_views
+  columns:
+    id: STRING
+    event_date_et: TIMESTAMP
+- name: marketing.first_purchase
+  columns:
+    event_date_et: DATE

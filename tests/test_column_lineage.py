@@ -16,6 +16,7 @@ from tests.conftest import FIXTURE_PROJECT
 UNION_CTE_MODEL = Path(__file__).resolve().parent / "fixtures" / "union_cte_model.sql"
 UNION_FROM_CTE_MODEL = Path(__file__).resolve().parent / "fixtures" / "union_from_cte_model.sql"
 BIGQUERY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "bigquery_project"
+DATE_EXPR_JOIN_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "date_expr_join_project"
 
 
 def test_extract_model_queries_marks_models_read_count() -> None:
@@ -145,3 +146,26 @@ def test_union_cte_fed_by_cte_syncs_column_lineage(tmp_path: Path) -> None:
         db.close()
     assert "sushi.union_from_cte/$combined/$base.id" in columns
     assert "sushi.union_from_cte/$combined/$base.id" in refs
+
+
+def test_date_expression_join_syncs_column_lineage(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    shutil.copytree(DATE_EXPR_JOIN_FIXTURE, root)
+    db = ProjectDB(root)
+    try:
+        ProjectProcessor(db, root).process(full=True)
+        refs = {
+            str(row["ref_column_qualified_name"])
+            for row in db.fetch(
+                """
+                SELECT column_lineage.ref_column_qualified_name
+                FROM column_lineage
+                INNER JOIN models
+                    ON models.id = column_lineage.ref_column_model_id
+                WHERE models.qualified_name = 'marketing.checkout'
+                """
+            )
+        }
+    finally:
+        db.close()
+    assert "marketing.checkout/$marketing_views/marketing.page_views.event_date_et" in refs

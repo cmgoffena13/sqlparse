@@ -406,7 +406,7 @@ def _cte_projection_qn(
     model_name: str, cte_name: str, scope: Scope, expression: exp.Expression
 ) -> str:
     name = expression.alias_or_name
-    from_table = _resolved_source(scope, _column_table_alias(expression))
+    from_table = _projection_from_table(scope, expression)
     return _qualified_name(model_query_name(model_name, cte_name), from_table, name)
 
 
