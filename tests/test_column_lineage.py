@@ -14,6 +14,7 @@ from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
 
 UNION_CTE_MODEL = Path(__file__).resolve().parent / "fixtures" / "union_cte_model.sql"
+UNION_FROM_CTE_MODEL = Path(__file__).resolve().parent / "fixtures" / "union_from_cte_model.sql"
 BIGQUERY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "bigquery_project"
 
 
@@ -107,3 +108,40 @@ def test_union_cte_column_lineage_does_not_raise(tmp_path: Path) -> None:
     assert any(
         reference["ref_column_qualified_name"].endswith("customer_id") for reference in references
     )
+
+
+def test_union_cte_fed_by_cte_syncs_column_lineage(tmp_path: Path) -> None:
+    root = tmp_path / "sushi"
+    shutil.copytree(FIXTURE_PROJECT, root)
+    shutil.copy(UNION_FROM_CTE_MODEL, root / "models" / "union_from_cte.sql")
+    db = ProjectDB(root)
+    try:
+        ProjectProcessor(db, root).process(full=True)
+        columns = {
+            str(row["qualified_name"])
+            for row in db.fetch(
+                """
+                SELECT columns.qualified_name
+                FROM columns
+                INNER JOIN models
+                    ON models.id = columns.model_id
+                WHERE models.qualified_name = 'sushi.union_from_cte'
+                """
+            )
+        }
+        refs = {
+            str(row["ref_column_qualified_name"])
+            for row in db.fetch(
+                """
+                SELECT column_lineage.ref_column_qualified_name
+                FROM column_lineage
+                INNER JOIN models
+                    ON models.id = column_lineage.ref_column_model_id
+                WHERE models.qualified_name = 'sushi.union_from_cte'
+                """
+            )
+        }
+    finally:
+        db.close()
+    assert "sushi.union_from_cte/$combined/$base.id" in columns
+    assert "sushi.union_from_cte/$combined/$base.id" in refs

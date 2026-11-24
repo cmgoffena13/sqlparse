@@ -209,7 +209,7 @@ def _columns_from_query(
             if scope.is_cte and parent is not None
             else final_query_name(model_name)
         )
-        for expression in scope.expression.expressions:
+        for expression in _select_projections(cast(exp.Expression, scope.expression)):
             name = expression.alias_or_name
             from_table = _projection_from_table(scope, expression)
             line_start, line_end = _line_span(expression)
