@@ -12,6 +12,8 @@ _SKILL_BODY = """\
  - NEVER use ``read`` or ``grep .`` on a SQL file or directory.
  - Only ``include_tests`` when making changes to the codebase. 
  - DO NOT ``include_tests`` when investigating unless explicitly asked.
+ - If ``workspace://sqlparse/root`` does not match the project, STOP IMMEDIATELY.
+    - Inform the user to restart the sqlparse MCP server.
 
 # Tool Inputs
  - Query names are prefixed with ``$``. 
@@ -57,7 +59,6 @@ The information that is provided to you will determine the tool you should use.
 
 ## ``workspace://sqlparse/root``
  - Absolute path of the workspace this MCP server is indexing.
- - If the path doesn't match the project, stop and tell the user to restart the sqlparse MCP server.
 
 ## ``stats://sqlparse/sessions``
  - Only use when the question is about sqlparse sessions, cost, or decision quality.
