@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from typing import TypedDict, cast
 
+from pydantic import BaseModel, ConfigDict
 from sqlglot import exp
 from sqlglot.lineage import Node, lineage
 from sqlglot.optimizer.annotate_types import annotate_types
@@ -9,6 +10,21 @@ from sqlglot.optimizer.scope import Scope, traverse_scope
 from sqlmesh.core.model import Model
 
 FINAL_QUERY = "$"
+
+ColumnNameIndex = dict[str, dict[str, list[str]]]
+
+
+class PreparedModelQuery(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    model: Model
+    model_name: str
+    dialect: str
+    kind: str
+    mapping_schema: dict | None
+    rendered: exp.Query | None
+    qualified: exp.Query | None
+    sql_by_name: dict[str, str]
 
 
 def _qualify_query(query: exp.Query, dialect: str, schema: dict | None) -> exp.Query:
@@ -19,6 +35,45 @@ def _qualify_query(query: exp.Query, dialect: str, schema: dict | None) -> exp.Q
         validate_qualify_columns=False,
         allow_partial_qualification=True,
     )
+
+
+def prepare_model_query(model: Model) -> PreparedModelQuery:
+    rendered: exp.Query | None
+    try:
+        rendered = model.render_query()
+    except Exception:  # noqa: BLE001
+        rendered = None
+    dialect = str(model.dialect)
+    mapping_schema = model.mapping_schema
+    sql_by_name: dict[str, str] = {}
+    qualified: exp.Query | None = None
+    if rendered is not None:
+        external = model.kind.name == "EXTERNAL"
+        sql_by_name = {} if external else _rendered_query_sql(rendered.copy(), dialect)
+        qualified = _qualify_query(rendered, dialect, mapping_schema)
+        annotate_types(qualified, schema=mapping_schema, dialect=model.dialect)
+    return PreparedModelQuery(
+        model=model,
+        model_name=model.name,
+        dialect=dialect,
+        kind=model.kind.name,
+        mapping_schema=mapping_schema,
+        rendered=rendered,
+        qualified=qualified,
+        sql_by_name=sql_by_name,
+    )
+
+
+def build_column_name_index(qualified_names: Mapping[str, object]) -> ColumnNameIndex:
+    index: ColumnNameIndex = {}
+    for qualified_name in qualified_names:
+        model, sep, rest = qualified_name.partition("/")
+        query, sep2, column = rest.partition("/") if sep else ("", "", "")
+        if sep and sep2:
+            query_name = f"{model}/{query}"
+            bare = column.rsplit(".", 1)[-1]
+            index.setdefault(query_name, {}).setdefault(bare, []).append(qualified_name)
+    return index
 
 
 def stored_query_name(name: str) -> str:
@@ -132,29 +187,30 @@ def _qualified_name(query_name: str, from_table: str | None, name: str) -> str:
 
 
 def _stored_qualified_name(
-    query_name: str, proposed: str, qualified_names: Mapping[str, object]
+    query_name: str,
+    proposed: str,
+    qualified_names: Mapping[str, object],
+    name_index: ColumnNameIndex,
 ) -> str:
     stored = proposed
     if proposed not in qualified_names:
         column_name = proposed.rsplit("/", 1)[-1].rsplit(".", 1)[-1]
-        names = _columns_named(query_name, column_name, qualified_names)
+        names = _columns_named(query_name, column_name, qualified_names, name_index)
         if len(names) == 1:
             stored = names[0]
     return stored
 
 
 def _columns_named(
-    query_name: str, column_name: str, qualified_names: Mapping[str, object]
+    query_name: str,
+    column_name: str,
+    qualified_names: Mapping[str, object],
+    name_index: ColumnNameIndex,
 ) -> list[str]:
-    model, _, query = query_name.rpartition("/")
-    prefix = f"{model}/{query}/"
-    exact = f"{prefix}{column_name}"
+    exact = f"{query_name}/{column_name}"
     matched = [exact] if exact in qualified_names else []
     if not matched:
-        for qualified_name in qualified_names:
-            bare = qualified_name[len(prefix) :].rsplit(".", 1)[-1]
-            if qualified_name.startswith(prefix) and bare == column_name:
-                matched.append(qualified_name)
+        matched = list(name_index.get(query_name, {}).get(column_name, []))
     return matched
 
 
@@ -195,11 +251,9 @@ def _columns_from_types(model: Model) -> list[ExtractedColumn]:
 
 
 def _columns_from_query(
-    model_name: str, query: exp.Query, dialect: str, schema: dict | None
+    model_name: str, qualified: exp.Query, dialect: str
 ) -> list[ExtractedColumn]:
     columns: list[ExtractedColumn] = []
-    qualified = _qualify_query(query, dialect, schema)
-    annotate_types(qualified, schema=schema, dialect=dialect)
     for scope in traverse_scope(qualified):
         if not (scope.is_cte or scope.is_root):
             continue
@@ -287,21 +341,20 @@ def _rendered_query_sql(expression: exp.Query, dialect: str) -> dict[str, str]:
     return sql_by_name
 
 
-def extract_model_queries(model: Model) -> list[ExtractedQuery]:
+def extract_model_queries(
+    model: Model, prepared: PreparedModelQuery | None = None
+) -> list[ExtractedQuery]:
+    prepared_query = prepared if prepared is not None else prepare_model_query(model)
     queries: list[ExtractedQuery] = []
-    try:
-        rendered = model.render_query()
-    except Exception:  # noqa: BLE001
-        rendered = None
-    if rendered is None:
+    if prepared_query.qualified is None:
         queries.append(
             {
                 "name": FINAL_QUERY,
-                "query_name": final_query_name(model.name),
+                "query_name": final_query_name(prepared_query.model_name),
                 "line_start": 0,
                 "line_end": 0,
                 "depth": 0,
-                "select_col_count": len(model.columns_to_types or {}),
+                "select_col_count": len(prepared_query.model.columns_to_types or {}),
                 "select_expr_count": 0,
                 "select_alias_count": 0,
                 "where_condition_count": 0,
@@ -309,24 +362,21 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                 "group_by_col_count": 0,
                 "having_condition_count": 0,
                 "order_by_col_count": 0,
-                "rendered_sql": None if model.kind.name == "EXTERNAL" else "",
+                "rendered_sql": None if prepared_query.kind == "EXTERNAL" else "",
                 "models_read_count": 0,
             }
         )
     else:
-        external = model.kind.name == "EXTERNAL"
-        sql_by_name = {} if external else _rendered_query_sql(rendered.copy(), str(model.dialect))
-        qualified = _qualify_query(rendered, str(model.dialect), model.mapping_schema)
-        annotate_types(qualified, schema=model.mapping_schema, dialect=model.dialect)
+        external = prepared_query.kind == "EXTERNAL"
         seen: set[str] = set()
-        for scope in traverse_scope(qualified):
+        for scope in traverse_scope(prepared_query.qualified):
             parent = scope.expression.parent
             included = scope.is_cte or scope.is_root
             name = FINAL_QUERY
             if included and scope.is_cte and parent is not None:
                 name = parent.alias_or_name
             name = stored_query_name(name)
-            query_name = model_query_name(model.name, name)
+            query_name = model_query_name(prepared_query.model_name, name)
             if included and query_name not in seen:
                 seen.add(query_name)
                 line_start, line_end = _query_line_span(scope.expression)
@@ -355,25 +405,24 @@ def extract_model_queries(model: Model) -> list[ExtractedQuery]:
                         "group_by_col_count": group_by_col_count,
                         "having_condition_count": having_condition_count,
                         "order_by_col_count": order_by_col_count,
-                        "rendered_sql": None if external else sql_by_name[name],
+                        "rendered_sql": None if external else prepared_query.sql_by_name[name],
                         "models_read_count": _query_models_read_count(scope),
                     }
                 )
     return queries
 
 
-def extract_model_columns(model: Model) -> list[ExtractedColumn]:
-    columns: list[ExtractedColumn]
-    query: exp.Query | None
-    try:
-        query = model.render_query()
-    except Exception:  # noqa: BLE001
-        query = None
-    if query is None:
-        columns = _columns_from_types(model)
-    else:
-        columns = _columns_from_query(model.name, query, model.dialect, model.mapping_schema)
-    return columns
+def extract_model_columns(
+    model: Model, prepared: PreparedModelQuery | None = None
+) -> list[ExtractedColumn]:
+    prepared_query = prepared if prepared is not None else prepare_model_query(model)
+    return (
+        _columns_from_types(prepared_query.model)
+        if prepared_query.qualified is None
+        else _columns_from_query(
+            prepared_query.model_name, prepared_query.qualified, prepared_query.dialect
+        )
+    )
 
 
 def _append_reference(
@@ -651,17 +700,19 @@ def _emit_root_lineage_refs(
 ) -> None:
     root_scope = next(scope for scope in traverse_scope(query) if scope.is_root)
     query_name = final_query_name(model_name)
-    for expression in root_scope.expression.expressions:
+    nodes = lineage(
+        None,
+        query,
+        dialect=dialect,
+        schema=schema,
+        scope=root_scope,
+        copy=False,
+        allow_partial_qualification=True,
+    )
+    for expression in _select_projections(cast(exp.Expression, root_scope.expression)):
         name = expression.alias_or_name
+        node = nodes[name]
         ref_qn = _qualified_name(query_name, _projection_from_table(root_scope, expression), name)
-        node = lineage(
-            name,
-            query,
-            dialect=dialect,
-            schema=schema,
-            copy=False,
-            allow_partial_qualification=True,
-        )
         kind = _ref_kind(cast(exp.Expression, node.expression))
         for child in node.downstream:
             source = _lineage_node_qn(model_name, root_scope, child)
@@ -680,19 +731,15 @@ def _emit_root_lineage_refs(
                 )
 
 
-def extract_model_column_references(model: Model) -> list[ExtractedColumnReference]:
+def extract_model_column_references(
+    model: Model, prepared: PreparedModelQuery | None = None
+) -> list[ExtractedColumnReference]:
+    prepared_query = prepared if prepared is not None else prepare_model_query(model)
     refs: list[ExtractedColumnReference] = []
-    query: exp.Query | None
-    try:
-        query = model.render_query()
-    except Exception:  # noqa: BLE001
-        query = None
-    if query is not None:
-        dialect = model.dialect
-        model_name = model.name
-        schema = model.mapping_schema
-        qualified = _qualify_query(query, str(dialect), schema)
-        for scope in traverse_scope(qualified):
+    if prepared_query.qualified is not None:
+        model_name = prepared_query.model_name
+        dialect = prepared_query.dialect
+        for scope in traverse_scope(prepared_query.qualified):
             if not (scope.is_cte or scope.is_root):
                 continue
             parent = scope.expression.parent
@@ -719,8 +766,8 @@ def extract_model_column_references(model: Model) -> list[ExtractedColumnReferen
         _emit_root_lineage_refs(
             refs,
             model_name=model_name,
-            query=qualified,
+            query=prepared_query.qualified,
             dialect=dialect,
-            schema=schema,
+            schema=prepared_query.mapping_schema,
         )
     return refs

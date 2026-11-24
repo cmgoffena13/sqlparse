@@ -8,6 +8,7 @@ from src.parse.column_lineage import (
     extract_model_column_references,
     extract_model_columns,
     extract_model_queries,
+    prepare_model_query,
 )
 from src.parse.parse_only import install_parse_only_engine_support
 from src.processor import ProjectProcessor
@@ -38,6 +39,19 @@ def test_extract_model_queries_marks_models_read_count() -> None:
     assert status_by_name["$base"] == 1
     assert status_by_name["$filtered"] == 0
     assert status_by_name["$"] == 0
+
+
+def test_prepare_model_query_reuse_matches_direct_extracts() -> None:
+    install_parse_only_engine_support()
+    context = Context(paths=FIXTURE_PROJECT, load=False)
+    context.load(update_schemas=True)
+    model = next(model for model in context.models.values() if model.name == "sushi.customers")
+    prepared = prepare_model_query(model)
+    assert extract_model_queries(model, prepared) == extract_model_queries(model)
+    assert extract_model_columns(model, prepared) == extract_model_columns(model)
+    assert extract_model_column_references(model, prepared) == extract_model_column_references(
+        model
+    )
 
 
 def test_processor_stores_models_read_count() -> None:

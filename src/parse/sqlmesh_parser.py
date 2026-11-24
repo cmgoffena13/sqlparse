@@ -32,13 +32,16 @@ from src.db import (
 )
 from src.parse.audit_utils import audit_line_span, not_null_column_names
 from src.parse.column_lineage import (
+    PreparedModelQuery,
     _columns_named,
     _stored_qualified_name,
+    build_column_name_index,
     extract_model_column_references,
     extract_model_columns,
     extract_model_queries,
     final_query_name,
     model_query_name,
+    prepare_model_query,
 )
 from src.parse.macro_utils import macro_locations
 from src.parse.model_utils import (
@@ -112,6 +115,7 @@ class SQLMeshParser:
         self._gateway_ids: dict[tuple[str, str], int] = {}
         self._project_defaults: dict[str, str] = {}
         self._query_ids: dict[str, int] = {}
+        self._prepared_queries: dict[str, PreparedModelQuery] = {}
 
     def _new_batches(self) -> dict[str, list[dict[str, object]]]:
         return {table: [] for table in BATCH_TABLES}
@@ -141,12 +145,19 @@ class SQLMeshParser:
         for prior_query in queries_snapshot.values():
             self._query_ids[prior_query["query_name"]] = prior_query["id"]
         for model in self.context.models.values():
+            prepared = prepare_model_query(model)
+            self._prepared_queries[model.name] = prepared
             self._sync_model(model, files_snapshot, models_snapshot)
             self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
             self._sync_model_audits(model, models_snapshot, audits_snapshot, model_audits_snapshot)
-            self._sync_queries(model, files_snapshot, models_snapshot, queries_snapshot)
+            self._sync_queries(model, files_snapshot, models_snapshot, queries_snapshot, prepared)
             self._sync_columns(
-                model, files_snapshot, models_snapshot, columns_snapshot, search_docs_snapshot
+                model,
+                files_snapshot,
+                models_snapshot,
+                columns_snapshot,
+                search_docs_snapshot,
+                prepared,
             )
             self._flush()
 
@@ -170,9 +181,15 @@ class SQLMeshParser:
         self.db.delete_tests(tests_snapshot)
 
         column_lineage_snapshot = self.db.get_column_lineage_snapshot()
+        column_name_index = build_column_name_index(columns_snapshot)
         for model in self.context.models.values():
             self._sync_column_lineage(
-                model, models_snapshot, columns_snapshot, column_lineage_snapshot
+                model,
+                models_snapshot,
+                columns_snapshot,
+                column_lineage_snapshot,
+                self._prepared_queries[model.name],
+                column_name_index,
             )
             self._flush()
 
@@ -482,10 +499,11 @@ class SQLMeshParser:
         files_snapshot: dict[str, FileSnapshot],
         models_snapshot: dict[str, ModelSnapshot],
         queries_snapshot: dict[str, QuerySnapshot],
+        prepared: PreparedModelQuery,
     ) -> None:
         model_id = models_snapshot[model.name]["id"]
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
-        for query in extract_model_queries(model):
+        for query in extract_model_queries(model, prepared):
             name = query["name"]
             line_start = query["line_start"]
             line_end = query["line_end"]
@@ -565,6 +583,7 @@ class SQLMeshParser:
         models_snapshot: dict[str, ModelSnapshot],
         columns_snapshot: dict[str, ColumnSnapshot],
         search_docs_snapshot: dict[str, SearchDocSnapshot],
+        prepared: PreparedModelQuery,
     ) -> None:
         model_id = models_snapshot[model.name]["id"]
         model_name = model.name
@@ -572,7 +591,7 @@ class SQLMeshParser:
         column_descriptions = model.column_descriptions
         final_query = final_query_name(model_name)
         not_null_columns = not_null_column_names(model, self.context._audits)
-        for column in extract_model_columns(model):
+        for column in extract_model_columns(model, prepared):
             query_name = column["query_name"]
             from_table = column["from_table"]
             name = column["name"]
@@ -689,6 +708,8 @@ class SQLMeshParser:
         models_snapshot: dict[str, ModelSnapshot],
         columns_snapshot: dict[str, ColumnSnapshot],
         column_lineage_snapshot: dict[str, ColumnLineageSnapshot],
+        prepared: PreparedModelQuery,
+        name_index: dict[str, dict[str, list[str]]],
     ) -> None:
         model_id = models_snapshot[model.name]["id"]
         model_name_to_id = {
@@ -696,16 +717,20 @@ class SQLMeshParser:
             for synced in self.context.models.values()
             if synced.name in models_snapshot
         }
-        for reference in extract_model_column_references(model):
+        for reference in extract_model_column_references(model, prepared):
             ref_query_name = reference["ref_column_query_name"]
             ref_qn = _stored_qualified_name(
-                ref_query_name, reference["ref_column_qualified_name"], columns_snapshot
+                ref_query_name,
+                reference["ref_column_qualified_name"],
+                columns_snapshot,
+                name_index,
             )
             source_query_name = reference["source_query_name"]
             source_qn = _stored_qualified_name(
                 source_query_name,
                 reference["source_column_qualified_name"],
                 columns_snapshot,
+                name_index,
             )
             source_line = reference["source_line"]
             ref_line = reference["ref_line"]
@@ -800,6 +825,7 @@ class SQLMeshParser:
         tests_snapshot: dict[str, TestSnapshot],
         test_references_snapshot: dict[str, TestReferenceSnapshot],
     ) -> None:
+        column_name_index = build_column_name_index(columns_snapshot)
         for metadata in self.context._model_test_metadata:
             path = Path(str(metadata.path))
             file_id = self._file_id(path, files_snapshot)
@@ -854,7 +880,10 @@ class SQLMeshParser:
                 ):
                     column_qns.extend(
                         _columns_named(
-                            final_query_name(input_model.name), column_name, columns_snapshot
+                            final_query_name(input_model.name),
+                            column_name,
+                            columns_snapshot,
+                            column_name_index,
                         )
                     )
             outputs = body.get("outputs") or {}
@@ -864,7 +893,12 @@ class SQLMeshParser:
                 base_path=fixture_base,
             ):
                 column_qns.extend(
-                    _columns_named(final_query_name(model.name), column_name, columns_snapshot)
+                    _columns_named(
+                        final_query_name(model.name),
+                        column_name,
+                        columns_snapshot,
+                        column_name_index,
+                    )
                 )
             for cte_name, values in (outputs.get("ctes") or {}).items():
                 for column_name in fixture_column_names(
@@ -874,7 +908,10 @@ class SQLMeshParser:
                 ):
                     column_qns.extend(
                         _columns_named(
-                            model_query_name(model.name, cte_name), column_name, columns_snapshot
+                            model_query_name(model.name, cte_name),
+                            column_name,
+                            columns_snapshot,
+                            column_name_index,
                         )
                     )
             for column_qn in column_qns:
