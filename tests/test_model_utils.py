@@ -11,6 +11,7 @@ from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
 
 BIGQUERY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "bigquery_project"
+QUOTED_EXTERNAL_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "quoted_external_project"
 BLUEPRINT_MODEL = Path(__file__).resolve().parent / "fixtures" / "blueprint_items.sql"
 
 
@@ -70,3 +71,16 @@ def test_model_config_lines_parses_with_the_model_dialect(
     assert seen["default_dialect"] == "bigquery"
     assert start_line == 1
     assert end_line == 5
+
+
+def test_model_config_lines_matches_sqlmesh_external_yaml_names() -> None:
+    install_parse_only_engine_support()
+    context = Context(paths=QUOTED_EXTERNAL_FIXTURE, load=False)
+    context.load(update_schemas=True)
+    by_name = {
+        model.name: model for model in context.models.values() if model.source_type == "external"
+    }
+    publications = by_name["`fake-gcp-project-123456`.`beehiiv`.`publications`"]
+    hem_data = by_name["fake-gcp-project-123456.resonate.hem_data"]
+    assert model_config_lines(publications) == (1, 3)
+    assert model_config_lines(hem_data) == (4, 6)

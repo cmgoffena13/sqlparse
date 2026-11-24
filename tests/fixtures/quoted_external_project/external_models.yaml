@@ -1,0 +1,6 @@
+- name: '`fake-gcp-project-123456`.`beehiiv`.`publications`'
+  columns:
+    id: STRING
+- name: 'fake-gcp-project-123456.resonate.hem_data'
+  columns:
+    Customer_ID: STRING

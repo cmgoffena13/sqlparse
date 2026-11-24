@@ -6,6 +6,7 @@ from sqlmesh.core import constants as sqlmesh_constants
 from sqlmesh.core.dialect import Model as ModelExpr
 from sqlmesh.core.dialect import parse as sqlmesh_parse
 from sqlmesh.core.model import Model, PythonModel
+from sqlmesh.utils.yaml import YAML
 
 
 def model_is_blueprint(model: Model) -> bool:
@@ -57,8 +58,8 @@ def model_config_lines(model: Model) -> tuple[int, int]:
         end_line = cast(int, decorator.end_lineno)
     if source_type == "external":
         lines = text.splitlines()
-        marker = f"- name: {model.name}"
-        start_line = next(i for i, line in enumerate(lines, start=1) if line.strip() == marker)
+        row = next(entry for entry in YAML(typ="rt").load(text) if entry["name"] == model.name)
+        start_line = row.lc.line + 1
         end_line = start_line
         for i, line in enumerate(lines[start_line:], start=start_line + 1):
             if line.startswith("- "):
