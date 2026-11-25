@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from sqlglot import exp
 
 from src.db import ProjectDB
@@ -20,6 +22,11 @@ ORDERS = memory_fqn("sushi.orders")
 RAW_CUSTOMERS = memory_fqn("raw.customers")
 RAW_ORDERS = memory_fqn("raw.orders")
 CUSTOMER_STATUS = memory_fqn("sushi.customer_status")
+
+SHOP_COLUMN_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "shop_column_project"
+EXT_ORDERS = memory_fqn("ext_shop.orders")
+ORDERS_CLEAN = memory_fqn("shop.orders_clean")
+DAILY = memory_fqn("shop.daily")
 
 
 def test_column_parts_from_qn_splits_label_tail() -> None:
@@ -243,3 +250,48 @@ def test_column_relations_page_past_the_end() -> None:
     finally:
         db.close()
     assert missing.startswith("No more dependents")
+
+
+def test_column_relations_accepts_get_query_model_qualified_names() -> None:
+    db = ProjectDB(SHOP_COLUMN_FIXTURE)
+    try:
+        ProjectProcessor(db, SHOP_COLUMN_FIXTURE).process(full=True)
+        bare = get_column_relations(db, ORDERS_CLEAN, "$", "event_date_et", "dependencies")
+        model_qualified = get_column_relations(
+            db, ORDERS_CLEAN, "$", f"{ORDERS_CLEAN}.event_date_et", "dependencies"
+        )
+        source_original = get_column_relations(
+            db, ORDERS_CLEAN, "$", f"{EXT_ORDERS}.event_date", "dependencies"
+        )
+        source_aliased = get_column_relations(
+            db, ORDERS_CLEAN, "$", f"{EXT_ORDERS}.event_date_et", "dependencies"
+        )
+        customer_id = get_column_relations(db, ORDERS_CLEAN, "$", "customer_id", "dependencies")
+        order_id = get_column_relations(db, ORDERS_CLEAN, "$", "id", "dependencies")
+        article = get_column_relations(db, ORDERS_CLEAN, "$", "article_section", "dependencies")
+        external_bare = get_column_relations(db, EXT_ORDERS, "$", "event_date", "dependents")
+        external_qualified = get_column_relations(
+            db, EXT_ORDERS, "$", f"{EXT_ORDERS}.event_date", "dependents"
+        )
+        daily = get_column_relations(db, DAILY, "$", "event_date_et", "dependencies")
+    finally:
+        db.close()
+    expected_event_date = f"{EXT_ORDERS}/$EXTERNAL/event_date\n"
+    assert bare == expected_event_date
+    assert model_qualified == expected_event_date
+    assert source_original == expected_event_date
+    assert source_aliased == expected_event_date
+    assert customer_id == f"{EXT_ORDERS}/$EXTERNAL/user_id\n"
+    assert order_id == f"{EXT_ORDERS}/$EXTERNAL/id\n"
+    assert f"{EXT_ORDERS}/$EXTERNAL/event_data_article_section" in article
+    assert f"{EXT_ORDERS}/$EXTERNAL/event" in article
+    assert external_bare == external_qualified
+    assert external_bare == (
+        f"{ORDERS_CLEAN}/$/{EXT_ORDERS}.event_date (W, M)\n"
+        f"{ORDERS_CLEAN}/$/{EXT_ORDERS}.event_date_et (A, M)\n"
+        f"└── {DAILY}\n"
+    )
+    assert daily == (
+        f"{ORDERS_CLEAN}/$/{EXT_ORDERS}.event_date_et (A, M)\n"
+        f"└── {EXT_ORDERS}/$EXTERNAL/event_date\n"
+    )

@@ -168,3 +168,26 @@ def test_resolve_column_ids_accepts_cte_without_dollar() -> None:
         db.close()
     assert with_dollar == without
     assert len(with_dollar) == 1
+
+
+def test_resolve_column_ids_accepts_get_query_model_qualified_names() -> None:
+    root = Path(__file__).resolve().parent / "fixtures" / "shop_column_project"
+    db = ProjectDB(root)
+    try:
+        ProjectProcessor(db, root).process(full=True)
+        clean = memory_fqn("shop.orders_clean")
+        external = memory_fqn("ext_shop.orders")
+        bare = resolve_column_ids(db, clean, "$", "event_date_et")
+        model_qn = resolve_column_ids(db, clean, "$", f"{clean}.event_date_et")
+        short_model = resolve_column_ids(db, clean, "$", "shop.orders_clean.event_date_et")
+        source = resolve_column_ids(db, clean, "$", f"{external}.event_date")
+        external_bare = resolve_column_ids(db, external, "$", "event_date")
+        external_qn = resolve_column_ids(db, external, "$", f"{external}.event_date")
+        external_short = resolve_column_ids(db, external, "$", "ext_shop.orders.event_date")
+    finally:
+        db.close()
+    assert bare == model_qn == short_model
+    assert len(bare) == 1
+    assert len(source) == 1
+    assert external_bare == external_qn == external_short
+    assert len(external_bare) == 1

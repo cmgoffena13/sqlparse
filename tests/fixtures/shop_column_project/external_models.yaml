@@ -1,0 +1,7 @@
+- name: ext_shop.orders
+  columns:
+    id: INT
+    user_id: INT
+    event_date: DATE
+    event: TEXT
+    event_data_article_section: TEXT

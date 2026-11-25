@@ -71,16 +71,26 @@ def resolve_column_ids(
     key = column_input.strip()
     rows = list(db.connection.execute(_COLUMN_RESOLVE_SQL, (model_qualified_name, query_relative)))
     labels = {key}
+    names = {key}
     if rows:
         catalog = rows[0]["catalog_name"]
         dialect = rows[0]["dialect"]
-        labels.add(normalized_column_name(key, catalog, dialect))
-        if "." in key:
-            left, _, right = key.rpartition(".")
+        normalized = normalized_column_name(key, catalog, dialect)
+        labels.add(normalized)
+        for candidate in {key, normalized}:
+            if "." not in candidate:
+                continue
+            left, _, right = candidate.rpartition(".")
             if "." not in left and not left.startswith(FINAL_QUERY):
                 labels.add(normalized_column_name(f"{FINAL_QUERY}{left}.{right}", catalog, dialect))
+            table = left
+            if left and not left.startswith("$"):
+                table = normalized_model_name(left, catalog, dialect)
+            if table == model_qualified_name:
+                names.add(right)
+                names.add(normalized_column_name(right, catalog, dialect))
     return [
         int(row["id"])
         for row in rows
-        if str(row["column_name"]) in labels or str(row["name"]) == key
+        if str(row["column_name"]) in labels or str(row["name"]) in names
     ]
