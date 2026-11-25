@@ -42,10 +42,15 @@ from src.parse.model_utils import (
     model_config_lines,
     model_grain,
     model_is_blueprint,
+    model_qualified_name,
     model_time_column,
 )
 from src.parse.parse_utils import project_cwd, use_project_venv
-from src.parse.sqlmesh_utils import install_parse_only_engine_support
+from src.parse.sqlmesh_utils import (
+    catalog_for_connection,
+    column_label,
+    install_parse_only_engine_support,
+)
 from src.parse.test_utils import fixture_column_names, test_line_span
 from src.utils import snapshot_hash
 
@@ -88,7 +93,7 @@ class SQLMeshParser:
             bundles = list(pool.map(extract_model_bundle, models))
         return {bundle.model_name: bundle for bundle in bundles}
 
-    def sync(self, files_snapshot: dict[str, FileSnapshot]) -> None:
+    def sync(self, files_snapshot: dict[str, FileSnapshot]) -> int:
         projects_snapshot = self.db.get_projects_snapshot()
         gateways_snapshot = self.db.get_project_gateways_snapshot()
         self._sync_projects(projects_snapshot, gateways_snapshot)
@@ -115,8 +120,8 @@ class SQLMeshParser:
                 extract_models.append(model)
             else:
                 self._retain_model_extracts(
-                    models_snapshot[model.name]["id"],
-                    model.name,
+                    models_snapshot[model_qualified_name(model)]["id"],
+                    model_qualified_name(model),
                     queries_snapshot,
                     columns_snapshot,
                     search_docs_snapshot,
@@ -125,8 +130,8 @@ class SQLMeshParser:
         bundles = self._extract_models(extract_models) if extract_models else {}
         lineage_refs: dict[str, list[ExtractedColumnReference]] = {}
         for model in extract_models:
-            bundle = bundles[model.name]
-            lineage_refs[model.name] = bundle.references
+            bundle = bundles[model_qualified_name(model)]
+            lineage_refs[model_qualified_name(model)] = bundle.references
             self._sync_queries(
                 model, files_snapshot, models_snapshot, queries_snapshot, bundle.queries
             )
@@ -160,18 +165,18 @@ class SQLMeshParser:
         column_lineage_snapshot = self.db.get_column_lineage_snapshot()
         column_name_index = build_column_name_index(columns_snapshot)
         for model in self.context.models.values():
-            if model.name in lineage_refs:
+            if model_qualified_name(model) in lineage_refs:
                 self._sync_column_lineage(
                     model,
                     models_snapshot,
                     columns_snapshot,
                     column_lineage_snapshot,
-                    lineage_refs[model.name],
+                    lineage_refs[model_qualified_name(model)],
                     column_name_index,
                 )
             else:
                 self._retain_model_lineage(
-                    models_snapshot[model.name]["id"],
+                    models_snapshot[model_qualified_name(model)]["id"],
                     column_lineage_snapshot,
                 )
 
@@ -183,6 +188,7 @@ class SQLMeshParser:
         self.db.delete_project_gateways(gateways_snapshot)
         self.db.delete_projects(projects_snapshot)
         self._flush()
+        return len(extract_models)
 
     def _sync_macros(
         self,
@@ -282,7 +288,8 @@ class SQLMeshParser:
         self._project_defaults = {}
         for config_path, config in self.context.configs.items():
             project_name = config.project or Path(config_path).name
-            self._project_defaults[project_name] = config.default_gateway
+            default_gateway = config.default_gateway
+            self._project_defaults[project_name] = default_gateway
             prior_project = projects_snapshot.get(project_name)
             if prior_project is None:
                 project_id = self.assigner.reserve("projects", 1)[0]
@@ -300,47 +307,38 @@ class SQLMeshParser:
                 gateway_dialect = None
                 if gateway.model_defaults is not None and gateway.model_defaults.dialect:
                     gateway_dialect = gateway.model_defaults.dialect
-                catalog_name = None
-                if gateway.connection is not None:
-                    catalog_name = gateway.connection.get_catalog()
+                if gateway_dialect is None and config.model_defaults is not None:
+                    gateway_dialect = config.model_defaults.dialect
+                if gateway_dialect is None:
+                    gateway_dialect = self.context.default_dialect
+                connection = gateway.connection
+                if connection is None:
+                    connection = config.get_connection(gateway_name)
+                catalog_name = catalog_for_connection(connection)
+                is_default = gateway_name == default_gateway
+                digest = snapshot_hash(
+                    [project_id, gateway_name, catalog_name, gateway_dialect, is_default]
+                )
                 key = f"{project_id}:{gateway_name}"
                 prior_gateway = gateways_snapshot.get(key)
-                if prior_gateway is None:
-                    gateway_id = self.assigner.reserve("project_gateways", 1)[0]
-                    self._queue(
-                        "project_gateways",
-                        {
-                            "id": gateway_id,
-                            "project_id": project_id,
-                            "name": gateway_name,
-                            "catalog_name": catalog_name,
-                            "dialect": gateway_dialect,
-                        },
-                    )
-                else:
-                    gateway_id = prior_gateway["id"]
-                    if (
-                        prior_gateway["project_id"] != project_id
-                        or prior_gateway["name"] != gateway_name
-                        or prior_gateway["catalog_name"] != catalog_name
-                        or prior_gateway["dialect"] != gateway_dialect
-                    ):
-                        self._queue(
-                            "project_gateways",
-                            {
-                                "id": gateway_id,
-                                "project_id": project_id,
-                                "name": gateway_name,
-                                "catalog_name": catalog_name,
-                                "dialect": gateway_dialect,
-                            },
-                        )
-                gateways_snapshot[key] = {
-                    "id": gateway_id,
+                row = {
                     "project_id": project_id,
                     "name": gateway_name,
                     "catalog_name": catalog_name,
                     "dialect": gateway_dialect,
+                    "is_default": is_default,
+                    "snapshot_hash": digest,
+                }
+                if prior_gateway is None:
+                    gateway_id = self.assigner.reserve("project_gateways", 1)[0]
+                    self._queue("project_gateways", {"id": gateway_id, **row})
+                else:
+                    gateway_id = prior_gateway["id"]
+                    if prior_gateway["snapshot_hash"] != digest:
+                        self._queue("project_gateways", {"id": gateway_id, **row})
+                gateways_snapshot[key] = {
+                    "id": gateway_id,
+                    "snapshot_hash": digest,
                     "seen": True,
                 }
                 self._gateway_ids[(project_name, gateway_name)] = gateway_id
@@ -362,7 +360,7 @@ class SQLMeshParser:
         files_snapshot: dict[str, FileSnapshot],
         models_snapshot: dict[str, ModelSnapshot],
     ) -> bool:
-        qualified_name = model.name
+        qualified_name = model_qualified_name(model)
         schema_name = model.schema_name
         kind = model.kind.name
         time_column = model_time_column(model)
@@ -468,7 +466,7 @@ class SQLMeshParser:
         macros_snapshot: dict[str, MacroSnapshot],
         model_macros_snapshot: dict[str, ModelMacroSnapshot],
     ) -> None:
-        model_id = models_snapshot[model.name]["id"]
+        model_id = models_snapshot[model_qualified_name(model)]["id"]
         macro_names = set(model.jinja_macros.root_macros)
         for name in model.python_env or {}:
             if name in macros_snapshot:
@@ -497,7 +495,7 @@ class SQLMeshParser:
         audits_snapshot: dict[str, AuditSnapshot],
         model_audits_snapshot: dict[str, ModelAuditSnapshot],
     ) -> None:
-        model_id = models_snapshot[model.name]["id"]
+        model_id = models_snapshot[model_qualified_name(model)]["id"]
         audit_names = {audit_name for audit_name, _ in model.audits}
         audit_names |= set(model.audit_definitions)
         for audit_name in audit_names:
@@ -527,7 +525,7 @@ class SQLMeshParser:
         queries_snapshot: dict[str, QuerySnapshot],
         queries: list[ExtractedQuery],
     ) -> None:
-        model_id = models_snapshot[model.name]["id"]
+        model_id = models_snapshot[model_qualified_name(model)]["id"]
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
         for query in queries:
             name = query["name"]
@@ -612,8 +610,8 @@ class SQLMeshParser:
         search_docs_snapshot: dict[str, SearchDocSnapshot],
         columns: list[ExtractedColumn],
     ) -> None:
-        model_id = models_snapshot[model.name]["id"]
-        model_name = model.name
+        model_id = models_snapshot[model_qualified_name(model)]["id"]
+        model_name = model_qualified_name(model)
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
         column_descriptions = model.column_descriptions
         final_query = final_query_name(model_name)
@@ -622,7 +620,7 @@ class SQLMeshParser:
             query_name = column["query_name"]
             from_table = column["from_table"]
             name = column["name"]
-            column_name = f"{from_table}.{name}" if from_table is not None else name
+            column_name = column_label(from_table, name, model.dialect)
             qualified_name = column["qualified_name"]
             line_start = column["line_start"]
             line_end = column["line_end"]
@@ -711,9 +709,8 @@ class SQLMeshParser:
                 if query_name.startswith(f"{model_name}/")
                 else query_name
             )
-            column_label = f"{from_table}.{name}" if from_table is not None else name
             model_kind = model.kind.name
-            doc_digest = snapshot_hash([model_name, model_kind, relative, column_label])
+            doc_digest = snapshot_hash([model_name, model_kind, relative, column_name])
             doc_prior = search_docs_snapshot.get(str(column_id))
             if doc_prior is None or doc_prior["snapshot_hash"] != doc_digest:
                 self._queue(
@@ -723,7 +720,7 @@ class SQLMeshParser:
                         "model_name": model_name,
                         "model_kind": model_kind,
                         "query_name": relative,
-                        "column_name": column_label,
+                        "column_name": column_name,
                         "snapshot_hash": doc_digest,
                     },
                 )
@@ -743,11 +740,11 @@ class SQLMeshParser:
         references: list[ExtractedColumnReference],
         name_index: dict[str, dict[str, list[str]]],
     ) -> None:
-        model_id = models_snapshot[model.name]["id"]
+        model_id = models_snapshot[model_qualified_name(model)]["id"]
         model_name_to_id = {
-            synced.name: models_snapshot[synced.name]["id"]
+            model_qualified_name(synced): models_snapshot[model_qualified_name(synced)]["id"]
             for synced in self.context.models.values()
-            if synced.name in models_snapshot
+            if model_qualified_name(synced) in models_snapshot
         }
         for reference in references:
             ref_query_name = reference["ref_column_query_name"]
@@ -866,9 +863,9 @@ class SQLMeshParser:
             path = Path(str(metadata.path))
             file_id = self._file_id(path, files_snapshot)
             model = self.context.get_model(metadata.model_name)
-            if model is None or model.name not in models_snapshot:
+            if model is None or model_qualified_name(model) not in models_snapshot:
                 continue
-            model_id = models_snapshot[model.name]["id"]
+            model_id = models_snapshot[model_qualified_name(model)]["id"]
             name = metadata.test_name
             line_start, line_end = test_line_span(path, name)
             digest = snapshot_hash([file_id, model_id, name, line_start, line_end])
@@ -918,7 +915,7 @@ class SQLMeshParser:
                 ):
                     column_qns.extend(
                         _columns_named(
-                            final_query_name(input_model.name),
+                            final_query_name(model_qualified_name(input_model)),
                             column_name,
                             columns_snapshot,
                             column_name_index,
@@ -932,7 +929,7 @@ class SQLMeshParser:
             ):
                 column_qns.extend(
                     _columns_named(
-                        final_query_name(model.name),
+                        final_query_name(model_qualified_name(model)),
                         column_name,
                         columns_snapshot,
                         column_name_index,
@@ -946,7 +943,7 @@ class SQLMeshParser:
                 ):
                     column_qns.extend(
                         _columns_named(
-                            model_query_name(model.name, cte_name),
+                            model_query_name(model_qualified_name(model), cte_name),
                             column_name,
                             columns_snapshot,
                             column_name_index,

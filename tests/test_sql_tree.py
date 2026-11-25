@@ -45,7 +45,7 @@ def test_sql_tree_by_file_path() -> None:
     finally:
         db.close()
     assert out == (
-        "Model: sushi.customers\n"
+        "Model: memory.sushi.customers\n"
         "Kind: FULL\n"
         "\n"
         "## SQL Tree\n"
@@ -142,4 +142,6 @@ def test_sql_tree_missing_target() -> None:
         out = get_model(db, "missing.model")
     finally:
         db.close()
-    assert out == "No model found."
+    from src.sqlparse_mcp.model_utils import model_not_found_message
+
+    assert out == model_not_found_message()

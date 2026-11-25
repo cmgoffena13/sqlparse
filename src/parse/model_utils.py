@@ -8,6 +8,12 @@ from sqlmesh.core.dialect import parse as sqlmesh_parse
 from sqlmesh.core.model import Model, PythonModel
 from sqlmesh.utils.yaml import YAML
 
+from src.parse.sqlmesh_utils import normalized_model_name
+
+
+def model_qualified_name(model: Model) -> str:
+    return normalized_model_name(model.fqn, model.default_catalog, model.dialect)
+
 
 def model_is_blueprint(model: Model) -> bool:
     env = model.python_env or {}

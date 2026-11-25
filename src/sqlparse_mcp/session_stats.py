@@ -9,6 +9,7 @@ from fastmcp.tools.base import ToolResult
 from pydantic import BaseModel
 
 from src.sqlparse_mcp.model import _normalize_file_path
+from src.sqlparse_mcp.model_utils import resolve_model_qualified_name_on
 from src.utils import db_path_for_index_root
 
 _ARGUMENT_KEYS = {
@@ -21,7 +22,7 @@ _ARGUMENT_KEYS = {
 }
 _TRACKED_TOOLS = frozenset(_ARGUMENT_KEYS)
 
-_MODEL_FILE_SQL = """
+_MODEL_PATH_SQL = """
 SELECT files.path
 FROM models
 INNER JOIN files
@@ -422,11 +423,13 @@ def _model_path(root: Path, qualified_name: str) -> str:
     connection = _connect(root)
     if qualified_name and connection is not None:
         try:
-            row = connection.execute(_MODEL_FILE_SQL, (qualified_name,)).fetchone()
+            resolved = resolve_model_qualified_name_on(connection, qualified_name)
+            if resolved is not None:
+                row = connection.execute(_MODEL_PATH_SQL, (resolved,)).fetchone()
+                if row is not None and row["path"]:
+                    relative = str(row["path"])
         finally:
             connection.close()
-        if row is not None and row["path"]:
-            relative = str(row["path"])
     return relative
 
 

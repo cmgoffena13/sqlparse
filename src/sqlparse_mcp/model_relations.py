@@ -7,6 +7,7 @@ from src.sqlparse_mcp.format_utils import (
     tree_glyphs,
     with_page_footer,
 )
+from src.sqlparse_mcp.model_utils import model_not_found_message, resolve_model_qualified_name
 
 _MAX_NODES = 100
 _PAGE_SIZE = 100
@@ -157,37 +158,40 @@ def get_model_relations(
     key = model_name.strip()
     result = "No model name given; pass a non-empty model name."
     if key:
-        dependencies, dependents = _load_graph(db)
-        children = dependents if relation == "dependents" else dependencies
-        siblings = [child for child in children.get(key, ()) if child != key]
-        result = "No relations."
-        if siblings:
-            window = page_window(len(siblings), page, _PAGE_SIZE, label=relation)
-            if isinstance(window, str):
-                result = window
-            else:
-                start, stop, page_count = window
-                children[key] = siblings[start:stop]
-                meta = _model_meta(db)
-                mark_external = relation == "dependencies"
-                tests = _model_tests(db) if include_tests and relation == "dependents" else {}
-                lines = _relation_lines(
-                    children,
-                    key,
-                    "",
-                    seen={key},
-                    budget=[_MAX_NODES],
-                    meta=meta,
-                    mark_external=mark_external,
-                    nested=False,
-                    tests=tests,
-                )
-                result = with_page_footer(
-                    "\n".join(lines) + "\n",
-                    page,
-                    page_count,
-                    stop - start,
-                    len(siblings),
-                    relation,
-                )
+        resolved = resolve_model_qualified_name(db, key)
+        result = model_not_found_message()
+        if resolved is not None:
+            dependencies, dependents = _load_graph(db)
+            children = dependents if relation == "dependents" else dependencies
+            siblings = [child for child in children.get(resolved, ()) if child != resolved]
+            result = "No relations."
+            if siblings:
+                window = page_window(len(siblings), page, _PAGE_SIZE, label=relation)
+                if isinstance(window, str):
+                    result = window
+                else:
+                    start, stop, page_count = window
+                    children[resolved] = siblings[start:stop]
+                    meta = _model_meta(db)
+                    mark_external = relation == "dependencies"
+                    tests = _model_tests(db) if include_tests and relation == "dependents" else {}
+                    lines = _relation_lines(
+                        children,
+                        resolved,
+                        "",
+                        seen={resolved},
+                        budget=[_MAX_NODES],
+                        meta=meta,
+                        mark_external=mark_external,
+                        nested=False,
+                        tests=tests,
+                    )
+                    result = with_page_footer(
+                        "\n".join(lines) + "\n",
+                        page,
+                        page_count,
+                        stop - start,
+                        len(siblings),
+                        relation,
+                    )
     return result

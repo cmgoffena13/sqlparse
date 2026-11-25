@@ -13,6 +13,7 @@ from src.parse.column_lineage import FINAL_QUERY, _query_line_span, stored_query
 from src.sqlparse_mcp.column_relations import _resolve_query_name
 from src.sqlparse_mcp.format_utils import bullet
 from src.sqlparse_mcp.model import _normalize_file_path
+from src.sqlparse_mcp.model_utils import model_not_found_message, resolve_model_qualified_name
 
 _CONFIG_QUERY = "$CONFIG"
 _EXTERNAL_QUERY = "$EXTERNAL"
@@ -157,6 +158,7 @@ INNER JOIN models
     ON models.id = columns.model_id
 WHERE models.qualified_name = ?
   AND queries.name = ?
+  AND columns.is_select = 1
 ORDER BY columns.line_start, columns.line_end, columns.name
 """
 
@@ -297,13 +299,14 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
     key = target.strip()
     result = "No target given; pass a model name or file path."
     if key:
-        rows = list(db.connection.execute(_MODEL_SQL, (key,)))
+        resolved = resolve_model_qualified_name(db, key)
+        rows = list(db.connection.execute(_MODEL_SQL, (resolved,))) if resolved is not None else []
         from_file = not rows
         if from_file:
             file_path = _normalize_file_path(key, db.root)
             rows = list(db.connection.execute(_MODEL_BY_FILE_SQL, (file_path,)))
         if not rows:
-            result = "No model found."
+            result = model_not_found_message()
         elif len(rows) > 1:
             result = "File contains more than one model; pass a model name."
         else:

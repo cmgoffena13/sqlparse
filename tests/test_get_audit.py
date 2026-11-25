@@ -14,7 +14,7 @@ _AUDIT = (
     "\n"
     "## Models\n"
     "\n"
-    "  • sushi.customers\n"
+    "  • memory.sushi.customers\n"
 )
 
 

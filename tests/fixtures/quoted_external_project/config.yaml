@@ -1,7 +1,8 @@
 gateways:
   local:
     connection:
-      type: duckdb
+      type: bigquery
+      project: fake-gcp-project-123456
 default_gateway: local
 model_defaults:
   dialect: bigquery

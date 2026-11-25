@@ -59,10 +59,7 @@ class ProjectSnapshot(TypedDict):
 
 class ProjectGatewaySnapshot(TypedDict):
     id: int
-    project_id: int
-    name: str
-    catalog_name: str | None
-    dialect: str | None
+    snapshot_hash: str
     seen: bool
 
 
@@ -263,7 +260,7 @@ class ProjectDB:
 
     def get_project_gateways_snapshot(self) -> dict[str, ProjectGatewaySnapshot]:
         cursor = self.connection.execute(
-            "SELECT id, project_id, name, catalog_name, dialect FROM project_gateways"
+            "SELECT id, project_id, name, snapshot_hash FROM project_gateways"
         )
         return {
             f"{row['project_id']}:{row['name']}": self._project_gateway_snapshot(row)
@@ -452,14 +449,9 @@ class ProjectDB:
         }
 
     def _project_gateway_snapshot(self, row: sqlite3.Row) -> ProjectGatewaySnapshot:
-        dialect = row["dialect"]
-        catalog_name = row["catalog_name"]
         return {
             "id": int(row["id"]),
-            "project_id": int(row["project_id"]),
-            "name": str(row["name"]),
-            "catalog_name": str(catalog_name) if catalog_name is not None else None,
-            "dialect": str(dialect) if dialect is not None else None,
+            "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
 
@@ -560,10 +552,11 @@ class ProjectDB:
                 """
                 INSERT OR REPLACE INTO files (
                     id, directory_id, name, path, normalized_path, language,
-                    content_hash, mtime_ns, size_bytes, line_count, is_test
+                    content_hash, mtime_ns, size_bytes, line_count, is_test, is_config
                 ) VALUES (
                     :id, :directory_id, :name, :path, :normalized_path, :language,
-                    :content_hash, :mtime_ns, :size_bytes, :line_count, :is_test
+                    :content_hash, :mtime_ns, :size_bytes, :line_count, :is_test,
+                    :is_config
                 )
                 """,
                 batches["files"],
@@ -581,9 +574,10 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO project_gateways (
-                    id, project_id, name, catalog_name, dialect
+                    id, project_id, name, catalog_name, dialect, is_default, snapshot_hash
                 ) VALUES (
-                    :id, :project_id, :name, :catalog_name, :dialect
+                    :id, :project_id, :name, :catalog_name, :dialect, :is_default,
+                    :snapshot_hash
                 )
                 """,
                 batches["project_gateways"],

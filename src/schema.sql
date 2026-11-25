@@ -16,11 +16,16 @@ CREATE TABLE IF NOT EXISTS project_gateways (
     id                  INTEGER NOT NULL PRIMARY KEY,
     project_id          INTEGER NOT NULL REFERENCES projects(id),
     name                TEXT NOT NULL,
-    catalog_name        TEXT NULL,
-    dialect             TEXT NULL
+    catalog_name        TEXT NOT NULL,
+    dialect             TEXT NULL,
+    is_default          BOOLEAN NOT NULL,
+    snapshot_hash       TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS project_gateways_project_id_name_index
     ON project_gateways (project_id, name);
+CREATE UNIQUE INDEX IF NOT EXISTS project_gateways_project_id_default_index
+    ON project_gateways (project_id)
+    WHERE is_default;
 
 CREATE TABLE IF NOT EXISTS directories (
     id              INTEGER NOT NULL PRIMARY KEY,
@@ -41,7 +46,8 @@ CREATE TABLE IF NOT EXISTS files (
     mtime_ns            INTEGER NOT NULL,
     size_bytes          INTEGER NOT NULL,
     line_count          INTEGER NOT NULL DEFAULT 0,
-    is_test             INTEGER NOT NULL
+    is_test             BOOLEAN NOT NULL,
+    is_config           BOOLEAN NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS models (

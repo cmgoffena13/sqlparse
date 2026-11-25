@@ -63,7 +63,7 @@ def search(
                     query_name = "$EXTERNAL"
                 column_name = str(row["column_name"])
                 candidates = (
-                    ("models", search_models, model_name),
+                    ("models", search_models, path_label(model_name)),
                     ("queries", search_queries, path_label(model_name, query_name)),
                     (
                         "columns",

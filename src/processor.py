@@ -37,6 +37,10 @@ def file_path_is_test(relative_path: str) -> bool:
     )
 
 
+def file_path_is_config(relative_path: str) -> bool:
+    return relative_path.split("/")[-1] in ("config.yml", "config.yaml", "config.py")
+
+
 def _join_rel(dir_rel: str, name: str) -> str:
     return name if not dir_rel else f"{dir_rel}/{name}"
 
@@ -167,6 +171,7 @@ class ProjectProcessor:
             "size_bytes": size_bytes,
             "line_count": line_count,
             "is_test": file_path_is_test(file_relative_path),
+            "is_config": file_path_is_config(file_relative_path),
         }
         if (
             not existed
@@ -274,11 +279,11 @@ class ProjectProcessor:
         self.directories_snapshot = {
             path: meta for path, meta in self.directories_snapshot.items() if meta["seen"]
         }
+        models_indexed = 0
         if reloaded or full or self.files_indexed or deleted:
-            self.parser.sync(self.files_snapshot)
+            models_indexed = self.parser.sync(self.files_snapshot)
 
         duration_ms = round((time.perf_counter() - start_time) * 1000)
-        models_indexed = len(self.parser.context.models)
         indexed = (
             f"Indexed {self.files_indexed} files and {models_indexed} models incrementally"
             if not full

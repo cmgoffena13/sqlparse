@@ -39,6 +39,10 @@ async def _print_tools() -> None:
 
     async with Client(mcp) as client:
         _print_section(
+            "CATALOGS",
+            _body(await client.call_tool("list_catalogs", {})),
+        )
+        _print_section(
             "SCHEMAS",
             _body(await client.call_tool("list_schemas", {})),
         )

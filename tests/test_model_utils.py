@@ -6,9 +6,10 @@ from sqlmesh.core.context import Context
 
 from src.db import ProjectDB
 from src.parse.model_utils import model_config_lines, model_is_blueprint
-from src.parse.sqlmesh_utils import install_parse_only_engine_support
+from src.parse.sqlmesh_utils import install_parse_only_engine_support, normalized_model_name
 from src.processor import ProjectProcessor
-from tests.conftest import FIXTURE_PROJECT
+from src.sqlparse_mcp.model_utils import resolve_column_ids, resolve_model_qualified_name
+from tests.conftest import FIXTURE_PROJECT, memory_fqn
 
 BIGQUERY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "bigquery_project"
 QUOTED_EXTERNAL_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "quoted_external_project"
@@ -42,9 +43,9 @@ def test_processor_stores_is_blueprint(tmp_path: Path) -> None:
         }
     finally:
         db.close()
-    assert rows["bp1.bp_items"] is True
-    assert rows["bp2.bp_items"] is True
-    assert rows["sushi.customers"] is False
+    assert rows["memory.bp1.bp_items"] is True
+    assert rows["memory.bp2.bp_items"] is True
+    assert rows["memory.sushi.customers"] is False
 
 
 def test_model_config_lines_parses_with_the_model_dialect(
@@ -84,3 +85,86 @@ def test_model_config_lines_matches_sqlmesh_external_yaml_names() -> None:
     hem_data = by_name["fake-gcp-project-123456.resonate.hem_data"]
     assert model_config_lines(publications) == (1, 3)
     assert model_config_lines(hem_data) == (4, 6)
+
+
+def test_resolve_model_qualified_name_uses_model_gateway_catalog() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        gateway = db.connection.execute(
+            "SELECT id, catalog_name, dialect FROM project_gateways WHERE name = 'local'"
+        ).fetchone()
+        model = db.connection.execute(
+            """
+            SELECT qualified_name, gateway_id
+            FROM models
+            WHERE qualified_name = ?
+            """,
+            (memory_fqn("sushi.customers"),),
+        ).fetchone()
+        assert gateway is not None
+        assert model is not None
+        assert int(model["gateway_id"]) == int(gateway["id"])
+        assert gateway["catalog_name"] == "memory"
+        assert resolve_model_qualified_name(db, "sushi.customers") == memory_fqn("sushi.customers")
+        assert resolve_model_qualified_name(db, memory_fqn("sushi.customers")) == memory_fqn(
+            "sushi.customers"
+        )
+    finally:
+        db.close()
+
+
+def test_resolve_model_qualified_name_short_external_uses_gateway() -> None:
+    install_parse_only_engine_support()
+    db = ProjectDB(QUOTED_EXTERNAL_FIXTURE)
+    try:
+        ProjectProcessor(db, QUOTED_EXTERNAL_FIXTURE).process(full=True)
+        expected = normalized_model_name(
+            "beehiiv.publications", "fake-gcp-project-123456", "bigquery"
+        )
+        gateway = db.connection.execute(
+            "SELECT id FROM project_gateways WHERE name = 'local'"
+        ).fetchone()
+        model = db.connection.execute(
+            "SELECT gateway_id FROM models WHERE qualified_name = ?",
+            (expected,),
+        ).fetchone()
+        assert gateway is not None
+        assert model is not None
+        assert int(model["gateway_id"]) == int(gateway["id"])
+        assert resolve_model_qualified_name(db, "beehiiv.publications") == expected
+    finally:
+        db.close()
+
+
+def test_resolve_column_ids_accepts_unquoted_and_bare_names() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        model = memory_fqn("sushi.customer_orders")
+        quoted = f"{memory_fqn('sushi.customers')}.customer_id"
+        full = resolve_column_ids(db, model, "$", "memory.sushi.customers.customer_id")
+        short = resolve_column_ids(db, model, "$", "sushi.customers.customer_id")
+        exact = resolve_column_ids(db, model, "$", quoted)
+        bare = resolve_column_ids(db, model, "$", "customer_id")
+        missing = resolve_column_ids(db, model, "$", "missing_col")
+    finally:
+        db.close()
+    assert full == exact
+    assert short == exact
+    assert len(exact) == 1
+    assert len(bare) == 2
+    assert missing == []
+
+
+def test_resolve_column_ids_accepts_cte_without_dollar() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        model = memory_fqn("sushi.customer_status")
+        with_dollar = resolve_column_ids(db, model, "$", "$filtered.customer_id")
+        without = resolve_column_ids(db, model, "$", "filtered.customer_id")
+    finally:
+        db.close()
+    assert with_dollar == without
+    assert len(with_dollar) == 1

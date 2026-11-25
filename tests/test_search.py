@@ -38,15 +38,15 @@ def test_search_finds_models_queries_and_columns() -> None:
     finally:
         db.close()
     assert "## Models\n\n" in out
-    assert "sushi.customers" in out
+    assert "memory.sushi.customers" in out
     assert "## Queries\n\n" in out
-    assert "sushi.customers/$cte" in out
-    assert "sushi.customers/$" in out
+    assert "memory.sushi.customers/$cte" in out
+    assert "memory.sushi.customers/$" in out
     assert "## Columns\n\n" in out
-    assert "sushi.customers/$/$cte.customer_id" in out
-    assert "raw.customers/$EXTERNAL" in out
-    assert "raw.customers/$EXTERNAL/status" in out
-    assert "• raw.customers/$\n" not in out
+    assert "memory.sushi.customers/$/$cte.customer_id" in out
+    assert "memory.raw.customers/$EXTERNAL" in out
+    assert "memory.raw.customers/$EXTERNAL/status" in out
+    assert "• memory.raw.customers/$\n" not in out
 
 
 def test_search_cte_name_includes_model() -> None:
@@ -56,7 +56,7 @@ def test_search_cte_name_includes_model() -> None:
         out = search(db, "filtered", limit=20)
     finally:
         db.close()
-    assert "sushi.customer_status/$filtered" in out
+    assert "memory.sushi.customer_status/$filtered" in out
 
 
 def test_search_column_prefers_smart_identifier() -> None:
@@ -66,7 +66,7 @@ def test_search_column_prefers_smart_identifier() -> None:
         out = search(db, "amount_cents", limit=20)
     finally:
         db.close()
-    assert "sushi.customers/$cte/raw.orders.amount_cents" in out
+    assert "memory.sushi.customers/$cte/memory.raw.orders.amount_cents" in out
 
 
 def test_search_ranks_globally_across_sections() -> None:
@@ -93,10 +93,10 @@ def test_search_can_keep_any_combination_of_sections() -> None:
     assert models.startswith("## Models\n")
     assert "## Queries" not in models
     assert "## Columns" not in models
-    assert "sushi.customers" in models
+    assert "memory.sushi.customers" in models
     assert queries_and_columns.startswith("## Queries\n")
     assert "## Models" not in queries_and_columns
     assert "## Columns" in queries_and_columns
-    assert "sushi.customers/$cte" in queries_and_columns
+    assert "memory.sushi.customers/$cte" in queries_and_columns
     ranks = [int(match) for match in re.findall(r"#(\d+)\s+•", queries_and_columns)]
     assert sorted(ranks) == list(range(1, len(ranks) + 1))

@@ -9,6 +9,9 @@ from sqlglot.optimizer.qualify import qualify
 from sqlglot.optimizer.scope import Scope, traverse_scope
 from sqlmesh.core.model import Model
 
+from src.parse.model_utils import model_qualified_name
+from src.parse.sqlmesh_utils import column_label, normalized_model_name
+
 FINAL_QUERY = "$"
 
 ColumnNameIndex = dict[str, dict[str, list[str]]]
@@ -20,6 +23,7 @@ class PreparedModelQuery(BaseModel):
     model: Model
     model_name: str
     dialect: str
+    default_catalog: str | None
     kind: str
     mapping_schema: dict | None
     rendered: exp.Query | None
@@ -54,8 +58,9 @@ def prepare_model_query(model: Model) -> PreparedModelQuery:
         annotate_types(qualified, schema=mapping_schema, dialect=model.dialect)
     return PreparedModelQuery(
         model=model,
-        model_name=model.name,
+        model_name=model_qualified_name(model),
         dialect=dialect,
+        default_catalog=model.default_catalog,
         kind=model.kind.name,
         mapping_schema=mapping_schema,
         rendered=rendered,
@@ -145,7 +150,7 @@ class ModelExtractBundle(BaseModel):
 def extract_model_bundle(model: Model) -> ModelExtractBundle:
     prepared = prepare_model_query(model)
     return ModelExtractBundle(
-        model_name=model.name,
+        model_name=prepared.model_name,
         prepared=prepared,
         queries=extract_model_queries(model, prepared),
         columns=extract_model_columns(model, prepared),
@@ -179,32 +184,43 @@ def _column_table_alias(expression: exp.Expression) -> str | None:
     return column.table if isinstance(column, exp.Column) and column.table else None
 
 
-def _projection_from_table(scope: Scope, expression: exp.Expression) -> str | None:
+def _projection_from_table(
+    scope: Scope,
+    expression: exp.Expression,
+    *,
+    default_catalog: str | None,
+    dialect: str,
+) -> str | None:
     alias = _column_table_alias(expression)
     if alias is None:
         tables = {column.table for column in expression.find_all(exp.Column) if column.table}
         alias = tables.pop() if len(tables) == 1 else None
-    return _resolved_source(scope, alias)
+    return _resolved_source(scope, alias, default_catalog=default_catalog, dialect=dialect)
 
 
-def _table_source_name(table: exp.Table) -> str:
-    return f"{table.db}.{table.name}" if table.db else table.name
+def _table_source_name(table: exp.Table, *, default_catalog: str | None, dialect: str) -> str:
+    return normalized_model_name(table, default_catalog, dialect)
 
 
-def _resolved_source(scope: Scope, table_alias: str | None) -> str | None:
+def _resolved_source(
+    scope: Scope,
+    table_alias: str | None,
+    *,
+    default_catalog: str | None,
+    dialect: str,
+) -> str | None:
     source = None if table_alias is None else scope.sources.get(table_alias)
     source_name = None
     if isinstance(source, exp.Table):
-        source_name = _table_source_name(source)
+        source_name = _table_source_name(source, default_catalog=default_catalog, dialect=dialect)
     if table_alias is not None and isinstance(source, Scope) and source.is_cte:
         source_name = stored_query_name(table_alias)
     return source_name
 
 
-def _qualified_name(query_name: str, from_table: str | None, name: str) -> str:
-    column = f"{from_table}.{name}" if from_table is not None else name
+def _qualified_name(query_name: str, from_table: str | None, name: str, dialect: str) -> str:
     model, _, query = query_name.rpartition("/")
-    return f"{model}/{query}/{column}"
+    return f"{model}/{query}/{column_label(from_table, name, dialect)}"
 
 
 def _stored_qualified_name(
@@ -249,7 +265,7 @@ def _ref_kind(expression: exp.Expr) -> str:
 
 
 def _columns_from_types(model: Model) -> list[ExtractedColumn]:
-    model_name = model.name
+    model_name = model_qualified_name(model)
     query_name = final_query_name(model_name)
     dialect = model.dialect
     columns: list[ExtractedColumn] = []
@@ -260,7 +276,7 @@ def _columns_from_types(model: Model) -> list[ExtractedColumn]:
                 "query_name": query_name,
                 "from_table": None,
                 "name": name,
-                "qualified_name": _qualified_name(query_name, None, name),
+                "qualified_name": _qualified_name(query_name, None, name, dialect),
                 "data_type": type_sql,
                 "line_start": 0,
                 "line_end": 0,
@@ -272,7 +288,11 @@ def _columns_from_types(model: Model) -> list[ExtractedColumn]:
 
 
 def _columns_from_query(
-    model_name: str, qualified: exp.Query, dialect: str
+    model_name: str,
+    qualified: exp.Query,
+    dialect: str,
+    *,
+    default_catalog: str | None,
 ) -> list[ExtractedColumn]:
     columns: list[ExtractedColumn] = []
     for scope in traverse_scope(qualified):
@@ -286,14 +306,16 @@ def _columns_from_query(
         )
         for expression in _select_projections(cast(exp.Expression, scope.expression)):
             name = expression.alias_or_name
-            from_table = _projection_from_table(scope, expression)
+            from_table = _projection_from_table(
+                scope, expression, default_catalog=default_catalog, dialect=dialect
+            )
             line_start, line_end = _line_span(expression)
             columns.append(
                 {
                     "query_name": query_name,
                     "from_table": from_table,
                     "name": name,
-                    "qualified_name": _qualified_name(query_name, from_table, name),
+                    "qualified_name": _qualified_name(query_name, from_table, name, dialect),
                     "data_type": cast(exp.DataType, expression.type).sql(dialect=dialect),
                     "line_start": line_start,
                     "line_end": line_end,
@@ -303,7 +325,11 @@ def _columns_from_query(
             )
         seen = {column["qualified_name"] for column in columns}
         for clause_column in _columns_from_clauses(
-            query_name, scope, dialect, model_name=model_name
+            query_name,
+            scope,
+            dialect,
+            model_name=model_name,
+            default_catalog=default_catalog,
         ):
             if clause_column["qualified_name"] not in seen:
                 columns.append(clause_column)
@@ -337,11 +363,11 @@ def _query_depth(scope: Scope) -> int:
     return depth
 
 
-def _query_models_read_count(scope: Scope) -> int:
+def _query_models_read_count(scope: Scope, *, default_catalog: str | None, dialect: str) -> int:
     tables: set[str] = set()
     for source in scope.sources.values():
         if isinstance(source, exp.Table):
-            tables.add(_table_source_name(source))
+            tables.add(_table_source_name(source, default_catalog=default_catalog, dialect=dialect))
     return len(tables)
 
 
@@ -427,7 +453,11 @@ def extract_model_queries(
                         "having_condition_count": having_condition_count,
                         "order_by_col_count": order_by_col_count,
                         "rendered_sql": None if external else prepared_query.sql_by_name[name],
-                        "models_read_count": _query_models_read_count(scope),
+                        "models_read_count": _query_models_read_count(
+                            scope,
+                            default_catalog=prepared_query.default_catalog,
+                            dialect=prepared_query.dialect,
+                        ),
                     }
                 )
     return queries
@@ -441,7 +471,10 @@ def extract_model_columns(
         _columns_from_types(prepared_query.model)
         if prepared_query.qualified is None
         else _columns_from_query(
-            prepared_query.model_name, prepared_query.qualified, prepared_query.dialect
+            prepared_query.model_name,
+            prepared_query.qualified,
+            prepared_query.dialect,
+            default_catalog=prepared_query.default_catalog,
         )
     )
 
@@ -473,11 +506,19 @@ def _append_reference(
 
 
 def _cte_projection_qn(
-    model_name: str, cte_name: str, scope: Scope, expression: exp.Expression
+    model_name: str,
+    cte_name: str,
+    scope: Scope,
+    expression: exp.Expression,
+    *,
+    default_catalog: str | None,
+    dialect: str,
 ) -> str:
     name = expression.alias_or_name
-    from_table = _projection_from_table(scope, expression)
-    return _qualified_name(model_query_name(model_name, cte_name), from_table, name)
+    from_table = _projection_from_table(
+        scope, expression, default_catalog=default_catalog, dialect=dialect
+    )
+    return _qualified_name(model_query_name(model_name, cte_name), from_table, name, dialect)
 
 
 def _select_projections(expression: exp.Expression) -> list[exp.Expression]:
@@ -491,17 +532,22 @@ def _select_projections(expression: exp.Expression) -> list[exp.Expression]:
 
 
 def _table_column_qn(
-    scope: Scope, column: exp.Column, *, model_name: str
+    scope: Scope,
+    column: exp.Column,
+    *,
+    model_name: str,
+    default_catalog: str | None,
+    dialect: str,
 ) -> tuple[str, str, str] | None:
     resolved: tuple[str, str, str] | None = None
     source = scope.sources.get(column.table) if column.table else None
     if isinstance(source, exp.Table):
-        from_table = _table_source_name(source)
+        from_table = _table_source_name(source, default_catalog=default_catalog, dialect=dialect)
         source_query_name = final_query_name(from_table)
         resolved = (
             from_table,
             source_query_name,
-            _qualified_name(source_query_name, None, column.name),
+            _qualified_name(source_query_name, None, column.name, dialect),
         )
     if isinstance(source, Scope) and source.is_cte:
         cte_name = column.table
@@ -518,7 +564,14 @@ def _table_column_qn(
             resolved = (
                 stored_query_name(cte_name),
                 query_name,
-                _cte_projection_qn(model_name, cte_name, source, expression),
+                _cte_projection_qn(
+                    model_name,
+                    cte_name,
+                    source,
+                    expression,
+                    default_catalog=default_catalog,
+                    dialect=dialect,
+                ),
             )
     return resolved
 
@@ -590,12 +643,23 @@ def _clause_nodes(select: exp.Select) -> list[tuple[str, exp.Expression]]:
 
 
 def _columns_from_clauses(
-    query_base: str, scope: Scope, dialect: str, *, model_name: str
+    query_base: str,
+    scope: Scope,
+    dialect: str,
+    *,
+    model_name: str,
+    default_catalog: str | None,
 ) -> list[ExtractedColumn]:
     columns: list[ExtractedColumn] = []
     for _kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
         for column in node.find_all(exp.Column):
-            source = _table_column_qn(scope, column, model_name=model_name)
+            source = _table_column_qn(
+                scope,
+                column,
+                model_name=model_name,
+                default_catalog=default_catalog,
+                dialect=dialect,
+            )
             if source is not None:
                 from_table, _source_query_name, _source_qn = source
                 line_start, line_end = _line_span(column)
@@ -604,7 +668,9 @@ def _columns_from_clauses(
                         "query_name": query_base,
                         "from_table": from_table,
                         "name": column.name,
-                        "qualified_name": _qualified_name(query_base, from_table, column.name),
+                        "qualified_name": _qualified_name(
+                            query_base, from_table, column.name, dialect
+                        ),
                         "data_type": cast(exp.DataType, column.type).sql(dialect=dialect),
                         "line_start": line_start,
                         "line_end": line_end,
@@ -622,16 +688,23 @@ def _emit_clause_refs(
     scope: Scope,
     dialect: str,
     model_name: str,
+    default_catalog: str | None,
 ) -> None:
     for kind, node in _clause_nodes(cast(exp.Select, scope.expression)):
         for column in node.find_all(exp.Column):
-            source = _table_column_qn(scope, column, model_name=model_name)
+            source = _table_column_qn(
+                scope,
+                column,
+                model_name=model_name,
+                default_catalog=default_catalog,
+                dialect=dialect,
+            )
             if source is not None:
                 from_table, source_query_name, source_qn = source
                 _append_reference(
                     refs,
                     ref_query_name=query_base,
-                    ref_qn=_qualified_name(query_base, from_table, column.name),
+                    ref_qn=_qualified_name(query_base, from_table, column.name, dialect),
                     source_query_name=source_query_name,
                     source_qn=source_qn,
                     ref_expression=node,
@@ -648,13 +721,27 @@ def _emit_cte_projection_refs(
     scope: Scope,
     cte_name: str,
     dialect: str,
+    default_catalog: str | None,
 ) -> None:
     ref_query_name = model_query_name(model_name, cte_name)
     for expression in _select_projections(cast(exp.Expression, scope.expression)):
-        ref_qn = _cte_projection_qn(model_name, cte_name, scope, expression)
+        ref_qn = _cte_projection_qn(
+            model_name,
+            cte_name,
+            scope,
+            expression,
+            default_catalog=default_catalog,
+            dialect=dialect,
+        )
         inner = _unwrap(expression)
         if isinstance(inner, exp.Column):
-            source = _table_column_qn(scope, inner, model_name=model_name)
+            source = _table_column_qn(
+                scope,
+                inner,
+                model_name=model_name,
+                default_catalog=default_catalog,
+                dialect=dialect,
+            )
             if source is not None:
                 _from_table, source_query_name, source_qn = source
                 _append_reference(
@@ -670,7 +757,13 @@ def _emit_cte_projection_refs(
                 )
             continue
         for column in inner.find_all(exp.Column):
-            source = _table_column_qn(scope, column, model_name=model_name)
+            source = _table_column_qn(
+                scope,
+                column,
+                model_name=model_name,
+                default_catalog=default_catalog,
+                dialect=dialect,
+            )
             if source is not None:
                 _from_table, source_query_name, source_qn = source
                 _append_reference(
@@ -686,27 +779,43 @@ def _emit_cte_projection_refs(
                 )
 
 
-def _lineage_node_qn(model_name: str, root_scope: Scope, node: Node) -> tuple[str, str] | None:
+def _lineage_node_qn(
+    model_name: str,
+    root_scope: Scope,
+    node: Node,
+    *,
+    default_catalog: str | None,
+    dialect: str,
+) -> tuple[str, str] | None:
     expression = cast(exp.Expression, node.expression)
     resolved: tuple[str, str] | None = None
     if isinstance(expression, exp.Placeholder):
         resolved = None
     elif isinstance(expression, exp.Table):
         column_name = node.name.split(".")[-1].strip('"')
-        query_name = final_query_name(_table_source_name(expression))
-        resolved = (query_name, _qualified_name(query_name, None, column_name))
+        query_name = final_query_name(
+            _table_source_name(expression, default_catalog=default_catalog, dialect=dialect)
+        )
+        resolved = (query_name, _qualified_name(query_name, None, column_name, dialect))
     elif node.reference_node_name:
         cte_scope = root_scope.sources.get(node.reference_node_name)
         if isinstance(cte_scope, Scope):
             resolved = (
                 model_query_name(model_name, node.reference_node_name),
-                _cte_projection_qn(model_name, node.reference_node_name, cte_scope, expression),
+                _cte_projection_qn(
+                    model_name,
+                    node.reference_node_name,
+                    cte_scope,
+                    expression,
+                    default_catalog=default_catalog,
+                    dialect=dialect,
+                ),
             )
     elif isinstance(_unwrap(expression), exp.Column):
         query_name = final_query_name(model_name)
         resolved = (
             query_name,
-            _qualified_name(query_name, None, expression.alias_or_name),
+            _qualified_name(query_name, None, expression.alias_or_name, dialect),
         )
     return resolved
 
@@ -717,6 +826,7 @@ def _emit_root_lineage_refs(
     model_name: str,
     query: exp.Query,
     dialect: str,
+    default_catalog: str | None,
     schema: dict | None,
 ) -> None:
     root_scope = next(scope for scope in traverse_scope(query) if scope.is_root)
@@ -733,10 +843,23 @@ def _emit_root_lineage_refs(
     for expression in _select_projections(cast(exp.Expression, root_scope.expression)):
         name = expression.alias_or_name
         node = nodes[name]
-        ref_qn = _qualified_name(query_name, _projection_from_table(root_scope, expression), name)
+        ref_qn = _qualified_name(
+            query_name,
+            _projection_from_table(
+                root_scope, expression, default_catalog=default_catalog, dialect=dialect
+            ),
+            name,
+            dialect,
+        )
         kind = _ref_kind(cast(exp.Expression, node.expression))
         for child in node.downstream:
-            source = _lineage_node_qn(model_name, root_scope, child)
+            source = _lineage_node_qn(
+                model_name,
+                root_scope,
+                child,
+                default_catalog=default_catalog,
+                dialect=dialect,
+            )
             if source is not None:
                 source_query_name, source_qn = source
                 _append_reference(
@@ -760,6 +883,7 @@ def extract_model_column_references(
     if prepared_query.qualified is not None:
         model_name = prepared_query.model_name
         dialect = prepared_query.dialect
+        default_catalog = prepared_query.default_catalog
         for scope in traverse_scope(prepared_query.qualified):
             if not (scope.is_cte or scope.is_root):
                 continue
@@ -776,6 +900,7 @@ def extract_model_column_references(
                     scope=scope,
                     cte_name=parent.alias_or_name,
                     dialect=dialect,
+                    default_catalog=default_catalog,
                 )
             _emit_clause_refs(
                 refs,
@@ -783,12 +908,14 @@ def extract_model_column_references(
                 scope=scope,
                 dialect=dialect,
                 model_name=model_name,
+                default_catalog=default_catalog,
             )
         _emit_root_lineage_refs(
             refs,
             model_name=model_name,
             query=prepared_query.qualified,
             dialect=dialect,
+            default_catalog=default_catalog,
             schema=prepared_query.mapping_schema,
         )
     return refs

@@ -3,4 +3,4 @@ MODEL (
   kind FULL
 );
 
-SELECT 1 AS a
+SELECT id FROM beehiiv.publications

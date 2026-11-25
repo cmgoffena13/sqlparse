@@ -1,5 +1,6 @@
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
+from src.sqlparse_mcp.model_utils import model_not_found_message
 from src.sqlparse_mcp.query import get_query, get_span_at_lines
 from tests.conftest import FIXTURE_PROJECT
 
@@ -18,9 +19,9 @@ _FINAL = (
     "\n"
     "## Output Schema\n"
     "\n"
-    "  • sushi.customers.customer_id INT NOT NULL\n"
-    "  • sushi.customers.amount      DOUBLE\n"
-    "  • sushi.customers.status      TEXT\n"
+    "  • memory.sushi.customers.customer_id INT NOT NULL\n"
+    "  • memory.sushi.customers.amount      DOUBLE\n"
+    "  • memory.sushi.customers.status      TEXT\n"
 )
 
 _cte = (
@@ -61,9 +62,9 @@ _RENDERED_FINAL = (
     "\n"
     "## Output Schema\n"
     "\n"
-    "  • sushi.customers.customer_id INT NOT NULL\n"
-    "  • sushi.customers.amount      DOUBLE\n"
-    "  • sushi.customers.status      TEXT\n"
+    "  • memory.sushi.customers.customer_id INT NOT NULL\n"
+    "  • memory.sushi.customers.amount      DOUBLE\n"
+    "  • memory.sushi.customers.status      TEXT\n"
 )
 
 _RENDERED_CTE = (
@@ -95,6 +96,20 @@ def test_query_lists_the_final_select() -> None:
     finally:
         db.close()
     assert out == _FINAL
+
+
+def test_query_output_schema_lists_only_select_columns() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        out = get_query(db, "sushi.customer_orders", "$")
+    finally:
+        db.close()
+    schema = out.split("## Output Schema\n\n", 1)[1]
+    assert schema.count(".customer_id") == 1
+    assert ".order_id" in schema
+    assert ".status" in schema
+    assert len([line for line in schema.splitlines() if line.startswith("  • ")]) == 3
 
 
 def test_query_defaults_to_the_final_query() -> None:
@@ -139,7 +154,7 @@ def test_query_missing_model_and_query() -> None:
         empty = get_query(db, "  ", None)
     finally:
         db.close()
-    assert missing_model == "No model found."
+    assert missing_model == model_not_found_message()
     assert missing_query == "No query found."
     assert empty == "No target given; pass a model name or file path."
 
@@ -155,7 +170,7 @@ def test_query_header_follows_the_input_kind() -> None:
     assert by_model == _cte
     assert "Model:" not in by_model
     assert by_file == (
-        "Model: sushi.customers\n"
+        "Model: memory.sushi.customers\n"
         "\n"
         "L9  | WITH cte AS (\n"
         "L10 |   SELECT\n"
@@ -208,7 +223,7 @@ def test_query_named_model_returns_the_config() -> None:
         "L6 | );\n"
     )
     assert by_name == f"File: models/customers.sql\n\n{config}"
-    assert by_file == f"Model: sushi.customers\n\n{config}"
+    assert by_file == f"Model: memory.sushi.customers\n\n{config}"
     assert rendered == by_name
     assert external == "$EXTERNAL"
     assert python == (
@@ -232,8 +247,8 @@ _EXTERNAL_FINAL = (
     "\n"
     "## Output Schema\n"
     "\n"
-    "  • raw.customers.customer_id INT\n"
-    "  • raw.customers.status      TEXT\n"
+    "  • memory.raw.customers.customer_id INT\n"
+    "  • memory.raw.customers.status      TEXT\n"
 )
 
 
@@ -251,7 +266,7 @@ def test_query_external_model_has_no_query() -> None:
             WHERE models.qualified_name = ?
               AND queries.name = ?
             """,
-            ("raw.customers", "$"),
+            ("memory.raw.customers", "$"),
         ).fetchone()
     finally:
         db.close()
@@ -279,10 +294,10 @@ def test_span_at_lines_returns_the_containing_query() -> None:
     finally:
         db.close()
     assert cte == _cte.replace(
-        "File: models/customers.sql", "Model: sushi.customers\nQuery: $cte", 1
+        "File: models/customers.sql", "Model: memory.sushi.customers\nQuery: $cte", 1
     )
     assert final == _FINAL.replace(
-        "File: models/customers.sql", "Model: sushi.customers\nQuery: $", 1
+        "File: models/customers.sql", "Model: memory.sushi.customers\nQuery: $", 1
     )
 
 
@@ -294,7 +309,7 @@ def test_span_at_lines_on_model_config_shows_the_config() -> None:
     finally:
         db.close()
     assert out == (
-        "Model: sushi.customers\n"
+        "Model: memory.sushi.customers\n"
         "Query: $CONFIG\n"
         "\n"
         "L1 | MODEL (\n"
@@ -315,8 +330,8 @@ def test_span_at_lines_lists_overlapping_query_names() -> None:
         db.close()
     assert out == (
         "Multiple spans found:\n"
-        "  • sushi.customer_status/$base L7-L12\n"
-        "  • sushi.customer_status/$filtered L13-L19\n"
+        "  • memory.sushi.customer_status/$base L7-L12\n"
+        "  • memory.sushi.customer_status/$filtered L13-L19\n"
     )
 
 
@@ -328,7 +343,7 @@ def test_span_at_lines_uses_the_closest_query_beside_the_range() -> None:
     finally:
         db.close()
     assert out == _cte.replace(
-        "File: models/customers.sql", "Model: sushi.customers\nQuery: $cte", 1
+        "File: models/customers.sql", "Model: memory.sushi.customers\nQuery: $cte", 1
     )
 
 
@@ -366,7 +381,7 @@ def test_span_at_lines_returns_an_audit() -> None:
         "\n"
         "## Models\n"
         "\n"
-        "  • sushi.customers\n"
+        "  • memory.sushi.customers\n"
     )
     assert "## Output" not in out
 
@@ -389,7 +404,7 @@ def test_span_at_lines_returns_a_macro() -> None:
         "\n"
         "## Models\n"
         "\n"
-        "  • sushi.customers\n"
+        "  • memory.sushi.customers\n"
     )
     assert python == (
         "Macro: identity\n"
@@ -454,4 +469,4 @@ def test_span_at_lines_keeps_audits_macros_and_tests_in_their_directories() -> N
     assert nested_test == "No test found."
     assert named_like_audit == "No model found."
     assert named_like_test == "No model found."
-    assert model.startswith("Model: sushi.customers\nQuery: $cte")
+    assert model.startswith("Model: memory.sushi.customers\nQuery: $cte")

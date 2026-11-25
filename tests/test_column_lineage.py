@@ -10,6 +10,7 @@ from src.parse.column_lineage import (
     extract_model_queries,
     prepare_model_query,
 )
+from src.parse.model_utils import model_qualified_name
 from src.parse.sqlmesh_utils import install_parse_only_engine_support
 from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
@@ -66,17 +67,20 @@ def test_processor_stores_models_read_count() -> None:
                 FROM queries
                 INNER JOIN models
                     ON models.id = queries.model_id
-                WHERE models.qualified_name IN ('sushi.customers', 'sushi.customer_status')
+                WHERE models.qualified_name IN (
+                    'memory.sushi.customers',
+                    'memory.sushi.customer_status'
+                )
                 """
             )
         }
     finally:
         db.close()
-    assert rows[("sushi.customers", "$cte")] == 2
-    assert rows[("sushi.customers", "$")] == 0
-    assert rows[("sushi.customer_status", "$base")] == 1
-    assert rows[("sushi.customer_status", "$filtered")] == 0
-    assert rows[("sushi.customer_status", "$")] == 0
+    assert rows[("memory.sushi.customers", "$cte")] == 2
+    assert rows[("memory.sushi.customers", "$")] == 0
+    assert rows[("memory.sushi.customer_status", "$base")] == 1
+    assert rows[("memory.sushi.customer_status", "$filtered")] == 0
+    assert rows[("memory.sushi.customer_status", "$")] == 0
 
 
 def test_unnest_source_is_not_a_synthetic_query_name() -> None:
@@ -87,7 +91,7 @@ def test_unnest_source_is_not_a_synthetic_query_name() -> None:
     columns = extract_model_columns(model)
     product = next(column for column in columns if column["name"] == "product_id")
     assert product["from_table"] is None
-    assert product["qualified_name"] == "fake.unnest_ids/$/product_id"
+    assert product["qualified_name"] == f"{model_qualified_name(model)}/$/product_id"
     assert not any(
         column["from_table"] is not None and column["from_table"].startswith("$_")
         for column in columns
@@ -140,7 +144,7 @@ def test_union_cte_fed_by_cte_syncs_column_lineage(tmp_path: Path) -> None:
                 FROM columns
                 INNER JOIN models
                     ON models.id = columns.model_id
-                WHERE models.qualified_name = 'sushi.union_from_cte'
+                WHERE models.qualified_name = 'memory.sushi.union_from_cte'
                 """
             )
         }
@@ -152,14 +156,14 @@ def test_union_cte_fed_by_cte_syncs_column_lineage(tmp_path: Path) -> None:
                 FROM column_lineage
                 INNER JOIN models
                     ON models.id = column_lineage.ref_column_model_id
-                WHERE models.qualified_name = 'sushi.union_from_cte'
+                WHERE models.qualified_name = 'memory.sushi.union_from_cte'
                 """
             )
         }
     finally:
         db.close()
-    assert "sushi.union_from_cte/$combined/$base.id" in columns
-    assert "sushi.union_from_cte/$combined/$base.id" in refs
+    assert "memory.sushi.union_from_cte/$combined/$base.id" in columns
+    assert "memory.sushi.union_from_cte/$combined/$base.id" in refs
 
 
 def test_date_expression_join_syncs_column_lineage(tmp_path: Path) -> None:
@@ -176,10 +180,12 @@ def test_date_expression_join_syncs_column_lineage(tmp_path: Path) -> None:
                 FROM column_lineage
                 INNER JOIN models
                     ON models.id = column_lineage.ref_column_model_id
-                WHERE models.qualified_name = 'marketing.checkout'
+                WHERE models.qualified_name = 'memory.marketing.checkout'
                 """
             )
         }
     finally:
         db.close()
-    assert "marketing.checkout/$marketing_views/marketing.page_views.event_date_et" in refs
+    assert (
+        "memory.marketing.checkout/$marketing_views/memory.marketing.page_views.event_date_et"
+    ) in refs

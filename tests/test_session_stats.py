@@ -2,6 +2,10 @@ import asyncio
 import time
 from pathlib import Path
 
+from tests.conftest import memory_fqn
+
+CUSTOMERS_FQN = memory_fqn("sushi.customers")
+
 import pytest
 from fastmcp import Client
 from fastmcp.client.client import CallToolResult
@@ -30,8 +34,10 @@ def _seed(root: Path, paths: dict[str, str]) -> None:
     db.connection.execute("INSERT INTO projects (id, name) VALUES (1, 'sushi')")
     db.connection.execute(
         """
-        INSERT INTO project_gateways (id, project_id, name, catalog_name, dialect)
-        VALUES (1, 1, 'local', NULL, NULL)
+        INSERT INTO project_gateways (
+            id, project_id, name, catalog_name, dialect, is_default, snapshot_hash
+        )
+        VALUES (1, 1, 'local', 'memory', NULL, TRUE, 'hash')
         """
     )
     for file_id, path in enumerate(paths, start=1):
@@ -40,9 +46,9 @@ def _seed(root: Path, paths: dict[str, str]) -> None:
             """
             INSERT INTO files (
                 id, name, path, normalized_path, language, content_hash,
-                mtime_ns, size_bytes, line_count, is_test
+                mtime_ns, size_bytes, line_count, is_test, is_config
             )
-            VALUES (?, ?, ?, ?, 'sql', 'hash', 0, 1, 1, 0)
+            VALUES (?, ?, ?, ?, 'sql', 'hash', 0, 1, 1, 0, 0)
             """,
             (file_id, Path(path).name, path, path),
         )
@@ -54,10 +60,11 @@ def _seed(root: Path, paths: dict[str, str]) -> None:
             data_hash, metadata_hash
         )
         VALUES (
-            1, 1, 1, 'duckdb', 'sushi', 'sushi.customers', 'FULL', FALSE, 1, 1, 'hash',
+            1, 1, 1, 'duckdb', 'sushi', ?, 'FULL', FALSE, 1, 1, 'hash',
             'data', 'meta'
         )
-        """
+        """,
+        (CUSTOMERS_FQN,),
     )
     db.connection.commit()
     db.close()
@@ -97,7 +104,7 @@ def test_record_groups_calls_by_file(tmp_path: Path) -> None:
         "window-a",
         "models/customers.sql",
         "get_query",
-        "sushi.customers/$",
+        "memory.sushi.customers/$",
         "symbol-body",
         40,
     )
@@ -122,7 +129,7 @@ def test_record_groups_calls_by_file(tmp_path: Path) -> None:
         for item in target.outputs
     ] == [
         ("get_model", None, len("overview") // 4, 10),
-        ("get_query", "sushi.customers/$", len("symbol-body") // 4, 10),
+        ("get_query", "memory.sushi.customers/$", len("symbol-body") // 4, 10),
     ]
     assert files["models/orders.sql"].tool_call_count == 1
 
@@ -142,14 +149,14 @@ def test_format_session_stats_report_lists_sessions(tmp_path: Path) -> None:
     db.connection.commit()
     db.close()
     _record_call(
-        tmp_path, "window-a", "models/customers.sql", "get_model", "sushi.customers", "overview", 40
+        tmp_path, "window-a", "models/customers.sql", "get_model", CUSTOMERS_FQN, "overview", 40
     )
     _record_call(
         tmp_path,
         "window-a",
         "models/customers.sql",
         "get_query",
-        "sushi.customers/$",
+        "memory.sushi.customers/$",
         "symbol-body",
         80,
     )
@@ -196,10 +203,10 @@ def test_format_session_stats_report_empty(tmp_path: Path) -> None:
 def test_record_keeps_each_call_file_size(tmp_path: Path) -> None:
     _seed(tmp_path, {"models/customers.sql": "SELECT 1\n"})
     _record_call(
-        tmp_path, "window-a", "models/customers.sql", "get_model", "sushi.customers", "first", 10
+        tmp_path, "window-a", "models/customers.sql", "get_model", CUSTOMERS_FQN, "first", 10
     )
     _record_call(
-        tmp_path, "window-a", "models/customers.sql", "get_model", "sushi.customers", "second", 25
+        tmp_path, "window-a", "models/customers.sql", "get_model", CUSTOMERS_FQN, "second", 25
     )
     target = load_session_files(tmp_path)[0]
     assert target.current_file_tokens == 25 // 4
@@ -211,8 +218,8 @@ def test_record_separates_sessions_and_workspaces(tmp_path: Path) -> None:
     two = tmp_path / "two"
     _seed(one, {"models/customers.sql": "SELECT 1\n"})
     _seed(two, {"models/customers.sql": "SELECT 1\n"})
-    _record_call(one, "window-a", "models/customers.sql", "get_model", "sushi.customers", "a", 40)
-    _record_call(one, "window-b", "models/customers.sql", "get_model", "sushi.customers", "b", 80)
+    _record_call(one, "window-a", "models/customers.sql", "get_model", CUSTOMERS_FQN, "a", 40)
+    _record_call(one, "window-b", "models/customers.sql", "get_model", CUSTOMERS_FQN, "b", 80)
     rows = {
         (item.session_id, item.file_path, item.current_file_tokens)
         for item in load_session_files(one)
@@ -260,28 +267,26 @@ def test_record_deletes_sessions_older_than_a_week(tmp_path: Path) -> None:
             INSERT INTO session_stats_tool_outputs (
                 session_file_id, tool, tool_symbol_qualified_name, output_tokens, file_tokens
             )
-            VALUES (?, 'get_model', 'sushi.customers', 2, 4)
+            VALUES (?, 'get_model', ?, 2, 4)
             """,
-            (cursor.lastrowid,),
+            (cursor.lastrowid, CUSTOMERS_FQN),
         )
     db.connection.commit()
     db.close()
 
-    _record_call(
-        tmp_path, "fresh", "models/customers.sql", "get_model", "sushi.customers", "now", 40
-    )
+    _record_call(tmp_path, "fresh", "models/customers.sql", "get_model", CUSTOMERS_FQN, "now", 40)
     assert {item.session_id for item in load_session_files(tmp_path)} == {"recent", "fresh"}
 
 
 def test_record_resolves_a_model_name_and_skips_a_missing_one(tmp_path: Path) -> None:
     _seed(tmp_path, {"models/customers.sql": "SELECT 1\n"})
     source = (tmp_path / "models" / "customers.sql").read_text(encoding="utf-8")
-    _spawn(tmp_path, "window-a", "get_model", "sushi.customers", "sushi.customers", "symbol")
+    _spawn(tmp_path, "window-a", "get_model", CUSTOMERS_FQN, CUSTOMERS_FQN, "symbol")
     _spawn(tmp_path, "window-a", "get_model", "missing", "missing.model", "nope")
     recorded = _wait_path(tmp_path, "models/customers.sql", 1)
     assert len(recorded) == 1
     assert recorded[0].current_file_tokens == len(source) // 4
-    assert recorded[0].outputs[0].tool_symbol_qualified_name == "sushi.customers"
+    assert recorded[0].outputs[0].tool_symbol_qualified_name == CUSTOMERS_FQN
     time.sleep(0.05)
     assert load_session_files(tmp_path) == recorded
 
@@ -289,7 +294,7 @@ def test_record_resolves_a_model_name_and_skips_a_missing_one(tmp_path: Path) ->
 def test_record_skips_a_file_that_is_not_on_disk(tmp_path: Path) -> None:
     _seed(tmp_path, {"models/customers.sql": "SELECT 1\n"})
     (tmp_path / "models" / "customers.sql").unlink()
-    _record(tmp_path, "window-a", "get_model", "sushi.customers", "models/customers.sql", "body")
+    _record(tmp_path, "window-a", "get_model", CUSTOMERS_FQN, "models/customers.sql", "body")
     assert load_session_files(tmp_path) == []
 
 

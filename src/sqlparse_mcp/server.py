@@ -12,6 +12,7 @@ from src.processor import ProjectProcessor
 from src.sqlparse_mcp.audit import get_audit as run_get_audit
 from src.sqlparse_mcp.column_relations import get_column_relations as run_get_column_relations
 from src.sqlparse_mcp.directory_tree import get_directory_tree as run_get_directory_tree
+from src.sqlparse_mcp.listing import list_catalogs as run_list_catalogs
 from src.sqlparse_mcp.listing import list_models as run_list_models
 from src.sqlparse_mcp.listing import list_schemas as run_list_schemas
 from src.sqlparse_mcp.macro import get_macro as run_get_macro
@@ -122,15 +123,25 @@ def search(
 
 
 @mcp.tool()
-def list_schemas(ctx: Context) -> str:
-    """Return every schema name."""
-    return _processor(ctx).run_query(run_list_schemas)
+def list_catalogs(ctx: Context) -> str:
+    """Return every catalog (with the DEFAULT marked) with schema and table counts."""
+    return _processor(ctx).run_query(run_list_catalogs)
 
 
 @mcp.tool()
-def list_models(ctx: Context, schema: str) -> str:
-    """Return the model names in one schema."""
-    return _processor(ctx).run_query(lambda db: run_list_models(db, schema))
+def list_schemas(ctx: Context, catalog: str | None = None) -> str:
+    """
+    Return schema names in one catalog with table counts.
+    """
+    return _processor(ctx).run_query(lambda db: run_list_schemas(db, catalog))
+
+
+@mcp.tool()
+def list_models(ctx: Context, schema: str, catalog: str | None = None) -> str:
+    """
+    Return the model names in one schema.
+    """
+    return _processor(ctx).run_query(lambda db: run_list_models(db, schema, catalog))
 
 
 @mcp.tool()
@@ -150,15 +161,15 @@ def get_model(ctx: Context, target: str) -> str:
     Return a model's SQL tree, macro refs, and audit refs.
 
     Target can be a model name or model file path.
-    Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
+    Ex. ``catalog.schema.customer_orders`` or `models/customer_orders.sql`
 
     SQL TREE LEGEND:
      - Join Statements = J
      - Where Conditions = W
      - Grouped By Columns = G
      - Having Conditions = H
-     - Select Expressions = E
-     - Select Aliases = A
+     - Expressions in Select = E
+     - Aliases in Select = A
      - Total Select Columns = S
      - Order By Columns = O
      - Models Read = M
@@ -174,7 +185,7 @@ def get_query(
     Return a query's definition and output schema.
 
     Target can be a model name or model file path.
-    Ex. ``sushi.customer_orders`` or `sushi/models/customer_orders.sql`
+    Ex. ``catalog.schema.customer_orders`` or `models/customer_orders.sql`
 
     Enable ``render`` to render the SQL and the query's macros.
     """
@@ -234,7 +245,7 @@ def get_model_relations(
     page: int = 1,
 ) -> str:
     """
-    Return model relations for ``model_name``.
+    Return model relations for ``model_name``. Ex. ``catalog.schema.table``
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
     """
@@ -257,8 +268,8 @@ def get_column_relations(
     Return column relations for ``model_name/query_name/column_name``.
 
     ``query_name`` defaults to ``$`` if not provided.
-    ``column_name`` should include the source query name or table name.
-    Ex. ``$cte_name.customer_id`` or ``schema.table.column``
+    ``column_name`` should include the source query name or catalog.schema.table name.
+    Ex. ``$cte_name.customer_id`` or ``catalog.schema.table.column_name``
 
     Excludes test files from dependents by default; set ``include_tests`` to include them.
 

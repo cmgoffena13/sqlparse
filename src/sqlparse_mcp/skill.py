@@ -15,12 +15,16 @@ _SKILL_BODY = """\
  - If ``workspace://sqlparse/root`` does not match the project, STOP IMMEDIATELY.
     - Inform the user to restart the sqlparse MCP server.
 
-# Tool Inputs
+# Query Input
  - Query names are prefixed with ``$``. 
  - A single ``$`` is the final output query of the model.
  - Model Config is treated as a query and called ``$CONFIG``.
  - EXTERNAL models have an $EXTERNAL placeholder value for query text.
  - Ex. ``$``, ``$cte_name``, or ``$CONFIG``.
+
+# Catalog Input
+ - Omitting the catalog name from tool calls, data model names, or column names
+   implies the project's default catalog.
 
 # INSTRUCTIONS
 
@@ -37,7 +41,7 @@ The information that is provided to you will determine the tool you should use.
 1. Use ``get_span_at_lines`` to read the query, audit, macro, or test at a line range.
 
 ## You are NOT given a file name, model name, or query name.
-1. Investigate the project using ``list_schemas``, ``list_models``, and keywords
+1. Investigate the project using ``list_catalogs``, ``list_schemas``, ``list_models``, and keywords
 2. Use ``get_model`` to read the model's SQL tree, macro refs, and audit refs.
 3. Use ``get_query`` to read a query's output schema and definition.
 

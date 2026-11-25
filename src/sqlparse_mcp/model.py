@@ -7,6 +7,7 @@ from src.sqlparse_mcp.format_utils import (
     tree_glyphs,
     with_reads_models_count,
 )
+from src.sqlparse_mcp.model_utils import model_not_found_message, resolve_model_qualified_name
 
 _MODELS_BY_NAME_SQL = """
 SELECT
@@ -160,13 +161,18 @@ def get_model(db: ProjectDB, target: str) -> str:
     key = target.strip()
     result = "No target given; pass a model name or file path."
     if key:
-        models = list(db.connection.execute(_MODELS_BY_NAME_SQL, (key,)))
+        resolved = resolve_model_qualified_name(db, key)
+        models = (
+            list(db.connection.execute(_MODELS_BY_NAME_SQL, (resolved,)))
+            if resolved is not None
+            else []
+        )
         from_file = not models
         if from_file:
             file_path = _normalize_file_path(key, db.root)
             models = list(db.connection.execute(_MODELS_BY_FILE_SQL, (file_path,)))
         if not models:
-            result = "No model found."
+            result = model_not_found_message()
         else:
             blocks: list[str] = []
             for model in models:

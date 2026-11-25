@@ -14,20 +14,13 @@ from src.sqlparse_mcp.format_utils import (
     with_reads_models_flag,
 )
 from src.sqlparse_mcp.model_relations import _load_graph
+from src.sqlparse_mcp.model_utils import (
+    model_not_found_message,
+    resolve_column_ids,
+    resolve_model_qualified_name,
+)
 
 _PAGE_SIZE = 100
-
-_FIND_COLUMNS_SQL = """
-SELECT columns.id
-FROM columns
-INNER JOIN queries
-    ON queries.id = columns.query_id
-INNER JOIN models
-    ON models.id = columns.model_id
-WHERE models.qualified_name = ?
-  AND queries.name = ?
-  AND columns.column_name = ?
-"""
 
 _DEPENDENCIES_SQL = """
 SELECT
@@ -473,54 +466,51 @@ def get_column_relations(
     if model_key and not column_key:
         result = "No column name given; pass a non-empty column name."
     if model_key and column_key:
-        resolved = _resolve_query_name(model_key, query_name)
-        relative = _relative_query(model_key, resolved)
-        column_ids = [
-            int(row["id"])
-            for row in db.connection.execute(
-                _FIND_COLUMNS_SQL,
-                (model_key, relative, column_key),
-            )
-        ]
-        if not column_ids:
-            result = "No column found."
-        elif relation == "dependencies":
-            result = _format_dependency_tree(db, column_ids, page)
-        else:
-            placeholders = ", ".join("?" for _ in column_ids)
-            rows = []
-            for row in db.connection.execute(
-                _DEPENDENTS_SQL.format(placeholders=placeholders),
-                column_ids,
-            ):
-                from_table, column_name = _column_parts_from_qn(
-                    str(row["ref_column_qualified_name"])
-                )
-                rows.append(
-                    (
-                        str(row["model_name"]),
-                        str(row["model_kind"]),
-                        bool(row["model_is_blueprint"]),
-                        str(row["query_name"]),
-                        from_table,
-                        column_name,
-                        str(row["ref_kind"]),
+        model_resolved = resolve_model_qualified_name(db, model_key)
+        result = model_not_found_message()
+        if model_resolved is not None:
+            resolved = _resolve_query_name(model_resolved, query_name)
+            relative = _relative_query(model_resolved, resolved)
+            column_ids = resolve_column_ids(db, model_resolved, relative, column_key)
+            if not column_ids:
+                result = "No column found."
+            elif relation == "dependencies":
+                result = _format_dependency_tree(db, column_ids, page)
+            else:
+                placeholders = ", ".join("?" for _ in column_ids)
+                rows = []
+                for row in db.connection.execute(
+                    _DEPENDENTS_SQL.format(placeholders=placeholders),
+                    column_ids,
+                ):
+                    from_table, column_name = _column_parts_from_qn(
+                        str(row["ref_column_qualified_name"])
                     )
-                )
-            test_rows: list[tuple[str, str, str, int, int]] = []
-            if include_tests:
-                test_rows = [
-                    (
-                        str(row["qualified_name"]),
-                        str(row["file_path"]),
-                        str(row["test_name"]),
-                        int(row["line_start"]),
-                        int(row["line_end"]),
+                    rows.append(
+                        (
+                            str(row["model_name"]),
+                            str(row["model_kind"]),
+                            bool(row["model_is_blueprint"]),
+                            str(row["query_name"]),
+                            from_table,
+                            column_name,
+                            str(row["ref_kind"]),
+                        )
                     )
-                    for row in db.connection.execute(
-                        _TEST_DEPENDENTS_SQL.format(placeholders=placeholders),
-                        column_ids,
-                    )
-                ]
-            result = _format_groups(db, rows, test_rows, False, page)
+                test_rows: list[tuple[str, str, str, int, int]] = []
+                if include_tests:
+                    test_rows = [
+                        (
+                            str(row["qualified_name"]),
+                            str(row["file_path"]),
+                            str(row["test_name"]),
+                            int(row["line_start"]),
+                            int(row["line_end"]),
+                        )
+                        for row in db.connection.execute(
+                            _TEST_DEPENDENTS_SQL.format(placeholders=placeholders),
+                            column_ids,
+                        )
+                    ]
+                result = _format_groups(db, rows, test_rows, False, page)
     return result
