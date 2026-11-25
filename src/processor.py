@@ -11,7 +11,8 @@ import xxhash
 from src.assigner import GlobalIDAssigner
 from src.db import BATCH_TABLES, ProjectDB
 from src.git_utils import path_spec_for_indexing, relative_path_is_ignored
-from src.parse.sqlmesh_parser import SQLMeshParser, project_cwd
+from src.parse.parse_utils import project_cwd
+from src.parse.sqlmesh_parser import SQLMeshParser
 
 T = TypeVar("T")
 

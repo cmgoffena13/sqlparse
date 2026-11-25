@@ -132,6 +132,27 @@ class ExtractedQuery(TypedDict):
     models_read_count: int
 
 
+class ModelExtractBundle(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    model_name: str
+    prepared: PreparedModelQuery
+    queries: list[ExtractedQuery]
+    columns: list[ExtractedColumn]
+    references: list[ExtractedColumnReference]
+
+
+def extract_model_bundle(model: Model) -> ModelExtractBundle:
+    prepared = prepare_model_query(model)
+    return ModelExtractBundle(
+        model_name=model.name,
+        prepared=prepared,
+        queries=extract_model_queries(model, prepared),
+        columns=extract_model_columns(model, prepared),
+        references=extract_model_column_references(model, prepared),
+    )
+
+
 def _line_span(expression: exp.Expression) -> tuple[int, int]:
     line_start = 0
     line_end = 0

@@ -7,7 +7,7 @@ from typing import Any, Literal
 from fastmcp import Context, FastMCP
 
 from src.db import ProjectDB
-from src.parse.sqlmesh_parser import is_sqlmesh_project
+from src.parse.parse_utils import is_sqlmesh_project
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.audit import get_audit as run_get_audit
 from src.sqlparse_mcp.column_relations import get_column_relations as run_get_column_relations

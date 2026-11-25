@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlmesh.core.config.connection import BigQueryConnectionConfig
 from sqlmesh.core.context import Context
 
-from src.parse.parse_only import install_parse_only_engine_support
+from src.parse.sqlmesh_utils import install_parse_only_engine_support
 from tests.conftest import FIXTURE_PROJECT
 
 BIGQUERY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "bigquery_project"

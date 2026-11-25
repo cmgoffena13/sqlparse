@@ -10,7 +10,7 @@ from fastmcp import Client
 from fastmcp.client.client import CallToolResult
 from fastmcp.exceptions import ToolError
 
-from src.parse.sqlmesh_parser import is_sqlmesh_project, use_project_venv
+from src.parse.parse_utils import is_sqlmesh_project, use_project_venv
 from src.sqlparse_mcp.skill import SKILL_INSTRUCTIONS
 from tests.conftest import FIXTURE_PROJECT
 

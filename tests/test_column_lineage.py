@@ -10,7 +10,7 @@ from src.parse.column_lineage import (
     extract_model_queries,
     prepare_model_query,
 )
-from src.parse.parse_only import install_parse_only_engine_support
+from src.parse.sqlmesh_utils import install_parse_only_engine_support
 from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
 

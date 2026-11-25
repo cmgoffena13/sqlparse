@@ -42,6 +42,77 @@ def test_processor_releases_sqlmesh_before_the_next_index() -> None:
         db.close()
 
 
+def test_sync_flushes_every_batch_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.parse import sqlmesh_parser as parser_mod
+
+    flush_calls = {"count": 0}
+    real_flush = SQLMeshParser._flush
+
+    def counting_flush(self: SQLMeshParser) -> None:
+        flush_calls["count"] += 1
+        real_flush(self)
+
+    monkeypatch.setattr(SQLMeshParser, "_flush", counting_flush)
+    monkeypatch.setattr(parser_mod, "FLUSH_BATCH_SIZE", 10)
+    db = ProjectDB(FIXTURE_PROJECT)
+    processor = ProjectProcessor(db, FIXTURE_PROJECT)
+    try:
+        processor.process(full=True)
+        total_rows = (
+            int(db.fetch("SELECT COUNT(*) AS c FROM models")[0]["c"])
+            + int(db.fetch("SELECT COUNT(*) AS c FROM macros")[0]["c"])
+            + int(db.fetch("SELECT COUNT(*) AS c FROM audits")[0]["c"])
+            + int(db.fetch("SELECT COUNT(*) AS c FROM queries")[0]["c"])
+            + int(db.fetch("SELECT COUNT(*) AS c FROM columns")[0]["c"])
+            + int(db.fetch("SELECT COUNT(*) AS c FROM column_lineage")[0]["c"])
+            + int(db.fetch("SELECT COUNT(*) AS c FROM search_docs")[0]["c"])
+            + int(db.fetch("SELECT COUNT(*) AS c FROM tests")[0]["c"])
+        )
+        assert total_rows > 10
+        assert flush_calls["count"] >= total_rows // 10
+    finally:
+        processor.close()
+        db.close()
+
+
+def test_full_sync_extracts_models_in_parallel(monkeypatch: pytest.MonkeyPatch) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sqlmesh.core.model import Model
+
+    from src.parse import column_lineage
+    from src.parse.column_lineage import ModelExtractBundle
+
+    bundle_calls = {"count": 0}
+    real_bundle = column_lineage.extract_model_bundle
+
+    def tracking_bundle(model: Model) -> ModelExtractBundle:
+        bundle_calls["count"] += 1
+        return real_bundle(model)
+
+    submitted: list[int] = []
+
+    class TrackingExecutor(ThreadPoolExecutor):
+        def map(self, fn, *iterables, timeout=None, chunksize=1):
+            items = list(iterables[0])
+            submitted.append(len(items))
+            return super().map(fn, items, timeout=timeout, chunksize=chunksize)
+
+    monkeypatch.setattr("src.parse.sqlmesh_parser.extract_model_bundle", tracking_bundle)
+    monkeypatch.setattr("src.parse.sqlmesh_parser.ThreadPoolExecutor", TrackingExecutor)
+    db = ProjectDB(FIXTURE_PROJECT)
+    processor = ProjectProcessor(db, FIXTURE_PROJECT)
+    try:
+        processor.process(full=True)
+        assert bundle_calls["count"] > 0
+        assert submitted
+        assert submitted[0] == bundle_calls["count"]
+        assert db.fetch("SELECT COUNT(*) AS c FROM column_lineage")[0]["c"] > 0
+    finally:
+        processor.close()
+        db.close()
+
+
 def test_second_full_sync_skips_prepare_when_model_hashes_match(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -57,10 +128,7 @@ def test_second_full_sync_skips_prepare_when_model_hashes_match(
         prepared_names.append(model.name)
         return real_prepare(model)
 
-    monkeypatch.setattr(
-        "src.parse.sqlmesh_parser.prepare_model_query",
-        tracking_prepare,
-    )
+    monkeypatch.setattr(column_lineage, "prepare_model_query", tracking_prepare)
     db = ProjectDB(FIXTURE_PROJECT)
     processor = ProjectProcessor(db, FIXTURE_PROJECT)
     try:

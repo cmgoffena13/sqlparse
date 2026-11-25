@@ -6,7 +6,7 @@ from sqlmesh.core.context import Context
 
 from src.db import ProjectDB
 from src.parse.model_utils import model_config_lines, model_is_blueprint
-from src.parse.parse_only import install_parse_only_engine_support
+from src.parse.sqlmesh_utils import install_parse_only_engine_support
 from src.processor import ProjectProcessor
 from tests.conftest import FIXTURE_PROJECT
 

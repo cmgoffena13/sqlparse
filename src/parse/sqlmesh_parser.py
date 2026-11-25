@@ -1,15 +1,11 @@
 import os
-import site
 import sys
-from collections.abc import Generator
-from contextlib import contextmanager
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from sqlmesh.core.config import Config
-from sqlmesh.core.config.loader import load_configs
 from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
-from sqlmesh.utils.errors import ConfigError
 
 from src.assigner import GlobalIDAssigner
 from src.db import (
@@ -32,16 +28,16 @@ from src.db import (
 )
 from src.parse.audit_utils import audit_line_span, not_null_column_names
 from src.parse.column_lineage import (
-    PreparedModelQuery,
+    ExtractedColumn,
+    ExtractedColumnReference,
+    ExtractedQuery,
+    ModelExtractBundle,
     _columns_named,
     _stored_qualified_name,
     build_column_name_index,
-    extract_model_column_references,
-    extract_model_columns,
-    extract_model_queries,
+    extract_model_bundle,
     final_query_name,
     model_query_name,
-    prepare_model_query,
 )
 from src.parse.macro_utils import macro_locations
 from src.parse.model_utils import (
@@ -50,55 +46,12 @@ from src.parse.model_utils import (
     model_is_blueprint,
     model_time_column,
 )
-from src.parse.parse_only import install_parse_only_engine_support
+from src.parse.parse_utils import project_cwd, use_project_venv
+from src.parse.sqlmesh_utils import install_parse_only_engine_support
 from src.parse.test_utils import fixture_column_names, test_line_span
 from src.utils import snapshot_hash
 
-
-def project_site_packages(root: Path) -> list[Path]:
-    candidates = [
-        root / name for name in (".venv", "venv") if (root / name / "pyvenv.cfg").is_file()
-    ]
-    venv_root = candidates[0] if candidates else None
-    tag = f"python{sys.version_info.major}.{sys.version_info.minor}"
-    direct = (
-        []
-        if venv_root is None
-        else [venv_root / "lib" / tag / "site-packages", venv_root / "Lib" / "site-packages"]
-    )
-    packages = [path for path in direct if path.is_dir()]
-    if venv_root is not None and not packages:
-        packages = sorted(
-            path for path in (venv_root / "lib").glob("python*/site-packages") if path.is_dir()
-        )
-    return packages
-
-
-def use_project_venv(root: Path) -> None:
-    for package in project_site_packages(root):
-        site.addsitedir(str(package.absolute()))
-
-
-@contextmanager
-def project_cwd(root: Path) -> Generator[None]:
-    previous = Path.cwd()
-    os.chdir(root.resolve())
-    try:
-        yield
-    finally:
-        os.chdir(previous)
-
-
-def is_sqlmesh_project(root: Path) -> bool:
-    use_project_venv(root)
-    with project_cwd(root):
-        try:
-            load_configs("config", Config, root)
-        except ConfigError:
-            project = False
-        else:
-            project = True
-    return project
+FLUSH_BATCH_SIZE = 1000
 
 
 class SQLMeshParser:
@@ -115,26 +68,41 @@ class SQLMeshParser:
         self._gateway_ids: dict[tuple[str, str], int] = {}
         self._project_defaults: dict[str, str] = {}
         self._query_ids: dict[str, int] = {}
-        self._prepared_queries: dict[str, PreparedModelQuery] = {}
+        self._flush_ms = 0.0
 
     def _new_batches(self) -> dict[str, list[dict[str, object]]]:
         return {table: [] for table in BATCH_TABLES}
 
+    def _pending_rows(self) -> int:
+        return sum(len(rows) for rows in self.batches.values())
+
+    def _queue(self, table: str, row: dict[str, object]) -> None:
+        self.batches[table].append(row)
+        if self._pending_rows() >= FLUSH_BATCH_SIZE:
+            self._flush()
+
     def _flush(self) -> None:
+        started = time.perf_counter()
         self.db.bulk_insert(self.batches)
         self.batches = self._new_batches()
+        self._flush_ms += (time.perf_counter() - started) * 1000
+
+    def _extract_models(self, models: list[Model]) -> dict[str, ModelExtractBundle]:
+        workers = min(32, os.cpu_count() or 4, max(len(models), 1))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            bundles = list(pool.map(extract_model_bundle, models))
+        return {bundle.model_name: bundle for bundle in bundles}
 
     def sync(self, files_snapshot: dict[str, FileSnapshot]) -> None:
+        self._flush_ms = 0.0
         projects_snapshot = self.db.get_projects_snapshot()
         gateways_snapshot = self.db.get_project_gateways_snapshot()
         self._sync_projects(projects_snapshot, gateways_snapshot)
-        self._flush()
 
         macros_snapshot = self.db.get_macros_snapshot()
         self._sync_macros(files_snapshot, macros_snapshot)
         audits_snapshot = self.db.get_audits_snapshot()
         self._sync_audits(files_snapshot, audits_snapshot)
-        self._flush()
 
         models_snapshot = self.db.get_models_snapshot()
         model_macros_snapshot = self.db.get_model_macros_snapshot()
@@ -142,7 +110,7 @@ class SQLMeshParser:
         columns_snapshot = self.db.get_columns_snapshot()
         search_docs_snapshot = self.db.get_search_docs_snapshot()
         queries_snapshot = self.db.get_queries_snapshot()
-        self._prepared_queries = {}
+        extract_models: list[Model] = []
         for prior_query in queries_snapshot.values():
             self._query_ids[prior_query["query_name"]] = prior_query["id"]
         for model in self.context.models.values():
@@ -150,19 +118,7 @@ class SQLMeshParser:
             self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
             self._sync_model_audits(model, models_snapshot, audits_snapshot, model_audits_snapshot)
             if need_extract:
-                prepared = prepare_model_query(model)
-                self._prepared_queries[model.name] = prepared
-                self._sync_queries(
-                    model, files_snapshot, models_snapshot, queries_snapshot, prepared
-                )
-                self._sync_columns(
-                    model,
-                    files_snapshot,
-                    models_snapshot,
-                    columns_snapshot,
-                    search_docs_snapshot,
-                    prepared,
-                )
+                extract_models.append(model)
             else:
                 self._retain_model_extracts(
                     models_snapshot[model.name]["id"],
@@ -171,7 +127,25 @@ class SQLMeshParser:
                     columns_snapshot,
                     search_docs_snapshot,
                 )
-            self._flush()
+
+        extract_started = time.perf_counter()
+        bundles = self._extract_models(extract_models) if extract_models else {}
+        extract_ms = (time.perf_counter() - extract_started) * 1000
+        lineage_refs: dict[str, list[ExtractedColumnReference]] = {}
+        for model in extract_models:
+            bundle = bundles[model.name]
+            lineage_refs[model.name] = bundle.references
+            self._sync_queries(
+                model, files_snapshot, models_snapshot, queries_snapshot, bundle.queries
+            )
+            self._sync_columns(
+                model,
+                files_snapshot,
+                models_snapshot,
+                columns_snapshot,
+                search_docs_snapshot,
+                bundle.columns,
+            )
 
         self.db.delete_model_macros(model_macros_snapshot)
         self.db.delete_macros(macros_snapshot)
@@ -187,21 +161,21 @@ class SQLMeshParser:
             tests_snapshot,
             test_references_snapshot,
         )
-        self._flush()
 
         self.db.delete_test_references(test_references_snapshot)
         self.db.delete_tests(tests_snapshot)
 
         column_lineage_snapshot = self.db.get_column_lineage_snapshot()
         column_name_index = build_column_name_index(columns_snapshot)
+        lineage_started = time.perf_counter()
         for model in self.context.models.values():
-            if model.name in self._prepared_queries:
+            if model.name in lineage_refs:
                 self._sync_column_lineage(
                     model,
                     models_snapshot,
                     columns_snapshot,
                     column_lineage_snapshot,
-                    self._prepared_queries[model.name],
+                    lineage_refs[model.name],
                     column_name_index,
                 )
             else:
@@ -209,7 +183,7 @@ class SQLMeshParser:
                     models_snapshot[model.name]["id"],
                     column_lineage_snapshot,
                 )
-            self._flush()
+        lineage_ms = (time.perf_counter() - lineage_started) * 1000
 
         self.db.delete_column_lineage(column_lineage_snapshot)
         self.db.delete_search_docs(search_docs_snapshot)
@@ -218,6 +192,13 @@ class SQLMeshParser:
         self.db.delete_models(models_snapshot)
         self.db.delete_project_gateways(gateways_snapshot)
         self.db.delete_projects(projects_snapshot)
+        self._flush()
+        print(
+            "Sync extract_ms="
+            f"{round(extract_ms)} lineage_apply_ms={round(lineage_ms)} "
+            f"flush_ms={round(self._flush_ms)} models_extracted={len(extract_models)}",
+            file=sys.stderr,
+        )
 
     def _sync_macros(
         self,
@@ -233,7 +214,8 @@ class SQLMeshParser:
             prior = macros_snapshot.get(name)
             if prior is None:
                 macro_id = self.assigner.reserve("macros", 1)[0]
-                self.batches["macros"].append(
+                self._queue(
+                    "macros",
                     {
                         "id": macro_id,
                         "file_id": file_id,
@@ -242,13 +224,14 @@ class SQLMeshParser:
                         "line_start": line_start,
                         "line_end": line_end,
                         "snapshot_hash": digest,
-                    }
+                    },
                 )
                 macros_snapshot[name] = {"id": macro_id, "snapshot_hash": digest, "seen": True}
                 continue
             macro_id = prior["id"]
             if prior["snapshot_hash"] != digest:
-                self.batches["macros"].append(
+                self._queue(
+                    "macros",
                     {
                         "id": macro_id,
                         "file_id": file_id,
@@ -257,7 +240,7 @@ class SQLMeshParser:
                         "line_start": line_start,
                         "line_end": line_end,
                         "snapshot_hash": digest,
-                    }
+                    },
                 )
             macros_snapshot[name] = {"id": macro_id, "snapshot_hash": digest, "seen": True}
 
@@ -278,7 +261,8 @@ class SQLMeshParser:
             prior = audits_snapshot.get(name)
             if prior is None:
                 audit_id = self.assigner.reserve("audits", 1)[0]
-                self.batches["audits"].append(
+                self._queue(
+                    "audits",
                     {
                         "id": audit_id,
                         "file_id": file_id,
@@ -286,13 +270,14 @@ class SQLMeshParser:
                         "line_start": line_start,
                         "line_end": line_end,
                         "snapshot_hash": digest,
-                    }
+                    },
                 )
                 audits_snapshot[name] = {"id": audit_id, "snapshot_hash": digest, "seen": True}
                 continue
             audit_id = prior["id"]
             if prior["snapshot_hash"] != digest:
-                self.batches["audits"].append(
+                self._queue(
+                    "audits",
                     {
                         "id": audit_id,
                         "file_id": file_id,
@@ -300,7 +285,7 @@ class SQLMeshParser:
                         "line_start": line_start,
                         "line_end": line_end,
                         "snapshot_hash": digest,
-                    }
+                    },
                 )
             audits_snapshot[name] = {"id": audit_id, "snapshot_hash": digest, "seen": True}
 
@@ -317,11 +302,11 @@ class SQLMeshParser:
             prior_project = projects_snapshot.get(project_name)
             if prior_project is None:
                 project_id = self.assigner.reserve("projects", 1)[0]
-                self.batches["projects"].append({"id": project_id, "name": project_name})
+                self._queue("projects", {"id": project_id, "name": project_name})
             else:
                 project_id = prior_project["id"]
                 if prior_project["name"] != project_name:
-                    self.batches["projects"].append({"id": project_id, "name": project_name})
+                    self._queue("projects", {"id": project_id, "name": project_name})
             projects_snapshot[project_name] = {
                 "id": project_id,
                 "name": project_name,
@@ -338,14 +323,15 @@ class SQLMeshParser:
                 prior_gateway = gateways_snapshot.get(key)
                 if prior_gateway is None:
                     gateway_id = self.assigner.reserve("project_gateways", 1)[0]
-                    self.batches["project_gateways"].append(
+                    self._queue(
+                        "project_gateways",
                         {
                             "id": gateway_id,
                             "project_id": project_id,
                             "name": gateway_name,
                             "catalog_name": catalog_name,
                             "dialect": gateway_dialect,
-                        }
+                        },
                     )
                 else:
                     gateway_id = prior_gateway["id"]
@@ -355,14 +341,15 @@ class SQLMeshParser:
                         or prior_gateway["catalog_name"] != catalog_name
                         or prior_gateway["dialect"] != gateway_dialect
                     ):
-                        self.batches["project_gateways"].append(
+                        self._queue(
+                            "project_gateways",
                             {
                                 "id": gateway_id,
                                 "project_id": project_id,
                                 "name": gateway_name,
                                 "catalog_name": catalog_name,
                                 "dialect": gateway_dialect,
-                            }
+                            },
                         )
                 gateways_snapshot[key] = {
                     "id": gateway_id,
@@ -449,11 +436,11 @@ class SQLMeshParser:
         }
         if prior is None:
             model_id = self.assigner.reserve("models", 1)[0]
-            self.batches["models"].append({"id": model_id, **row})
+            self._queue("models", {"id": model_id, **row})
         else:
             model_id = prior["id"]
             if prior["snapshot_hash"] != digest:
-                self.batches["models"].append({"id": model_id, **row})
+                self._queue("models", {"id": model_id, **row})
         models_snapshot[qualified_name] = {
             "id": model_id,
             "snapshot_hash": digest,
@@ -506,9 +493,7 @@ class SQLMeshParser:
             key = f"{macro_name}:{model_id}"
             prior = model_macros_snapshot.get(key)
             if prior is None:
-                self.batches["model_macros"].append(
-                    {"macro_name": macro_name, "model_id": model_id}
-                )
+                self._queue("model_macros", {"macro_name": macro_name, "model_id": model_id})
                 model_macros_snapshot[key] = {
                     "macro_name": macro_name,
                     "model_id": model_id,
@@ -537,9 +522,7 @@ class SQLMeshParser:
             key = f"{audit_name}:{model_id}"
             prior = model_audits_snapshot.get(key)
             if prior is None:
-                self.batches["model_audits"].append(
-                    {"audit_name": audit_name, "model_id": model_id}
-                )
+                self._queue("model_audits", {"audit_name": audit_name, "model_id": model_id})
                 model_audits_snapshot[key] = {
                     "audit_name": audit_name,
                     "model_id": model_id,
@@ -558,11 +541,11 @@ class SQLMeshParser:
         files_snapshot: dict[str, FileSnapshot],
         models_snapshot: dict[str, ModelSnapshot],
         queries_snapshot: dict[str, QuerySnapshot],
-        prepared: PreparedModelQuery,
+        queries: list[ExtractedQuery],
     ) -> None:
         model_id = models_snapshot[model.name]["id"]
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
-        for query in extract_model_queries(model, prepared):
+        for query in queries:
             name = query["name"]
             line_start = query["line_start"]
             line_end = query["line_end"]
@@ -621,12 +604,12 @@ class SQLMeshParser:
             if prior is None:
                 query_id = self.assigner.reserve("queries", 1)[0]
                 row["id"] = query_id
-                self.batches["queries"].append(row)
+                self._queue("queries", row)
             else:
                 query_id = prior["id"]
                 row["id"] = query_id
                 if prior["snapshot_hash"] != digest:
-                    self.batches["queries"].append(row)
+                    self._queue("queries", row)
             queries_snapshot[key] = {
                 "id": query_id,
                 "model_id": model_id,
@@ -643,7 +626,7 @@ class SQLMeshParser:
         models_snapshot: dict[str, ModelSnapshot],
         columns_snapshot: dict[str, ColumnSnapshot],
         search_docs_snapshot: dict[str, SearchDocSnapshot],
-        prepared: PreparedModelQuery,
+        columns: list[ExtractedColumn],
     ) -> None:
         model_id = models_snapshot[model.name]["id"]
         model_name = model.name
@@ -651,7 +634,7 @@ class SQLMeshParser:
         column_descriptions = model.column_descriptions
         final_query = final_query_name(model_name)
         not_null_columns = not_null_column_names(model, self.context._audits)
-        for column in extract_model_columns(model, prepared):
+        for column in columns:
             query_name = column["query_name"]
             from_table = column["from_table"]
             name = column["name"]
@@ -688,7 +671,8 @@ class SQLMeshParser:
             prior = columns_snapshot.get(qualified_name)
             if prior is None:
                 column_id = self.assigner.reserve("columns", 1)[0]
-                self.batches["columns"].append(
+                self._queue(
+                    "columns",
                     {
                         "id": column_id,
                         "file_id": file_id,
@@ -706,12 +690,13 @@ class SQLMeshParser:
                         "description": description,
                         "is_select": is_select,
                         "snapshot_hash": digest,
-                    }
+                    },
                 )
             else:
                 column_id = prior["id"]
                 if prior["snapshot_hash"] != digest:
-                    self.batches["columns"].append(
+                    self._queue(
+                        "columns",
                         {
                             "id": column_id,
                             "file_id": file_id,
@@ -729,7 +714,7 @@ class SQLMeshParser:
                             "description": description,
                             "is_select": is_select,
                             "snapshot_hash": digest,
-                        }
+                        },
                     )
             columns_snapshot[qualified_name] = {
                 "id": column_id,
@@ -747,7 +732,8 @@ class SQLMeshParser:
             doc_digest = snapshot_hash([model_name, model_kind, relative, column_label])
             doc_prior = search_docs_snapshot.get(str(column_id))
             if doc_prior is None or doc_prior["snapshot_hash"] != doc_digest:
-                self.batches["search_docs"].append(
+                self._queue(
+                    "search_docs",
                     {
                         "id": column_id,
                         "model_name": model_name,
@@ -755,7 +741,7 @@ class SQLMeshParser:
                         "query_name": relative,
                         "column_name": column_label,
                         "snapshot_hash": doc_digest,
-                    }
+                    },
                 )
             search_docs_snapshot[str(column_id)] = {
                 "id": column_id,
@@ -770,7 +756,7 @@ class SQLMeshParser:
         models_snapshot: dict[str, ModelSnapshot],
         columns_snapshot: dict[str, ColumnSnapshot],
         column_lineage_snapshot: dict[str, ColumnLineageSnapshot],
-        prepared: PreparedModelQuery,
+        references: list[ExtractedColumnReference],
         name_index: dict[str, dict[str, list[str]]],
     ) -> None:
         model_id = models_snapshot[model.name]["id"]
@@ -779,7 +765,7 @@ class SQLMeshParser:
             for synced in self.context.models.values()
             if synced.name in models_snapshot
         }
-        for reference in extract_model_column_references(model, prepared):
+        for reference in references:
             ref_query_name = reference["ref_column_query_name"]
             ref_qn = _stored_qualified_name(
                 ref_query_name,
@@ -829,7 +815,8 @@ class SQLMeshParser:
             prior = column_lineage_snapshot.get(key)
             if prior is None:
                 lineage_id = self.assigner.reserve("column_lineage", 1)[0]
-                self.batches["column_lineage"].append(
+                self._queue(
+                    "column_lineage",
                     {
                         "id": lineage_id,
                         "ref_column_id": ref_column_id,
@@ -845,7 +832,7 @@ class SQLMeshParser:
                         "ref_kind": ref_kind,
                         "ref_context": ref_context,
                         "snapshot_hash": digest,
-                    }
+                    },
                 )
                 column_lineage_snapshot[key] = {
                     "id": lineage_id,
@@ -856,7 +843,8 @@ class SQLMeshParser:
                 continue
             lineage_id = prior["id"]
             if prior["snapshot_hash"] != digest:
-                self.batches["column_lineage"].append(
+                self._queue(
+                    "column_lineage",
                     {
                         "id": lineage_id,
                         "ref_column_id": ref_column_id,
@@ -872,7 +860,7 @@ class SQLMeshParser:
                         "ref_kind": ref_kind,
                         "ref_context": ref_context,
                         "snapshot_hash": digest,
-                    }
+                    },
                 )
             column_lineage_snapshot[key] = {
                 "id": lineage_id,
@@ -904,7 +892,8 @@ class SQLMeshParser:
             prior = tests_snapshot.get(key)
             if prior is None:
                 test_id = self.assigner.reserve("tests", 1)[0]
-                self.batches["tests"].append(
+                self._queue(
+                    "tests",
                     {
                         "id": test_id,
                         "file_id": file_id,
@@ -913,12 +902,13 @@ class SQLMeshParser:
                         "line_start": line_start,
                         "line_end": line_end,
                         "snapshot_hash": digest,
-                    }
+                    },
                 )
             else:
                 test_id = prior["id"]
                 if prior["snapshot_hash"] != digest:
-                    self.batches["tests"].append(
+                    self._queue(
+                        "tests",
                         {
                             "id": test_id,
                             "file_id": file_id,
@@ -927,7 +917,7 @@ class SQLMeshParser:
                             "line_start": line_start,
                             "line_end": line_end,
                             "snapshot_hash": digest,
-                        }
+                        },
                     )
             tests_snapshot[key] = {"id": test_id, "snapshot_hash": digest, "seen": True}
             body = metadata.body if isinstance(metadata.body, dict) else {}
@@ -985,9 +975,7 @@ class SQLMeshParser:
                 ref_key = f"{test_id}:{column_id}"
                 prior_ref = test_references_snapshot.get(ref_key)
                 if prior_ref is None:
-                    self.batches["test_references"].append(
-                        {"test_id": test_id, "column_id": column_id}
-                    )
+                    self._queue("test_references", {"test_id": test_id, "column_id": column_id})
                     test_references_snapshot[ref_key] = {
                         "test_id": test_id,
                         "column_id": column_id,
