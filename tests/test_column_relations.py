@@ -3,8 +3,19 @@ from sqlglot import exp
 from src.db import ProjectDB
 from src.parse.column_lineage import _ref_kind
 from src.processor import ProjectProcessor
-from src.sqlparse_mcp.column_relations import get_column_relations
+from src.sqlparse_mcp.column_relations import (
+    _column_parts_from_qn,
+    get_column_relations,
+)
 from tests.conftest import FIXTURE_PROJECT
+
+
+def test_column_parts_from_qn_splits_label_tail() -> None:
+    assert _column_parts_from_qn("sushi.customers/$cte/raw.customers.customer_id") == (
+        "raw.customers",
+        "customer_id",
+    )
+    assert _column_parts_from_qn("raw.customers/$/customer_id") == (None, "customer_id")
 
 
 def test_ref_kind_reserves_alias_for_a_renamed_column() -> None:

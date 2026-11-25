@@ -35,24 +35,23 @@ SELECT
     ref_models.qualified_name AS ref_model_name,
     ref_models.kind AS ref_model_kind,
     lineage.ref_column_query_name AS ref_query_name,
-    ref_columns.from_table AS ref_from_table,
-    ref_columns.name AS ref_output_name,
+    lineage.ref_column_qualified_name AS ref_column_qualified_name,
     lineage.ref_kind,
     lineage.source_column_id,
     source_models.qualified_name AS source_model_name,
     source_models.kind AS source_model_kind,
-    source_columns.name AS source_output_name
+    lineage.source_column_qualified_name AS source_column_qualified_name
 FROM column_lineage AS lineage
-INNER JOIN columns AS ref_columns
-    ON ref_columns.id = lineage.ref_column_id
 INNER JOIN models AS ref_models
     ON ref_models.id = lineage.ref_column_model_id
-INNER JOIN columns AS source_columns
-    ON source_columns.id = lineage.source_column_id
 INNER JOIN models AS source_models
     ON source_models.id = lineage.source_models_id
 WHERE lineage.ref_column_id IN ({placeholders})
-ORDER BY ref_model_name, ref_query_name, ref_output_name, ref_from_table, lineage.ref_kind
+ORDER BY
+    ref_model_name,
+    ref_query_name,
+    ref_column_qualified_name,
+    lineage.ref_kind
 """
 
 _DEPENDENTS_SQL = """
@@ -61,16 +60,13 @@ SELECT
     models.kind AS model_kind,
     models.is_blueprint AS model_is_blueprint,
     lineage.ref_column_query_name AS query_name,
-    columns.from_table AS from_table,
-    columns.name AS column_name,
+    lineage.ref_column_qualified_name AS ref_column_qualified_name,
     lineage.ref_kind AS ref_kind
 FROM column_lineage AS lineage
-INNER JOIN columns
-    ON columns.id = lineage.ref_column_id
 INNER JOIN models
     ON models.id = lineage.ref_column_model_id
 WHERE lineage.source_column_id IN ({placeholders})
-ORDER BY model_name, query_name, column_name, from_table, ref_kind
+ORDER BY model_name, query_name, ref_column_qualified_name, ref_kind
 """
 
 _TEST_DEPENDENTS_SQL = """
@@ -116,6 +112,15 @@ def _model_label(model_name: str, kind: str, is_blueprint: bool, mark_external: 
         is_blueprint=is_blueprint,
         mark_external=mark_external,
     )
+
+
+def _column_parts_from_qn(qualified_name: str) -> tuple[str | None, str]:
+    label = qualified_name.rsplit("/", 1)[-1]
+    from_table: str | None = None
+    name = label
+    if "." in label:
+        from_table, _, name = label.rpartition(".")
+    return from_table, name
 
 
 def _column_label(from_table: str | None, column_name: str) -> str:
@@ -280,25 +285,31 @@ def _fetch_dependencies(
     db: ProjectDB, column_ids: list[int]
 ) -> list[tuple[int, str, str, str, str | None, str, str, int, str, str, str]]:
     placeholders = ", ".join("?" for _ in column_ids)
-    return [
-        (
-            int(row["ref_column_id"]),
-            str(row["ref_model_name"]),
-            str(row["ref_model_kind"]),
-            str(row["ref_query_name"]),
-            str(row["ref_from_table"]) if row["ref_from_table"] is not None else None,
-            str(row["ref_output_name"]),
-            str(row["ref_kind"]),
-            int(row["source_column_id"]),
-            str(row["source_model_name"]),
-            str(row["source_model_kind"]),
-            str(row["source_output_name"]),
+    rows: list[tuple[int, str, str, str, str | None, str, str, int, str, str, str]] = []
+    for row in db.connection.execute(
+        _DEPENDENCIES_SQL.format(placeholders=placeholders),
+        column_ids,
+    ):
+        ref_from_table, ref_output_name = _column_parts_from_qn(
+            str(row["ref_column_qualified_name"])
         )
-        for row in db.connection.execute(
-            _DEPENDENCIES_SQL.format(placeholders=placeholders),
-            column_ids,
+        _, source_output_name = _column_parts_from_qn(str(row["source_column_qualified_name"]))
+        rows.append(
+            (
+                int(row["ref_column_id"]),
+                str(row["ref_model_name"]),
+                str(row["ref_model_kind"]),
+                str(row["ref_query_name"]),
+                ref_from_table,
+                ref_output_name,
+                str(row["ref_kind"]),
+                int(row["source_column_id"]),
+                str(row["source_model_name"]),
+                str(row["source_model_kind"]),
+                source_output_name,
+            )
         )
-    ]
+    return rows
 
 
 def _relation_text(
@@ -477,21 +488,25 @@ def get_column_relations(
             result = _format_dependency_tree(db, column_ids, page)
         else:
             placeholders = ", ".join("?" for _ in column_ids)
-            rows = [
-                (
-                    str(row["model_name"]),
-                    str(row["model_kind"]),
-                    bool(row["model_is_blueprint"]),
-                    str(row["query_name"]),
-                    str(row["from_table"]) if row["from_table"] is not None else None,
-                    str(row["column_name"]),
-                    str(row["ref_kind"]),
+            rows = []
+            for row in db.connection.execute(
+                _DEPENDENTS_SQL.format(placeholders=placeholders),
+                column_ids,
+            ):
+                from_table, column_name = _column_parts_from_qn(
+                    str(row["ref_column_qualified_name"])
                 )
-                for row in db.connection.execute(
-                    _DEPENDENTS_SQL.format(placeholders=placeholders),
-                    column_ids,
+                rows.append(
+                    (
+                        str(row["model_name"]),
+                        str(row["model_kind"]),
+                        bool(row["model_is_blueprint"]),
+                        str(row["query_name"]),
+                        from_table,
+                        column_name,
+                        str(row["ref_kind"]),
+                    )
                 )
-            ]
             test_rows: list[tuple[str, str, str, int, int]] = []
             if include_tests:
                 test_rows = [

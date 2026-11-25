@@ -38,6 +38,10 @@ INNER JOIN models AS source_models
 WHERE lineage.ref_column_model_id != lineage.source_models_id
 """
 
+_MODEL_META_SQL = """
+SELECT qualified_name, kind, is_blueprint FROM models
+"""
+
 
 def _load_graph(
     db: ProjectDB,
@@ -63,7 +67,7 @@ def _load_graph(
 def _model_meta(db: ProjectDB) -> dict[str, tuple[str, bool]]:
     return {
         str(row["qualified_name"]): (str(row["kind"]), bool(row["is_blueprint"]))
-        for row in db.connection.execute("SELECT qualified_name, kind, is_blueprint FROM models")
+        for row in db.connection.execute(_MODEL_META_SQL)
     }
 
 
