@@ -1,6 +1,4 @@
 import os
-import sys
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -68,7 +66,6 @@ class SQLMeshParser:
         self._gateway_ids: dict[tuple[str, str], int] = {}
         self._project_defaults: dict[str, str] = {}
         self._query_ids: dict[str, int] = {}
-        self._flush_ms = 0.0
 
     def _new_batches(self) -> dict[str, list[dict[str, object]]]:
         return {table: [] for table in BATCH_TABLES}
@@ -82,10 +79,8 @@ class SQLMeshParser:
             self._flush()
 
     def _flush(self) -> None:
-        started = time.perf_counter()
         self.db.bulk_insert(self.batches)
         self.batches = self._new_batches()
-        self._flush_ms += (time.perf_counter() - started) * 1000
 
     def _extract_models(self, models: list[Model]) -> dict[str, ModelExtractBundle]:
         workers = min(32, os.cpu_count() or 4, max(len(models), 1))
@@ -94,7 +89,6 @@ class SQLMeshParser:
         return {bundle.model_name: bundle for bundle in bundles}
 
     def sync(self, files_snapshot: dict[str, FileSnapshot]) -> None:
-        self._flush_ms = 0.0
         projects_snapshot = self.db.get_projects_snapshot()
         gateways_snapshot = self.db.get_project_gateways_snapshot()
         self._sync_projects(projects_snapshot, gateways_snapshot)
@@ -128,9 +122,7 @@ class SQLMeshParser:
                     search_docs_snapshot,
                 )
 
-        extract_started = time.perf_counter()
         bundles = self._extract_models(extract_models) if extract_models else {}
-        extract_ms = (time.perf_counter() - extract_started) * 1000
         lineage_refs: dict[str, list[ExtractedColumnReference]] = {}
         for model in extract_models:
             bundle = bundles[model.name]
@@ -167,7 +159,6 @@ class SQLMeshParser:
 
         column_lineage_snapshot = self.db.get_column_lineage_snapshot()
         column_name_index = build_column_name_index(columns_snapshot)
-        lineage_started = time.perf_counter()
         for model in self.context.models.values():
             if model.name in lineage_refs:
                 self._sync_column_lineage(
@@ -183,7 +174,6 @@ class SQLMeshParser:
                     models_snapshot[model.name]["id"],
                     column_lineage_snapshot,
                 )
-        lineage_ms = (time.perf_counter() - lineage_started) * 1000
 
         self.db.delete_column_lineage(column_lineage_snapshot)
         self.db.delete_search_docs(search_docs_snapshot)
@@ -193,12 +183,6 @@ class SQLMeshParser:
         self.db.delete_project_gateways(gateways_snapshot)
         self.db.delete_projects(projects_snapshot)
         self._flush()
-        print(
-            "Sync extract_ms="
-            f"{round(extract_ms)} lineage_apply_ms={round(lineage_ms)} "
-            f"flush_ms={round(self._flush_ms)} models_extracted={len(extract_models)}",
-            file=sys.stderr,
-        )
 
     def _sync_macros(
         self,

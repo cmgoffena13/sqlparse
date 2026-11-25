@@ -278,12 +278,10 @@ class ProjectProcessor:
             self.parser.sync(self.files_snapshot)
 
         duration_ms = round((time.perf_counter() - start_time) * 1000)
+        models_indexed = len(self.parser.context.models)
         indexed = (
-            f"Indexed {self.files_indexed} files incrementally"
+            f"Indexed {self.files_indexed} files and {models_indexed} models incrementally"
             if not full
-            else f"Indexed {self.files_indexed} files"
+            else f"Indexed {self.files_indexed} files and {models_indexed} models"
         )
-        print(
-            f"{indexed} in {duration_ms}ms (files_skipped: {self.files_skipped})",
-            file=sys.stderr,
-        )
+        print(f"{indexed} in {duration_ms}ms", file=sys.stderr)

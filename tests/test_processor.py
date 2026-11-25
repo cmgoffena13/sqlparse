@@ -173,6 +173,33 @@ def test_processor_reuses_context_across_process_calls() -> None:
         db.close()
 
 
+def test_process_prints_files_and_models_count(capsys: pytest.CaptureFixture[str]) -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    processor = ProjectProcessor(db, FIXTURE_PROJECT)
+    try:
+        processor.process(full=True)
+        model_count = len(processor.parser.context.models)
+        full_line = next(
+            line for line in capsys.readouterr().err.splitlines() if line.startswith("Indexed ")
+        )
+        assert full_line.startswith(
+            f"Indexed {processor.files_indexed} files and {model_count} models in "
+        )
+        assert full_line.endswith("ms")
+        assert "incrementally" not in full_line
+        processor.process()
+        incremental_line = next(
+            line for line in capsys.readouterr().err.splitlines() if line.startswith("Indexed ")
+        )
+        assert incremental_line.startswith(
+            f"Indexed {processor.files_indexed} files and {model_count} models incrementally in "
+        )
+        assert incremental_line.endswith("ms")
+    finally:
+        processor.close()
+        db.close()
+
+
 def test_processor_start_time_covers_sqlmesh_init(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
