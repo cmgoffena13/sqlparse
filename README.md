@@ -19,7 +19,8 @@ SQLParse is a SQLMesh project indexer that gives agents fast, accurate, and comp
 
 | Tool | Description |
 | --- | --- |
-| `list_schemas` | Return every schema name. |
+| `list_catalogs` | Return every catalog (DEFAULT marked) with schema and table counts. |
+| `list_schemas` | Return schema names in one catalog with table counts. |
 | `list_models` | Return the model names in one schema. |
 | `get_directory_tree` | Return the project's directory/file tree with line counts. |
 | `search` | Full-text search model, query, and column names. |
