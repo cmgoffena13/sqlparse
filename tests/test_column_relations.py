@@ -134,14 +134,14 @@ def test_column_relations_dependents_include_tests_when_requested() -> None:
         )
     finally:
         db.close()
-    assert (
+    assert out == (
         f"{ORDERS}/$/{CUSTOMERS}.customer_id (J, M)\n"
         "├── tests/test_orders.yaml\n"
         "│   • test_orders_exist\n"
         "│   • test_orders_csv\n"
         "│   • test_orders_query\n"
         f"└── {CUSTOMER_ORDERS}/$/{CUSTOMERS}.customer_id (J, G, S, M)\n"
-    ) in out
+    )
     assert "## Tests" not in out
 
 

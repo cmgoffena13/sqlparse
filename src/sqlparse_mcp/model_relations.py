@@ -97,6 +97,7 @@ def _relation_lines(
     branch_prefix: str,
     *,
     seen: set[str],
+    expanded: set[str],
     meta: dict[str, tuple[str, bool]],
     mark_external: bool,
     nested: bool,
@@ -122,20 +123,28 @@ def _relation_lines(
             prefix, continuation = tree_glyphs(index == last_index, wide=True)
         elif lines:
             lines.append("")
-        lines.append(f"{branch_prefix}{prefix}{label}")
-        lines.extend(
-            _relation_lines(
-                children,
-                child,
-                branch_prefix + continuation,
-                seen=seen,
-                meta=meta,
-                mark_external=mark_external,
-                nested=True,
-                tests=tests,
-                catalog=catalog,
+        has_nested = bool(children.get(child)) or bool(tests.get(child))
+        if child in expanded:
+            if has_nested:
+                label = f"{label} (shown above)"
+            lines.append(f"{branch_prefix}{prefix}{label}")
+        else:
+            expanded.add(child)
+            lines.append(f"{branch_prefix}{prefix}{label}")
+            lines.extend(
+                _relation_lines(
+                    children,
+                    child,
+                    branch_prefix + continuation,
+                    seen=seen,
+                    expanded=expanded,
+                    meta=meta,
+                    mark_external=mark_external,
+                    nested=True,
+                    tests=tests,
+                    catalog=catalog,
+                )
             )
-        )
         seen.remove(child)
         index += 1
     return lines
@@ -183,6 +192,7 @@ def get_model_relations(
                         resolved,
                         "",
                         seen={resolved},
+                        expanded=set(),
                         meta=meta,
                         mark_external=mark_external,
                         nested=False,

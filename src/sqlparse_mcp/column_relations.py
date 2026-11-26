@@ -6,7 +6,6 @@ from src.parse.column_lineage import FINAL_QUERY, final_query_name, model_query_
 from src.sqlparse_mcp.format_utils import (
     from_table_reads_models,
     kind_label,
-    model_display_label,
     omit_default_catalog,
     page_window,
     path_label,
@@ -100,22 +99,6 @@ def _relative_query(model_name: str, query_name: str) -> str:
     return relative
 
 
-def _model_label(
-    model_name: str,
-    kind: str,
-    is_blueprint: bool,
-    mark_external: bool,
-    catalog: str | None,
-) -> str:
-    return model_display_label(
-        model_name,
-        kind=kind,
-        is_blueprint=is_blueprint,
-        mark_external=mark_external,
-        default_catalog=catalog,
-    )
-
-
 def _column_parts_from_qn(qualified_name: str) -> tuple[str | None, str]:
     label = qualified_name.rsplit("/", 1)[-1]
     from_table: str | None = None
@@ -144,94 +127,120 @@ def _relation_kinds(ref_kind: str, kinds: list[str]) -> list[str]:
     return kinds
 
 
-def _model_children(direct: list[str], dependents: dict[str, list[str]]) -> dict[str, list[str]]:
+def _relation_text(
+    model_name: str,
+    kind: str,
+    query_name: str,
+    column: str,
+    ref_kinds: list[str],
+    *,
+    reads_models: bool = False,
+    catalog: str | None = None,
+) -> str:
+    shown = omit_default_catalog(model_name, catalog)
+    text = path_label(shown, "$EXTERNAL", column)
+    if kind != "EXTERNAL":
+        text = (
+            f"{path_label(shown, _relative_query(model_name, query_name), column)}"
+            f"{_use_label(ref_kinds, reads_models=reads_models)}"
+        )
+    return text
+
+
+def _reference_line(
+    model_name: str,
+    kind: str,
+    query_name: str,
+    from_table: str | None,
+    column_name: str,
+    kinds: list[str],
+    *,
+    catalog: str | None,
+) -> str:
+    column = column_name
+    reads_models = False
+    if kind != "EXTERNAL":
+        column = _column_label(from_table, column_name, catalog)
+        reads_models = from_table_reads_models(from_table)
+    return _relation_text(
+        model_name,
+        kind,
+        query_name,
+        column,
+        kinds if kind != "EXTERNAL" else [],
+        reads_models=reads_models,
+        catalog=catalog,
+    )
+
+
+def _descendants(start: str, dependents: dict[str, list[str]]) -> set[str]:
+    found: set[str] = set()
+    pending = list(dependents.get(start, ()))
+    while pending:
+        name = pending.pop(0)
+        if name not in found:
+            found.add(name)
+            pending.extend(dependents.get(name, ()))
+    return found
+
+
+def _included_models(
+    hits: list[str], dependents: dict[str, list[str]]
+) -> tuple[list[str], dict[str, list[str]]]:
+    roots: list[str] = []
+    for name in hits:
+        nested = any(name in _descendants(other, dependents) for other in hits if other != name)
+        if not nested:
+            roots.append(name)
     included: list[str] = []
-    pending = list(direct)
+    pending = list(roots)
     while pending:
         name = pending.pop(0)
         if name not in included:
             included.append(name)
-            pending.extend(dependents.get(name, []))
-    return {
-        name: [child for child in dependents.get(name, []) if child in included]
+            pending.extend(dependents.get(name, ()))
+    children = {
+        name: [child for child in dependents.get(name, ()) if child in included]
         for name in included
     }
+    return roots, children
 
 
 def _model_block(
     name: str,
-    grouped: OrderedDict[
-        str, tuple[str, bool, OrderedDict[str, OrderedDict[str, tuple[list[str], bool]]]]
-    ],
+    labels: dict[str, list[str]],
     children: dict[str, list[str]],
     tests: OrderedDict[str, OrderedDict[str, list[str]]],
     seen: set[str],
+    expanded: set[str],
     catalog: str | None,
 ) -> list[str]:
     seen.add(name)
-    header, hide_query, queries = grouped.get(
-        name, (omit_default_catalog(name, catalog), False, OrderedDict())
-    )
-    entries = [
-        (
-            f"{path_label(header, label)}{_use_label(kinds, reads_models=reads_models)}"
-            if hide_query
-            else (
-                f"{path_label(header, query_name, label)}"
-                f"{_use_label(kinds, reads_models=reads_models)}"
-            )
-        )
-        for query_name, columns in queries.items()
-        for label, (kinds, reads_models) in columns.items()
-    ]
-    if not entries:
-        entries = [header]
+    entries = labels.get(name) or [omit_default_catalog(name, catalog)]
     kids = [kid for kid in children.get(name, []) if kid not in seen]
+    files = list(tests.get(name, {}).items())
     lines: list[str] = []
-    last = len(entries) - 1
-    for index, text in enumerate(entries):
-        lines.append(text)
-        branches: list[tuple[str, list[str]]] = []
-        if index == 0:
-            branches.extend(
-                (file_path, [f"• {item}" for item in names])
-                for file_path, names in tests.get(name, {}).items()
-            )
-        if index == last:
-            for kid in kids:
-                nested = _model_block(kid, grouped, children, tests, seen, catalog)
-                branches.append((nested[0], nested[1:]))
-        for branch_index, (head, rest) in enumerate(branches):
-            connector, continuation = tree_glyphs(branch_index == len(branches) - 1, wide=True)
-            lines.append(f"{connector}{head}")
-            lines.extend(f"{continuation}{line}" for line in rest)
-    return lines
-
-
-def _relation_roots(children: dict[str, list[str]]) -> list[str]:
-    nested = {name for kids in children.values() for name in kids}
-    roots = [name for name in children if name not in nested]
-    if not roots and children:
-        roots = [next(iter(children))]
-    return roots
-
-
-def _dependency_tree(
-    grouped: OrderedDict[
-        str, tuple[str, bool, OrderedDict[str, OrderedDict[str, tuple[list[str], bool]]]]
-    ],
-    children: dict[str, list[str]],
-    tests: OrderedDict[str, OrderedDict[str, list[str]]],
-    roots: list[str],
-    catalog: str | None,
-) -> list[str]:
-    lines: list[str] = []
-    seen: set[str] = set()
-    for name in roots:
-        if name not in seen:
-            if lines:
-                lines.append("")
-            lines.extend(_model_block(name, grouped, children, tests, seen, catalog))
+    has_nested = bool(kids) or bool(files)
+    if name in expanded:
+        lines = [f"{text} (shown above)" for text in entries] if has_nested else list(entries)
+    else:
+        expanded.add(name)
+        last = len(entries) - 1
+        for index, text in enumerate(entries):
+            lines.append(text)
+            branches: list[tuple[str, list[str]]] = []
+            if index == 0:
+                branches.extend(
+                    (file_path, [f"• {item}" for item in names]) for file_path, names in files
+                )
+            if index == last:
+                for kid in kids:
+                    nested = _model_block(kid, labels, children, tests, seen, expanded, catalog)
+                    branches.append((nested[0], nested[1:]))
+            for branch_index, (head, rest) in enumerate(branches):
+                connector, continuation = tree_glyphs(branch_index == len(branches) - 1, wide=True)
+                lines.append(f"{connector}{head}")
+                lines.extend(f"{continuation}{line}" for line in rest)
     return lines
 
 
@@ -239,37 +248,33 @@ def _format_groups(
     db: ProjectDB,
     rows: list[tuple[str, str, bool, str, str | None, str, str]],
     test_rows: list[tuple[str, str, str, int, int]],
-    mark_external: bool,
     page: int,
 ) -> str:
     catalog = default_catalog(db)
-    grouped: OrderedDict[
-        str, tuple[str, bool, OrderedDict[str, OrderedDict[str, tuple[list[str], bool]]]]
-    ] = OrderedDict()
-    for model_name, kind, is_blueprint, query_name, from_table, column_name, ref_kind in rows:
-        _header, _hide_query, queries = grouped.setdefault(
-            model_name,
-            (
-                _model_label(model_name, kind, is_blueprint, mark_external, catalog),
-                mark_external and kind == "EXTERNAL",
-                OrderedDict(),
-            ),
-        )
-        columns = queries.setdefault(_relative_query(model_name, query_name), OrderedDict())
-        label = _column_label(from_table, column_name, catalog)
-        kinds, _reads = columns.setdefault(label, ([], from_table_reads_models(from_table)))
+    grouped: OrderedDict[tuple[str, str, str, str | None, str], list[str]] = OrderedDict()
+    hit_order: list[str] = []
+    for model_name, kind, _is_blueprint, query_name, from_table, column_name, ref_kind in rows:
+        relative = _relative_query(model_name, query_name)
+        key = (model_name, kind, relative, from_table, column_name)
+        kinds = grouped.setdefault(key, [])
         if ref_kind not in kinds:
             kinds.append(ref_kind)
+        if model_name not in hit_order:
+            hit_order.append(model_name)
+    labels: dict[str, list[str]] = {}
+    for (model_name, kind, relative, from_table, column_name), kinds in grouped.items():
+        text = _reference_line(
+            model_name, kind, relative, from_table, column_name, kinds, catalog=catalog
+        )
+        labels.setdefault(model_name, []).append(text)
     _dependencies, dependents = _load_graph(db)
+    roots, children = _included_models(hit_order, dependents)
     tests: OrderedDict[str, OrderedDict[str, list[str]]] = OrderedDict()
     for model_name, file_path, test_name, _line_start, _line_end in test_rows:
         files = tests.setdefault(model_name, OrderedDict())
-        item = test_name
         names = files.setdefault(file_path, [])
-        if item not in names:
-            names.append(item)
-    model_children = _model_children(list(grouped), dependents)
-    roots = _relation_roots(model_children)
+        if test_name not in names:
+            names.append(test_name)
     result = "No relations."
     if roots:
         window = page_window(len(roots), page, _PAGE_SIZE, label="dependents")
@@ -277,7 +282,12 @@ def _format_groups(
             result = window
         else:
             start, stop, page_count = window
-            lines = _dependency_tree(grouped, model_children, tests, roots[start:stop], catalog)
+            lines: list[str] = []
+            expanded: set[str] = set()
+            for name in roots[start:stop]:
+                if lines:
+                    lines.append("")
+                lines.extend(_model_block(name, labels, children, tests, set(), expanded, catalog))
             result = with_page_footer(
                 "\n".join(lines) + "\n",
                 page,
@@ -318,26 +328,6 @@ def _fetch_dependencies(
             )
         )
     return rows
-
-
-def _relation_text(
-    model_name: str,
-    kind: str,
-    query_name: str,
-    column: str,
-    ref_kinds: list[str],
-    *,
-    reads_models: bool = False,
-    catalog: str | None = None,
-) -> str:
-    shown = omit_default_catalog(model_name, catalog)
-    text = path_label(shown, "$EXTERNAL", column)
-    if kind != "EXTERNAL":
-        text = (
-            f"{path_label(shown, _relative_query(model_name, query_name), column)}"
-            f"{_use_label(ref_kinds, reads_models=reads_models)}"
-        )
-    return text
 
 
 def _dependency_nodes(
@@ -431,20 +421,34 @@ def _dependency_nodes(
     return result
 
 
-def _render_dependency_nodes(nodes: list[tuple[str, list]], nested: bool) -> list[str]:
+def _render_dependency_nodes(
+    nodes: list[tuple[str, list]], nested: bool, expanded: set[str]
+) -> list[str]:
     lines: list[str] = []
     last = len(nodes) - 1
     for index, (text, children) in enumerate(nodes):
         connector, continuation = tree_glyphs(index == last, wide=True)
-        if nested:
-            lines.append(f"{connector}{text}")
-            for line in _render_dependency_nodes(children, True):
-                lines.append(f"{continuation}{line}" if line else "")
+        shown = text
+        if text in expanded:
+            if children:
+                shown = f"{text} (shown above)"
+            if nested:
+                lines.append(f"{connector}{shown}")
+            else:
+                if lines:
+                    lines.append("")
+                lines.append(shown)
         else:
-            if lines:
-                lines.append("")
-            lines.append(text)
-            lines.extend(_render_dependency_nodes(children, True))
+            expanded.add(text)
+            if nested:
+                lines.append(f"{connector}{text}")
+                for line in _render_dependency_nodes(children, True, expanded):
+                    lines.append(f"{continuation}{line}" if line else "")
+            else:
+                if lines:
+                    lines.append("")
+                lines.append(text)
+                lines.extend(_render_dependency_nodes(children, True, expanded))
     return lines
 
 
@@ -463,7 +467,7 @@ def _format_dependency_tree(db: ProjectDB, column_ids: list[int], page: int) -> 
             result = window
         else:
             start, stop, page_count = window
-            lines = _render_dependency_nodes(roots[start:stop], False)
+            lines = _render_dependency_nodes(roots[start:stop], False, set())
             result = with_page_footer(
                 "\n".join(lines) + "\n",
                 page,
@@ -536,5 +540,5 @@ def get_column_relations(
                             column_ids,
                         )
                     ]
-                result = _format_groups(db, rows, test_rows, False, page)
+                result = _format_groups(db, rows, test_rows, page)
     return result

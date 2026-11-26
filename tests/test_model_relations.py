@@ -33,9 +33,7 @@ def test_model_relations_dependencies_tree() -> None:
         "\n"
         f"{ORDERS}\n"
         f"├── {RAW_ORDERS} (EXTERNAL)\n"
-        f"└── {CUSTOMERS}\n"
-        f"    ├── {RAW_CUSTOMERS} (EXTERNAL)\n"
-        f"    └── {RAW_ORDERS} (EXTERNAL)\n"
+        f"└── {CUSTOMERS} (shown above)\n"
     )
 
 
@@ -134,7 +132,5 @@ def test_model_relations_does_not_hard_truncate_nested_trees(
         "\n"
         f"{ORDERS}\n"
         f"├── {RAW_ORDERS} (EXTERNAL)\n"
-        f"└── {CUSTOMERS}\n"
-        f"    ├── {RAW_CUSTOMERS} (EXTERNAL)\n"
-        f"    └── {RAW_ORDERS} (EXTERNAL)\n"
+        f"└── {CUSTOMERS} (shown above)\n"
     )
