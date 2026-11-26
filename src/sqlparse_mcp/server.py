@@ -237,7 +237,9 @@ def get_macro(
     ctx: Context, file_path: str, macro_name: str, include_call_sites: bool = False
 ) -> str:
     """
-    Return a macro's definition and the models that use it.
+    Return a macro's definition.
+
+    Exclude model query references by default; set ``include_call_sites`` to include them.
     """
     return _processor(ctx).run_query(
         lambda db: run_get_macro(db, file_path, macro_name, include_call_sites)
@@ -249,7 +251,9 @@ def get_audit(
     ctx: Context, file_path: str, audit_name: str, include_call_sites: bool = False
 ) -> str:
     """
-    Return an audit's definition and the models that use it.
+    Return an audit's definition.
+
+    Exclude model references by default; set ``include_call_sites`` to include them.
     """
     return _processor(ctx).run_query(
         lambda db: run_get_audit(db, file_path, audit_name, include_call_sites)
