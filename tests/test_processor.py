@@ -647,9 +647,9 @@ def test_processor_indexes_files_and_directories() -> None:
     customers_root = first_queries[(customers_id, "$")]
     customers_cte = first_queries[(customers_id, "$cte")]
     assert customers_root["depth"] == 0
-    assert customers_root["line_start"] == 12
-    assert customers_root["line_end"] == 17
-    assert customers_root["line_count"] == 6
+    assert customers_root["line_start"] == 22
+    assert customers_root["line_end"] == 26
+    assert customers_root["line_count"] == 5
     assert customers_root["file_id"] == customer["id"]
     assert customers_root["model_id"] == customers_id
     assert customers_root["snapshot_hash"]
@@ -662,9 +662,9 @@ def test_processor_indexes_files_and_directories() -> None:
     assert customers_root["having_condition_count"] == 0
     assert customers_root["order_by_col_count"] == 0
     assert customers_cte["depth"] == 1
-    assert customers_cte["line_start"] == 1
-    assert customers_cte["line_end"] == 9
-    assert customers_cte["line_count"] == 9
+    assert customers_cte["line_start"] == 12
+    assert customers_cte["line_end"] == 21
+    assert customers_cte["line_count"] == 10
     assert customers_cte["select_col_count"] == 4
     assert customers_cte["select_expr_count"] == 0
     assert customers_cte["select_alias_count"] == 0
@@ -687,7 +687,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_queries[(status_id, "$filtered")]["join_statement_count"] == 0
     assert first_queries[(status_id, "$filtered")]["group_by_col_count"] == 0
     assert first_queries[(status_id, "$")]["depth"] == 0
-    assert first_queries[(status_id, "$")]["line_start"] == 21
+    assert first_queries[(status_id, "$")]["line_start"] == 20
     assert first_queries[(status_id, "$")]["line_end"] == 23
     assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["query_id"] == customers_root["id"]
     assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["file_id"] == customer["id"]

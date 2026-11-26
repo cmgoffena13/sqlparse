@@ -2,14 +2,8 @@ import re
 import sqlite3
 from typing import TypedDict
 
-from sqlglot import exp
-from sqlglot.errors import ParseError
-from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
-from sqlglot.optimizer.scope import traverse_scope
-from sqlmesh.core.dialect import parse as parse_sql
-
 from src.db import ProjectDB
-from src.parse.column_lineage import FINAL_QUERY, _query_line_span, stored_query_name
+from src.parse.column_lineage import FINAL_QUERY, stored_query_name
 from src.sqlparse_mcp.column_relations import _resolve_query_name
 from src.sqlparse_mcp.format_utils import bullet, omit_default_catalog
 from src.sqlparse_mcp.model import _normalize_file_path
@@ -61,12 +55,31 @@ WHERE models.qualified_name = ?
 """
 
 _QUERY_SQL = """
-SELECT queries.name
+SELECT
+    queries.name,
+    queries.line_start,
+    queries.line_end
 FROM queries
 INNER JOIN models
     ON models.id = queries.model_id
 WHERE models.qualified_name = ?
   AND queries.name = ?
+"""
+
+_FILE_QUERIES_SQL = """
+SELECT
+    models.qualified_name,
+    queries.name,
+    queries.line_start,
+    queries.line_end
+FROM queries
+INNER JOIN models
+    ON models.id = queries.model_id
+INNER JOIN files
+    ON files.id = models.file_id
+WHERE files.path = ?
+  AND queries.line_start IS NOT NULL
+ORDER BY queries.line_start, queries.name
 """
 
 _FILE_MODELS_SQL = """
@@ -168,13 +181,6 @@ ORDER BY columns.line_start, columns.line_end, columns.name
 """
 
 
-def _normalized_identifier(name: str, dialect: str) -> str:
-    normalized = name
-    if name != "$":
-        normalized = normalize_identifiers(exp.to_identifier(name), dialect=dialect).name
-    return normalized
-
-
 def _relative_query(model_name: str, query_name: str | None) -> str:
     resolved = _resolve_query_name(model_name, query_name)
     prefix = f"{model_name}/"
@@ -182,69 +188,6 @@ def _relative_query(model_name: str, query_name: str | None) -> str:
     if resolved.startswith(prefix):
         relative = resolved[len(prefix) :]
     return relative
-
-
-def _neutralize_jinja(text: str) -> str:
-    def replace_expression(match: re.Match[str]) -> str:
-        token = match.group(0)
-        return "NULL" + (" " * (len(token) - 4))
-
-    neutralized = re.sub(r"\{\{.*?\}\}", replace_expression, text, flags=re.DOTALL)
-    neutralized = re.sub(
-        r"\{%.*?%\}",
-        lambda match: " " * len(match.group(0)),
-        neutralized,
-        flags=re.DOTALL,
-    )
-    for token in ("JINJA_QUERY_BEGIN;", "JINJA_END;"):
-        neutralized = neutralized.replace(token, " " * len(token))
-    return neutralized
-
-
-def _expand_query_span(lines: list[str], start: int, end: int) -> tuple[int, int]:
-    while start > 1:
-        previous = lines[start - 2].strip().upper()
-        header = previous.startswith(("SELECT", "WITH ")) or previous.endswith(" AS (")
-        if not header:
-            break
-        start -= 1
-    if end < len(lines) and lines[end].strip() in {")", "),"}:
-        end += 1
-    return start, end
-
-
-def _indexed_query_name(name: str, dialect: str) -> str:
-    bare = name[1:] if name.startswith("$") and name != "$" else name
-    return stored_query_name(_normalized_identifier(bare, dialect))
-
-
-def _source_span(
-    text: str, dialect: str, query_name: str, model_name: str
-) -> tuple[int, int, str] | None:
-    span = None
-    try:
-        expressions = parse_sql(_neutralize_jinja(text), default_dialect=dialect)
-    except ParseError:
-        expressions = []
-    lines = text.splitlines()
-    for expression in expressions:
-        if isinstance(expression, exp.Query):
-            for scope in traverse_scope(expression):
-                parent = scope.expression.parent
-                name = "$"
-                if scope.is_cte and parent is not None:
-                    name = parent.alias_or_name
-                included = scope.is_cte or scope.is_root
-                same_name = _indexed_query_name(name, dialect) == _indexed_query_name(
-                    query_name, dialect
-                )
-                if included and same_name:
-                    start, end = _query_line_span(scope.expression)
-                    if start:
-                        expanded = _expand_query_span(lines, start, end)
-                        shown = model_name if name == "$" else stored_query_name(name)
-                        span = (expanded[0], expanded[1], shown)
-    return span
 
 
 def _called_macros(text: str, names: list[str]) -> list[str]:
@@ -376,19 +319,20 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                 if query_row is None:
                     result = "No query found."
                 else:
-                    text = (db.root / path).read_text(encoding="utf-8")
-                    span = _source_span(text, str(model_row["dialect"]), relative, model_name)
                     result = "No SQL source for this query."
-                    if span is not None:
+                    if query_row["line_start"] is not None:
+                        start = int(query_row["line_start"])
+                        end = int(query_row["line_end"])
+                        text = (db.root / path).read_text(encoding="utf-8")
                         query_lines = text.splitlines()
-                        source = "\n".join(query_lines[span[0] - 1 : span[1]])
+                        source = "\n".join(query_lines[start - 1 : end])
                         sql = _rendered_sql(db, model_name, relative) if render else None
                         if not render or sql is not None:
                             result = _format_query(
                                 header,
                                 query_lines,
-                                span[0],
-                                span[1],
+                                start,
+                                end,
                                 _query_macros(db, model_name, source),
                                 sql,
                             )
@@ -443,36 +387,7 @@ class _LineSpan(TypedDict):
     end: int
 
 
-def _parsed_query_spans(
-    text: str, dialect: str, model_name: str
-) -> list[tuple[str, str, int, int]]:
-    spans: list[tuple[str, str, int, int]] = []
-    try:
-        expressions = parse_sql(_neutralize_jinja(text), default_dialect=dialect)
-    except ParseError:
-        expressions = []
-    lines = text.splitlines()
-    seen: set[str] = set()
-    for expression in expressions:
-        if isinstance(expression, exp.Query):
-            for scope in traverse_scope(expression):
-                parent = scope.expression.parent
-                name = "$"
-                if scope.is_cte and parent is not None:
-                    name = parent.alias_or_name
-                stored = _indexed_query_name(name, dialect)
-                included = (scope.is_cte or scope.is_root) and stored not in seen
-                if included:
-                    start, end = _query_line_span(scope.expression)
-                    if start:
-                        seen.add(stored)
-                        expanded = _expand_query_span(lines, start, end)
-                        display = model_name if name == "$" else name
-                        spans.append((stored, display, expanded[0], expanded[1]))
-    return spans
-
-
-def _file_spans(text: str, models: list[sqlite3.Row]) -> list[_LineSpan]:
+def _file_spans(db: ProjectDB, path: str, models: list[sqlite3.Row]) -> list[_LineSpan]:
     spans: list[_LineSpan] = []
     for model in models:
         model_name = str(model["qualified_name"])
@@ -486,19 +401,20 @@ def _file_spans(text: str, models: list[sqlite3.Row]) -> list[_LineSpan]:
                 "end": int(model["config_end_line"]),
             }
         )
-        for query_name, display_name, start, end in _parsed_query_spans(
-            text, str(model["dialect"]), model_name
-        ):
-            spans.append(
-                {
-                    "kind": "query",
-                    "model_name": model_name,
-                    "query_name": query_name,
-                    "display_name": display_name,
-                    "start": start,
-                    "end": end,
-                }
-            )
+    for row in db.connection.execute(_FILE_QUERIES_SQL, (path,)):
+        model_name = str(row["qualified_name"])
+        query_name = str(row["name"])
+        display_name = model_name if query_name == FINAL_QUERY else query_name.removeprefix("$")
+        spans.append(
+            {
+                "kind": "query",
+                "model_name": model_name,
+                "query_name": query_name,
+                "display_name": display_name,
+                "start": int(row["line_start"]),
+                "end": int(row["line_end"]),
+            }
+        )
     return spans
 
 
@@ -664,7 +580,7 @@ def get_span_at_lines(
             models = list(db.connection.execute(_FILE_MODELS_SQL, (path,)))
             if models:
                 text = (db.root / path).read_text(encoding="utf-8")
-                spans = _file_spans(text, models)
+                spans = _file_spans(db, path, models)
         else:
             spans = _stored_spans(db, path, kind)
             if spans:

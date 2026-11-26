@@ -112,8 +112,8 @@ CREATE TABLE IF NOT EXISTS queries (
     model_id            INTEGER NOT NULL REFERENCES models(id),
     qualified_name      TEXT NOT NULL,
     name                TEXT NOT NULL,
-    line_start          INTEGER NOT NULL,
-    line_end            INTEGER NOT NULL,
+    line_start          INTEGER,
+    line_end            INTEGER,
     depth               INTEGER NOT NULL,
     file_id             INTEGER NOT NULL REFERENCES files(id),
     snapshot_hash       TEXT NOT NULL,
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS queries (
     order_by_col_count INTEGER NULL,
     rendered_sql        TEXT NULL,
     models_read_count   INTEGER NOT NULL,
-    line_count          INTEGER NOT NULL
+    line_count          INTEGER
 );
 CREATE UNIQUE INDEX IF NOT EXISTS queries_model_id_name_index ON queries (model_id, name);
 

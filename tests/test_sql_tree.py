@@ -24,8 +24,8 @@ def test_sql_tree_by_model_name_lists_queries_with_counts() -> None:
         "\n"
         "## SQL Tree\n"
         "\n"
-        "L1-9   $cte (1J, 4S, 2M)\n"
-        "L12-17 └── $ (1E, 3S)\n"
+        "L12-21 $cte (1J, 4S, 2M)\n"
+        "L22-26 └── $ (1E, 3S)\n"
         "\n"
         "## Macro Refs\n"
         "\n"
@@ -54,8 +54,8 @@ def test_sql_tree_by_file_path() -> None:
         "\n"
         "## SQL Tree\n"
         "\n"
-        "L1-9   $cte (1J, 4S, 2M)\n"
-        "L12-17 └── $ (1E, 3S)\n"
+        "L12-21 $cte (1J, 4S, 2M)\n"
+        "L22-26 └── $ (1E, 3S)\n"
         "\n"
         "## Macro Refs\n"
         "\n"
@@ -84,9 +84,9 @@ def test_sql_tree_lists_ctes_above_the_final_query() -> None:
         "\n"
         "## SQL Tree\n"
         "\n"
-        "L1-11  $base (1A, 2S, 1M)\n"
-        "L15-18 ├── $filtered (1W, 1A, 2S)\n"
-        "L21-23 └── $ (2S)\n"
+        "L7-12  $base (1A, 2S, 1M)\n"
+        "L13-19 ├── $filtered (1W, 1A, 2S)\n"
+        "L20-23 └── $ (2S)\n"
     )
 
 
@@ -105,7 +105,7 @@ def test_sql_tree_counts_where_ands_and_one_group_by() -> None:
         "\n"
         "## SQL Tree\n"
         "\n"
-        "L1-17 $ (1J, 1W, 3G, 3S, 2M)\n"
+        "L6-17 $ (1J, 1W, 3G, 3S, 2M)\n"
     )
 
 

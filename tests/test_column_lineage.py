@@ -36,8 +36,8 @@ def test_extract_model_queries_marks_models_read_count() -> None:
     assert by_name["$cte"] == 2
     assert by_name["$"] == 0
     line_counts = {query["name"]: query["line_count"] for query in extract_model_queries(customers)}
-    assert line_counts["$"] == 6
-    assert line_counts["$cte"] == 9
+    assert line_counts["$"] == 5
+    assert line_counts["$cte"] == 10
     status_by_name = {
         query["name"]: query["models_read_count"] for query in extract_model_queries(status)
     }
@@ -197,7 +197,7 @@ def test_union_cte_query_stats_use_output_width_and_arm_rollups(tmp_path: Path) 
     assert rows["$cte"]["models_read_count"] == 2
     assert rows["$cte"]["where_condition_count"] == 0
     assert rows["$cte"]["join_statement_count"] == 0
-    assert "L1-9   $cte (1S, 2M)" in tree
+    assert "L6-10  $cte (1S, 2M)" in tree
     assert "└── $" in tree
 
 

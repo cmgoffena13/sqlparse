@@ -224,7 +224,11 @@ def get_model(db: ProjectDB, target: str) -> str:
                 model_id = int(model["id"])
                 fetched = list(db.connection.execute(_QUERIES_SQL, (model_id,)))
                 fetched.sort(
-                    key=lambda row: (int(row["depth"]), int(row["line_start"]), str(row["name"]))
+                    key=lambda row: (
+                        int(row["depth"]),
+                        0 if row["line_start"] is None else int(row["line_start"]),
+                        str(row["name"]),
+                    )
                 )
                 labels: list[str] = []
                 span_labels: list[str] = []
@@ -248,8 +252,10 @@ def get_model(db: ProjectDB, target: str) -> str:
                         int(row["models_read_count"]),
                     )
                     labels.append(f"{relative} ({label})")
-                    line_start = int(row["line_start"])
-                    line_end = int(row["line_end"])
+                    stored_start = row["line_start"]
+                    stored_end = row["line_end"]
+                    line_start = 0 if stored_start is None else int(stored_start)
+                    line_end = 0 if stored_end is None else int(stored_end)
                     span = line_span(line_start, line_end) if line_end else ""
                     span_labels.append(span)
                     nodes.append((int(row["depth"]), line_start))

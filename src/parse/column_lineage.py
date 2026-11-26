@@ -10,6 +10,7 @@ from sqlglot.optimizer.scope import Scope, traverse_scope
 from sqlmesh.core.model import Model
 
 from src.parse.model_utils import model_qualified_name
+from src.parse.query_spans import model_query_line_spans
 from src.parse.sqlmesh_utils import column_label, normalized_model_name
 
 FINAL_QUERY = "$"
@@ -122,9 +123,9 @@ class ExtractedColumnReference(TypedDict):
 class ExtractedQuery(TypedDict):
     name: str
     query_name: str
-    line_start: int
-    line_end: int
-    line_count: int
+    line_start: int | None
+    line_end: int | None
+    line_count: int | None
     depth: int
     select_col_count: int
     select_expr_count: int
@@ -413,30 +414,10 @@ def extract_model_queries(
 ) -> list[ExtractedQuery]:
     prepared_query = prepared if prepared is not None else prepare_model_query(model)
     queries: list[ExtractedQuery] = []
-    if prepared_query.qualified is None:
-        queries.append(
-            {
-                "name": FINAL_QUERY,
-                "query_name": final_query_name(prepared_query.model_name),
-                "line_start": 0,
-                "line_end": 0,
-                "line_count": 0,
-                "depth": 0,
-                "select_col_count": len(prepared_query.model.columns_to_types or {}),
-                "select_expr_count": 0,
-                "select_alias_count": 0,
-                "where_condition_count": 0,
-                "join_statement_count": 0,
-                "group_by_col_count": 0,
-                "having_condition_count": 0,
-                "order_by_col_count": 0,
-                "rendered_sql": None if prepared_query.kind == "EXTERNAL" else "",
-                "models_read_count": 0,
-            }
-        )
-    else:
+    if prepared_query.qualified is not None:
         external = prepared_query.kind == "EXTERNAL"
         seen: set[str] = set()
+        source_spans = model_query_line_spans(prepared_query.model, prepared_query.dialect)
         scopes = list(traverse_scope(prepared_query.qualified))
         scope_by_expression = {id(scope.expression): scope for scope in scopes}
         for scope in scopes:
@@ -449,7 +430,10 @@ def extract_model_queries(
             query_name = model_query_name(prepared_query.model_name, name)
             if included and query_name not in seen:
                 seen.add(query_name)
-                line_start, line_end = _query_line_span(scope.expression)
+                line_start, line_end = source_spans.get(name, (None, None))
+                if name not in source_spans:
+                    start, end = _query_line_span(scope.expression)
+                    line_start, line_end = (start, end) if start else (None, None)
                 (
                     select_col_count,
                     select_expr_count,
@@ -472,13 +456,16 @@ def extract_model_queries(
                         default_catalog=prepared_query.default_catalog,
                         dialect=prepared_query.dialect,
                     )
+                line_count = (
+                    None if line_start is None or line_end is None else line_end - line_start + 1
+                )
                 queries.append(
                     {
                         "name": name,
                         "query_name": query_name,
                         "line_start": line_start,
                         "line_end": line_end,
-                        "line_count": 0 if not line_end else line_end - line_start + 1,
+                        "line_count": line_count,
                         "depth": _query_depth(scope),
                         "select_col_count": select_col_count,
                         "select_expr_count": select_expr_count,
