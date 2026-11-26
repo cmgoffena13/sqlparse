@@ -159,6 +159,15 @@ def test_model_lists_kind_and_time_column_when_present() -> None:
         "\n"
         "## SQL Tree\n"
     )
+    assert (
+        "## Test Refs\n"
+        "\n"
+        "tests/test_orders.yaml\n"
+        "  • test_orders_exist\n"
+        "  • test_orders_csv\n"
+        "  • test_orders_query\n"
+    ) in orders
+    assert "## Test Refs" not in customers
     assert "Time Column:" not in customers
     assert "Direct Model Dependents: 2\nDirect Model Dependencies: 2\n" in customers
 

@@ -160,6 +160,17 @@ WHERE model_audits.model_id = ?
 ORDER BY files.path, model_audits.audit_name
 """
 
+_TESTS_SQL = """
+SELECT
+    tests.name AS test_name,
+    files.path AS file_path
+FROM tests
+INNER JOIN files
+    ON files.id = tests.file_id
+WHERE tests.model_id = ?
+ORDER BY files.path, tests.line_start, tests.name
+"""
+
 
 def _model_facts(
     kind: str,
@@ -281,8 +292,13 @@ def get_model(db: ProjectDB, target: str) -> str:
                     (str(row["file_path"]), str(row["audit_name"]))
                     for row in db.connection.execute(_AUDITS_SQL, (model_id,))
                 ]
+                tests = [
+                    (str(row["file_path"]), str(row["test_name"]))
+                    for row in db.connection.execute(_TESTS_SQL, (model_id,))
+                ]
                 sections.append(_named_section("Macro Refs", macros))
                 sections.append(_named_section("Audit Refs", audits))
+                sections.append(_named_section("Test Refs", tests))
                 lines: list[str] = []
                 for section in sections:
                     if section and lines:

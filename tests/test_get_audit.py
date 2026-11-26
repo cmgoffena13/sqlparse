@@ -11,6 +11,16 @@ _AUDIT = (
     "L5 | SELECT *\n"
     "L6 | FROM @this_model\n"
     "L7 | WHERE customer_id IS NULL\n"
+)
+
+_AUDIT_WITH_SITES = (
+    "L1 | AUDIT (\n"
+    "L2 |   name not_null_customer_id\n"
+    "L3 | );\n"
+    "L4 | \n"
+    "L5 | SELECT *\n"
+    "L6 | FROM @this_model\n"
+    "L7 | WHERE customer_id IS NULL\n"
     "\n"
     "## Models\n"
     "\n"
@@ -23,8 +33,15 @@ def test_get_audit_returns_the_named_audit_with_line_numbers() -> None:
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
         out = get_audit(db, "audits/not_null_customer_id.sql", "not_null_customer_id")
+        with_sites = get_audit(
+            db,
+            "audits/not_null_customer_id.sql",
+            "not_null_customer_id",
+            include_call_sites=True,
+        )
         missing = get_audit(db, "audits/not_null_customer_id.sql", "missing")
     finally:
         db.close()
     assert out == _AUDIT
+    assert with_sites == _AUDIT_WITH_SITES
     assert missing == "No audit found."

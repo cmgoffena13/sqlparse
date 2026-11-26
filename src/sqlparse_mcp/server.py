@@ -159,7 +159,7 @@ def get_directory_tree(ctx: Context, directory_path: str | None = None) -> str:
 @mcp.tool()
 def get_model(ctx: Context, target: str) -> str:
     """
-    Return a model's SQL tree, macro refs, and audit refs.
+    Return a model's SQL tree, macro refs, audit refs, and test refs.
 
     Target can be a model name or model file path.
     Ex. ``catalog.schema.customer_orders`` or `models/customer_orders.sql`
@@ -233,19 +233,27 @@ def get_test(ctx: Context, file_path: str, test_name: str) -> str:
 
 
 @mcp.tool()
-def get_macro(ctx: Context, file_path: str, macro_name: str) -> str:
+def get_macro(
+    ctx: Context, file_path: str, macro_name: str, include_call_sites: bool = False
+) -> str:
     """
     Return a macro's definition and the models that use it.
     """
-    return _processor(ctx).run_query(lambda db: run_get_macro(db, file_path, macro_name))
+    return _processor(ctx).run_query(
+        lambda db: run_get_macro(db, file_path, macro_name, include_call_sites)
+    )
 
 
 @mcp.tool()
-def get_audit(ctx: Context, file_path: str, audit_name: str) -> str:
+def get_audit(
+    ctx: Context, file_path: str, audit_name: str, include_call_sites: bool = False
+) -> str:
     """
     Return an audit's definition and the models that use it.
     """
-    return _processor(ctx).run_query(lambda db: run_get_audit(db, file_path, audit_name))
+    return _processor(ctx).run_query(
+        lambda db: run_get_audit(db, file_path, audit_name, include_call_sites)
+    )
 
 
 @mcp.tool()

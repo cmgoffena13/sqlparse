@@ -130,7 +130,11 @@ async def _print_tools() -> None:
             _body(
                 await client.call_tool(
                     "get_macro",
-                    {"file_path": "macros/cents_to_dollars.sql", "macro_name": "cents_to_dollars"},
+                    {
+                        "file_path": "macros/cents_to_dollars.sql",
+                        "macro_name": "cents_to_dollars",
+                        "include_call_sites": True,
+                    },
                 )
             ),
         )
@@ -142,6 +146,7 @@ async def _print_tools() -> None:
                     {
                         "file_path": "audits/not_null_customer_id.sql",
                         "audit_name": "not_null_customer_id",
+                        "include_call_sites": True,
                     },
                 )
             ),

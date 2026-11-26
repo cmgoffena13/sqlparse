@@ -22,7 +22,9 @@ ORDER BY models.qualified_name
 """
 
 
-def get_macro(db: ProjectDB, file_path: str, macro_name: str) -> str:
+def get_macro(
+    db: ProjectDB, file_path: str, macro_name: str, include_call_sites: bool = False
+) -> str:
     path_key = file_path.strip()
     name = macro_name.strip()
     result = "No file path given; pass a macro file path."
@@ -41,14 +43,16 @@ def get_macro(db: ProjectDB, file_path: str, macro_name: str) -> str:
                 f"L{lineno:<{gutter}} | {line}"
                 for lineno, line in enumerate(text.splitlines()[start - 1 : end], start)
             ]
-            catalog = default_catalog(db)
-            models = [
-                omit_default_catalog(str(row["qualified_name"]), catalog)
-                for row in rows
-                if row["qualified_name"] is not None
-            ]
             header = [f"Type: {rows[0]['kind']}", ""]
-            footer = ["", "## Models", "", *[bullet(model) for model in models]]
-            lines = [*header, *body, *footer] if models else [*header, *body]
+            lines = [*header, *body]
+            if include_call_sites:
+                catalog = default_catalog(db)
+                models = [
+                    omit_default_catalog(str(row["qualified_name"]), catalog)
+                    for row in rows
+                    if row["qualified_name"] is not None
+                ]
+                if models:
+                    lines.extend(["", "## Models", "", *[bullet(model) for model in models]])
             result = "\n".join(lines) + "\n"
     return result

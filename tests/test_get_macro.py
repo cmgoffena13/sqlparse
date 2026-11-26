@@ -9,6 +9,14 @@ _MACRO = (
     "L1 | {% macro cents_to_dollars(column) %}\n"
     "L2 |   {{ column }} / 100\n"
     "L3 | {% endmacro %}\n"
+)
+
+_MACRO_WITH_SITES = (
+    "Type: jinja\n"
+    "\n"
+    "L1 | {% macro cents_to_dollars(column) %}\n"
+    "L2 |   {{ column }} / 100\n"
+    "L3 | {% endmacro %}\n"
     "\n"
     "## Models\n"
     "\n"
@@ -25,10 +33,14 @@ def test_get_macro_returns_the_named_macro_with_line_numbers() -> None:
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
         used = get_macro(db, "macros/cents_to_dollars.sql", "cents_to_dollars")
+        with_sites = get_macro(
+            db, "macros/cents_to_dollars.sql", "cents_to_dollars", include_call_sites=True
+        )
         unused = get_macro(db, "macros/identity.py", "identity")
         missing = get_macro(db, "macros/cents_to_dollars.sql", "missing")
     finally:
         db.close()
     assert used == _MACRO
+    assert with_sites == _MACRO_WITH_SITES
     assert unused == _UNUSED_MACRO
     assert missing == "No macro found."
