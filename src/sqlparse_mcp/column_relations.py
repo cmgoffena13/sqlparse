@@ -7,6 +7,7 @@ from src.sqlparse_mcp.format_utils import (
     from_table_reads_models,
     kind_label,
     model_display_label,
+    omit_default_catalog,
     page_window,
     path_label,
     tree_glyphs,
@@ -15,6 +16,7 @@ from src.sqlparse_mcp.format_utils import (
 )
 from src.sqlparse_mcp.model_relations import _load_graph
 from src.sqlparse_mcp.model_utils import (
+    default_catalog,
     model_not_found_message,
     resolve_column_ids,
     resolve_model_qualified_name,
@@ -98,12 +100,19 @@ def _relative_query(model_name: str, query_name: str) -> str:
     return relative
 
 
-def _model_label(model_name: str, kind: str, is_blueprint: bool, mark_external: bool) -> str:
+def _model_label(
+    model_name: str,
+    kind: str,
+    is_blueprint: bool,
+    mark_external: bool,
+    catalog: str | None,
+) -> str:
     return model_display_label(
         model_name,
         kind=kind,
         is_blueprint=is_blueprint,
         mark_external=mark_external,
+        default_catalog=catalog,
     )
 
 
@@ -116,10 +125,11 @@ def _column_parts_from_qn(qualified_name: str) -> tuple[str | None, str]:
     return from_table, name
 
 
-def _column_label(from_table: str | None, column_name: str) -> str:
+def _column_label(from_table: str | None, column_name: str, catalog: str | None = None) -> str:
     label = column_name
     if from_table is not None:
-        label = f"{from_table}.{column_name}"
+        shown = omit_default_catalog(from_table, catalog)
+        label = f"{shown}.{column_name}"
     return label
 
 
@@ -156,9 +166,12 @@ def _model_block(
     children: dict[str, list[str]],
     tests: OrderedDict[str, OrderedDict[str, list[str]]],
     seen: set[str],
+    catalog: str | None,
 ) -> list[str]:
     seen.add(name)
-    header, hide_query, queries = grouped.get(name, (name, False, OrderedDict()))
+    header, hide_query, queries = grouped.get(
+        name, (omit_default_catalog(name, catalog), False, OrderedDict())
+    )
     entries = [
         (
             f"{path_label(header, label)}{_use_label(kinds, reads_models=reads_models)}"
@@ -186,7 +199,7 @@ def _model_block(
             )
         if index == last:
             for kid in kids:
-                nested = _model_block(kid, grouped, children, tests, seen)
+                nested = _model_block(kid, grouped, children, tests, seen, catalog)
                 branches.append((nested[0], nested[1:]))
         for branch_index, (head, rest) in enumerate(branches):
             connector, continuation = tree_glyphs(branch_index == len(branches) - 1, wide=True)
@@ -210,6 +223,7 @@ def _dependency_tree(
     children: dict[str, list[str]],
     tests: OrderedDict[str, OrderedDict[str, list[str]]],
     roots: list[str],
+    catalog: str | None,
 ) -> list[str]:
     lines: list[str] = []
     seen: set[str] = set()
@@ -217,7 +231,7 @@ def _dependency_tree(
         if name not in seen:
             if lines:
                 lines.append("")
-            lines.extend(_model_block(name, grouped, children, tests, seen))
+            lines.extend(_model_block(name, grouped, children, tests, seen, catalog))
     return lines
 
 
@@ -228,6 +242,7 @@ def _format_groups(
     mark_external: bool,
     page: int,
 ) -> str:
+    catalog = default_catalog(db)
     grouped: OrderedDict[
         str, tuple[str, bool, OrderedDict[str, OrderedDict[str, tuple[list[str], bool]]]]
     ] = OrderedDict()
@@ -235,13 +250,13 @@ def _format_groups(
         _header, _hide_query, queries = grouped.setdefault(
             model_name,
             (
-                _model_label(model_name, kind, is_blueprint, mark_external),
+                _model_label(model_name, kind, is_blueprint, mark_external, catalog),
                 mark_external and kind == "EXTERNAL",
                 OrderedDict(),
             ),
         )
         columns = queries.setdefault(_relative_query(model_name, query_name), OrderedDict())
-        label = _column_label(from_table, column_name)
+        label = _column_label(from_table, column_name, catalog)
         kinds, _reads = columns.setdefault(label, ([], from_table_reads_models(from_table)))
         if ref_kind not in kinds:
             kinds.append(ref_kind)
@@ -262,7 +277,7 @@ def _format_groups(
             result = window
         else:
             start, stop, page_count = window
-            lines = _dependency_tree(grouped, model_children, tests, roots[start:stop])
+            lines = _dependency_tree(grouped, model_children, tests, roots[start:stop], catalog)
             result = with_page_footer(
                 "\n".join(lines) + "\n",
                 page,
@@ -313,11 +328,13 @@ def _relation_text(
     ref_kinds: list[str],
     *,
     reads_models: bool = False,
+    catalog: str | None = None,
 ) -> str:
-    text = path_label(model_name, "$EXTERNAL", column)
+    shown = omit_default_catalog(model_name, catalog)
+    text = path_label(shown, "$EXTERNAL", column)
     if kind != "EXTERNAL":
         text = (
-            f"{path_label(model_name, _relative_query(model_name, query_name), column)}"
+            f"{path_label(shown, _relative_query(model_name, query_name), column)}"
             f"{_use_label(ref_kinds, reads_models=reads_models)}"
         )
     return text
@@ -328,6 +345,7 @@ def _dependency_nodes(
     column_ids: list[int],
     seen: set[int],
 ) -> list[tuple[str, list]]:
+    catalog = default_catalog(db)
     pending = list(column_ids)
     owned: dict[int, list[tuple[str, list]]] = {}
     result: list[tuple[str, list]] = []
@@ -353,7 +371,7 @@ def _dependency_nodes(
             column = name
             reads_models = False
             if kind != "EXTERNAL":
-                column = _column_label(from_table, name)
+                column = _column_label(from_table, name, catalog)
                 reads_models = from_table_reads_models(from_table)
             if kind == "EXTERNAL":
                 ref_kind = ""
@@ -378,7 +396,12 @@ def _dependency_nodes(
                     level_children[source_id] = [
                         (
                             _relation_text(
-                                source_model_name, source_model_kind, "", source_name, []
+                                source_model_name,
+                                source_model_kind,
+                                "",
+                                source_name,
+                                [],
+                                catalog=catalog,
                             ),
                             [],
                         )
@@ -395,6 +418,7 @@ def _dependency_nodes(
                     column,
                     ref_kinds,
                     reads_models=reads_models,
+                    catalog=catalog,
                 ),
                 level_children.get(source_id, []),
             )

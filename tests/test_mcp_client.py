@@ -63,23 +63,23 @@ def test_client_lists_tools_and_reads_the_project(
                 await mcp_client.call_tool("search", {"query": "customers", "limit": 30})
             )
             assert "## Models" in search_out
-            assert "memory.sushi.customers" in search_out
+            assert "sushi.customers" in search_out
             assert "## Columns" in search_out
             tree_out = _text(
                 await mcp_client.call_tool("get_directory_tree", {"directory_path": "models"})
             )
             assert tree_out.startswith("models/")
             assert "customers.sql" in tree_out
-            assert "memory.sushi.customers" not in tree_out
+            assert "sushi.customers" not in tree_out
             relations_out = _text(
                 await mcp_client.call_tool(
                     "get_model_relations",
                     {"model_name": "sushi.customers", "relation": "dependents"},
                 )
             )
-            assert relations_out.startswith("memory.sushi.customer_orders\n")
-            assert "memory.sushi.customers\n" not in relations_out
-            assert "memory.sushi.customer_orders" in relations_out
+            assert relations_out.startswith("sushi.customer_orders\n")
+            assert "sushi.customers\n" not in relations_out
+            assert "sushi.customer_orders" in relations_out
             column_out = _text(
                 await mcp_client.call_tool(
                     "get_column_relations",
@@ -90,7 +90,7 @@ def test_client_lists_tools_and_reads_the_project(
                     },
                 )
             )
-            assert "memory.sushi.customers" in column_out
+            assert "sushi.customers" in column_out
             assert "cte" in column_out
 
     asyncio.run(run())

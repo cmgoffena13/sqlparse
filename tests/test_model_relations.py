@@ -7,16 +7,16 @@ import src.sqlparse_mcp.model_relations as model_relations_mod
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.model_relations import get_model_relations
-from tests.conftest import FIXTURE_PROJECT, memory_fqn
+from tests.conftest import FIXTURE_PROJECT
 
 BLUEPRINT_MODEL = Path(__file__).resolve().parent / "fixtures" / "blueprint_items.sql"
 BLUEPRINT_CONSUMER = Path(__file__).resolve().parent / "fixtures" / "blueprint_consumer.sql"
 
-CUSTOMERS = memory_fqn("sushi.customers")
-CUSTOMER_ORDERS = memory_fqn("sushi.customer_orders")
-ORDERS = memory_fqn("sushi.orders")
-RAW_CUSTOMERS = memory_fqn("raw.customers")
-RAW_ORDERS = memory_fqn("raw.orders")
+CUSTOMERS = "sushi.customers"
+CUSTOMER_ORDERS = "sushi.customer_orders"
+ORDERS = "sushi.orders"
+RAW_CUSTOMERS = "raw.customers"
+RAW_ORDERS = "raw.orders"
 
 
 def test_model_relations_dependencies_tree() -> None:
@@ -50,7 +50,7 @@ def test_model_relations_marks_blueprints(tmp_path: Path) -> None:
         out = get_model_relations(db, "sushi.bp_consumer", "dependencies")
     finally:
         db.close()
-    assert out == f"{memory_fqn('bp1.bp_items')} (BLUEPRINT)\n"
+    assert out == "bp1.bp_items (BLUEPRINT)\n"
 
 
 def test_model_relations_dependents_tree() -> None:

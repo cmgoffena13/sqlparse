@@ -6,6 +6,12 @@ from src.parse.sqlmesh_utils import normalized_column_name, normalized_model_nam
 
 _MODEL_BY_QN_SQL = "SELECT qualified_name FROM models WHERE qualified_name = ?"
 
+_DEFAULT_CATALOG_SQL = """
+SELECT project_gateways.catalog_name
+FROM project_gateways
+WHERE project_gateways.is_default
+"""
+
 _GATEWAYS_SQL = """
 SELECT DISTINCT
     project_gateways.catalog_name,
@@ -39,6 +45,11 @@ _NOT_FOUND = (
 
 def model_not_found_message() -> str:
     return _NOT_FOUND
+
+
+def default_catalog(db: ProjectDB) -> str | None:
+    row = db.connection.execute(_DEFAULT_CATALOG_SQL).fetchone()
+    return None if row is None else str(row["catalog_name"])
 
 
 def resolve_model_qualified_name_on(connection: sqlite3.Connection, name: str) -> str | None:

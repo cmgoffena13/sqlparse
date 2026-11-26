@@ -39,7 +39,7 @@ def test_quoted_external_lineage_and_short_name_lookup() -> None:
         assert "Kind: EXTERNAL" in get_model(db, "beehiiv.publications")
         assert "external_models.yaml" in get_model(db, "beehiiv.publications")
         dependents = get_model_relations(db, "beehiiv.publications", "dependents")
-        assert DEMO_X in dependents
+        assert "demo.x" in dependents
         assert get_model(db, "missing.table") == model_not_found_message()
     finally:
         db.close()

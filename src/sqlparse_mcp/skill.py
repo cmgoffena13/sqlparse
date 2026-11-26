@@ -25,6 +25,7 @@ _SKILL_BODY = """\
 # Catalog Input
  - Omitting the catalog name from tool calls, data model names, or column names
    implies the project's default catalog.
+ - The default catalog name is omitted from data model names and column names.
 
 # INSTRUCTIONS
 

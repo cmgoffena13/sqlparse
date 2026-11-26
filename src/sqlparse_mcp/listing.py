@@ -1,11 +1,6 @@
 from src.db import ProjectDB
 from src.sqlparse_mcp.format_utils import bullet, model_display_label
-
-_DEFAULT_CATALOG_SQL = """
-SELECT project_gateways.catalog_name
-FROM project_gateways
-WHERE project_gateways.is_default
-"""
+from src.sqlparse_mcp.model_utils import default_catalog
 
 _CATALOGS_SQL = """
 SELECT
@@ -59,12 +54,7 @@ def _bullets(names: list[str], singular: str, empty: str) -> str:
 
 def _resolved_catalog(db: ProjectDB, catalog: str | None) -> str | None:
     key = None if catalog is None else catalog.strip()
-    resolved = key if key else None
-    if not key:
-        rows = list(db.connection.execute(_DEFAULT_CATALOG_SQL))
-        if rows:
-            resolved = str(rows[0]["catalog_name"])
-    return resolved
+    return key if key else default_catalog(db)
 
 
 def list_catalogs(db: ProjectDB) -> str:
@@ -107,10 +97,12 @@ def list_models(db: ProjectDB, schema: str, catalog: str | None = None) -> str:
         result = "No catalogs found."
         if resolved is not None:
             rows = list(db.connection.execute(_MODELS_SQL, (resolved, key)))
+            catalog = default_catalog(db)
             names = [
                 model_display_label(
                     str(row["qualified_name"]),
                     is_blueprint=bool(row["is_blueprint"]),
+                    default_catalog=catalog,
                 )
                 for row in rows
             ]

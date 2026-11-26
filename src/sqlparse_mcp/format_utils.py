@@ -78,18 +78,28 @@ def bullet(text: str, lead: str = "") -> str:
     return f"  {lead}• {text}"
 
 
+def omit_default_catalog(name: str, default_catalog: str | None) -> str:
+    label = name
+    if default_catalog:
+        prefix = f"{default_catalog}."
+        if name.startswith(prefix):
+            label = name[len(prefix) :]
+    return label
+
+
 def model_display_label(
     name: str,
     *,
     kind: str | None = None,
     is_blueprint: bool = False,
     mark_external: bool = False,
+    default_catalog: str | None = None,
 ) -> str:
-    label = name
+    label = omit_default_catalog(name, default_catalog)
     if mark_external and kind == "EXTERNAL":
-        label = f"{name} (EXTERNAL)"
+        label = f"{label} (EXTERNAL)"
     elif is_blueprint:
-        label = f"{name} (BLUEPRINT)"
+        label = f"{label} (BLUEPRINT)"
     return label
 
 

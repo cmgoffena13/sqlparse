@@ -7,7 +7,11 @@ from src.sqlparse_mcp.format_utils import (
     tree_glyphs,
     with_page_footer,
 )
-from src.sqlparse_mcp.model_utils import model_not_found_message, resolve_model_qualified_name
+from src.sqlparse_mcp.model_utils import (
+    default_catalog,
+    model_not_found_message,
+    resolve_model_qualified_name,
+)
 
 _PAGE_SIZE = 100
 
@@ -71,13 +75,19 @@ def _model_meta(db: ProjectDB) -> dict[str, tuple[str, bool]]:
     }
 
 
-def _labeled_model(name: str, meta: dict[str, tuple[str, bool]], mark_external: bool) -> str:
+def _labeled_model(
+    name: str,
+    meta: dict[str, tuple[str, bool]],
+    mark_external: bool,
+    catalog: str | None,
+) -> str:
     kind, is_blueprint = meta.get(name, ("", False))
     return model_display_label(
         name,
         kind=kind,
         is_blueprint=is_blueprint,
         mark_external=mark_external,
+        default_catalog=catalog,
     )
 
 
@@ -91,6 +101,7 @@ def _relation_lines(
     mark_external: bool,
     nested: bool,
     tests: dict[str, dict[str, list[str]]],
+    catalog: str | None,
 ) -> list[str]:
     lines: list[str] = []
     files = list(tests.get(parent, {}).items()) if nested else []
@@ -104,7 +115,7 @@ def _relation_lines(
         index += 1
     for child in siblings:
         seen.add(child)
-        label = _labeled_model(child, meta, mark_external)
+        label = _labeled_model(child, meta, mark_external, catalog)
         prefix = ""
         continuation = ""
         if nested:
@@ -122,6 +133,7 @@ def _relation_lines(
                 mark_external=mark_external,
                 nested=True,
                 tests=tests,
+                catalog=catalog,
             )
         )
         seen.remove(child)
@@ -165,6 +177,7 @@ def get_model_relations(
                     meta = _model_meta(db)
                     mark_external = relation == "dependencies"
                     tests = _model_tests(db) if include_tests and relation == "dependents" else {}
+                    catalog = default_catalog(db)
                     lines = _relation_lines(
                         children,
                         resolved,
@@ -174,6 +187,7 @@ def get_model_relations(
                         mark_external=mark_external,
                         nested=False,
                         tests=tests,
+                        catalog=catalog,
                     )
                     result = with_page_footer(
                         "\n".join(lines) + "\n",

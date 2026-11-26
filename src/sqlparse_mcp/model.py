@@ -5,10 +5,15 @@ from src.sqlparse_mcp.format_utils import (
     bullet,
     kind_counts_label,
     line_span,
+    omit_default_catalog,
     tree_glyphs,
     with_reads_models_count,
 )
-from src.sqlparse_mcp.model_utils import model_not_found_message, resolve_model_qualified_name
+from src.sqlparse_mcp.model_utils import (
+    default_catalog,
+    model_not_found_message,
+    resolve_model_qualified_name,
+)
 
 _MODELS_BY_NAME_SQL = """
 SELECT
@@ -242,11 +247,8 @@ def get_model(db: ProjectDB, target: str) -> str:
                 children: dict[int | None, list[int]] = {}
                 for index, parent in enumerate(_parent_indexes(nodes)):
                     children.setdefault(parent, []).append(index)
-                header = (
-                    f"Model: {model['qualified_name']}"
-                    if from_file
-                    else f"File: {model['file_path']}"
-                )
+                shown = omit_default_catalog(str(model["qualified_name"]), default_catalog(db))
+                header = f"Model: {shown}" if from_file else f"File: {model['file_path']}"
                 time_column = model["time_column"]
                 grain = model["grain"]
                 facts = _model_facts(

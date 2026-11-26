@@ -2,7 +2,8 @@ import sqlite3
 from collections import OrderedDict
 
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import bullet, gutter_width, path_label
+from src.sqlparse_mcp.format_utils import bullet, gutter_width, omit_default_catalog, path_label
+from src.sqlparse_mcp.model_utils import default_catalog
 
 _SEARCH_SQL = """
 SELECT
@@ -55,13 +56,14 @@ def search(
         fts_query = build_fts_query(stripped)
         try:
             rows = db.connection.execute(_SEARCH_SQL, (fts_query, limit)).fetchall()
+            catalog = default_catalog(db)
             hits: OrderedDict[str, str] = OrderedDict()
             for row in rows:
-                model_name = str(row["model_name"])
+                model_name = omit_default_catalog(str(row["model_name"]), catalog)
                 query_name = str(row["query_name"])
                 if str(row["model_kind"]) == "EXTERNAL":
                     query_name = "$EXTERNAL"
-                column_name = str(row["column_name"])
+                column_name = omit_default_catalog(str(row["column_name"]), catalog)
                 candidates = (
                     ("models", search_models, path_label(model_name)),
                     ("queries", search_queries, path_label(model_name, query_name)),

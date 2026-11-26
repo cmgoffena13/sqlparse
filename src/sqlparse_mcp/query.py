@@ -11,9 +11,13 @@ from sqlmesh.core.dialect import parse as parse_sql
 from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, _query_line_span, stored_query_name
 from src.sqlparse_mcp.column_relations import _resolve_query_name
-from src.sqlparse_mcp.format_utils import bullet
+from src.sqlparse_mcp.format_utils import bullet, omit_default_catalog
 from src.sqlparse_mcp.model import _normalize_file_path
-from src.sqlparse_mcp.model_utils import model_not_found_message, resolve_model_qualified_name
+from src.sqlparse_mcp.model_utils import (
+    default_catalog,
+    model_not_found_message,
+    resolve_model_qualified_name,
+)
 
 _CONFIG_QUERY = "$CONFIG"
 _EXTERNAL_QUERY = "$EXTERNAL"
@@ -348,7 +352,8 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
             model_row = rows[0]
             model_name = str(model_row["qualified_name"])
             path = str(model_row["file_path"])
-            header = f"Model: {model_name}" if from_file else f"File: {path}"
+            shown = omit_default_catalog(model_name, default_catalog(db))
+            header = f"Model: {shown}" if from_file else f"File: {path}"
             asked = "" if query_name is None else query_name.strip()
             result = _EXTERNAL_QUERY
             if asked == _CONFIG_QUERY and str(model_row["kind"]) == "EXTERNAL":
@@ -421,9 +426,10 @@ def get_query_schema(db: ProjectDB, target: str, query_name: str | None) -> str:
                     else:
                         columns = _select_columns(db, model_name, relative)
                 if result != "No query found.":
-                    qualifier = model_name
+                    catalog = default_catalog(db)
+                    qualifier = omit_default_catalog(model_name, catalog)
                     if relative != FINAL_QUERY:
-                        qualifier = stored_query_name(relative)
+                        qualifier = omit_default_catalog(stored_query_name(relative), catalog)
                     result = _format_output_schema(qualifier, columns)
     return result
 
@@ -540,12 +546,11 @@ def _stored_spans(db: ProjectDB, path: str, kind: str) -> list[_LineSpan]:
     return spans
 
 
-def _span_label(span: _LineSpan) -> str:
-    label = f"{span['model_name']}/{_CONFIG_QUERY}"
+def _span_label(span: _LineSpan, catalog: str | None = None) -> str:
+    model_shown = omit_default_catalog(span["model_name"], catalog)
+    label = f"{model_shown}/{_CONFIG_QUERY}"
     if span["kind"] == "query":
-        label = (
-            f"{span['model_name']}/{_shown_query_name(span['query_name'], span['display_name'])}"
-        )
+        label = f"{model_shown}/{_shown_query_name(span['query_name'], span['display_name'])}"
     elif span["kind"] == "audit":
         label = f"Audit: {span['model_name']}"
     elif span["kind"] == "macro":
@@ -585,12 +590,18 @@ def _matching_spans(spans: list[_LineSpan], start: int, end: int) -> list[_LineS
 
 def _referenced_models(db: ProjectDB, kind: str, name: str) -> list[str]:
     sql = _AUDIT_MODELS_SQL if kind == "audit" else _MACRO_MODELS_SQL
-    return [str(row["qualified_name"]) for row in db.connection.execute(sql, (name,))]
+    catalog = default_catalog(db)
+    return [
+        omit_default_catalog(str(row["qualified_name"]), catalog)
+        for row in db.connection.execute(sql, (name,))
+    ]
 
 
 def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
     macros: list[str] = []
-    detail = f"Model: {span['model_name']}"
+    catalog = default_catalog(db)
+    model_shown = omit_default_catalog(span["model_name"], catalog)
+    detail = f"Model: {model_shown}"
     if span["kind"] == "query":
         shown = _shown_query_name(span["query_name"], span["display_name"])
         detail = f"{detail}\nQuery: {shown}"
@@ -621,10 +632,10 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
     return text
 
 
-def _render_many(spans: list[_LineSpan]) -> str:
+def _render_many(spans: list[_LineSpan], catalog: str | None) -> str:
     lines = ["Multiple spans found:"]
     for span in spans:
-        lines.append(bullet(f"{_span_label(span)} L{span['start']}-L{span['end']}"))
+        lines.append(bullet(f"{_span_label(span, catalog)} L{span['start']}-L{span['end']}"))
     return "\n".join(lines) + "\n"
 
 
@@ -665,5 +676,5 @@ def get_span_at_lines(
             elif len(chosen) == 1:
                 result = _render_span(db, text.splitlines(), chosen[0])
             elif chosen:
-                result = _render_many(chosen)
+                result = _render_many(chosen, default_catalog(db))
     return result

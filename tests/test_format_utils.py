@@ -6,6 +6,8 @@ from src.sqlparse_mcp.format_utils import (
     kind_counts_label,
     kind_label,
     line_span,
+    model_display_label,
+    omit_default_catalog,
     path_label,
     tree_glyphs,
     with_reads_models_count,
@@ -24,6 +26,22 @@ def test_bullet_with_rank_lead() -> None:
 def test_path_label_joins_model_query_column() -> None:
     assert path_label("sushi.customers", "$cte", "raw.orders.amount_cents") == (
         "sushi.customers/$cte/raw.orders.amount_cents"
+    )
+
+
+def test_omit_default_catalog_strips_only_the_default_prefix() -> None:
+    assert omit_default_catalog("memory.sushi.customers", "memory") == "sushi.customers"
+    assert omit_default_catalog("other.sushi.customers", "memory") == "other.sushi.customers"
+    assert omit_default_catalog("$cte.customer_id", "memory") == "$cte.customer_id"
+    assert omit_default_catalog("memory.sushi.customers", None) == "memory.sushi.customers"
+    assert (
+        model_display_label(
+            "memory.raw.customers",
+            kind="EXTERNAL",
+            mark_external=True,
+            default_catalog="memory",
+        )
+        == "raw.customers (EXTERNAL)"
     )
 
 

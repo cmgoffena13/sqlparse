@@ -47,7 +47,7 @@ def test_sql_tree_by_file_path() -> None:
     finally:
         db.close()
     assert out == (
-        "Model: memory.sushi.customers\n"
+        "Model: sushi.customers\n"
         "Kind: FULL\n"
         "Direct Model Dependents: 2\n"
         "Direct Model Dependencies: 2\n"

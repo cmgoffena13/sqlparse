@@ -12,7 +12,7 @@ _MACRO = (
     "\n"
     "## Models\n"
     "\n"
-    "  • memory.sushi.customers\n"
+    "  • sushi.customers\n"
 )
 
 _UNUSED_MACRO = (

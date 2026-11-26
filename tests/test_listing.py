@@ -4,7 +4,7 @@ from pathlib import Path
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.listing import list_catalogs, list_models, list_schemas
-from tests.conftest import FIXTURE_PROJECT, memory_fqn
+from tests.conftest import FIXTURE_PROJECT
 
 BLUEPRINT_MODEL = Path(__file__).resolve().parent / "fixtures" / "blueprint_items.sql"
 
@@ -49,18 +49,14 @@ def test_list_models_scopes_to_catalog_and_schema() -> None:
     assert sushi == (
         "6 Models\n"
         "\n"
-        f"  • {memory_fqn('sushi.customer_orders')}\n"
-        f"  • {memory_fqn('sushi.customer_status')}\n"
-        f"  • {memory_fqn('sushi.customers')}\n"
-        f"  • {memory_fqn('sushi.orders')}\n"
-        f"  • {memory_fqn('sushi.raw_seed')}\n"
-        f"  • {memory_fqn('sushi.waiters')}\n"
+        "  • sushi.customer_orders\n"
+        "  • sushi.customer_status\n"
+        "  • sushi.customers\n"
+        "  • sushi.orders\n"
+        "  • sushi.raw_seed\n"
+        "  • sushi.waiters\n"
     )
-    assert raw == (
-        "2 Models\n\nEXTERNAL SCHEMA\n\n"
-        f"  • {memory_fqn('raw.customers')}\n"
-        f"  • {memory_fqn('raw.orders')}\n"
-    )
+    assert raw == ("2 Models\n\nEXTERNAL SCHEMA\n\n  • raw.customers\n  • raw.orders\n")
     assert missing == "No models found."
     assert blank == "No schema given; pass a schema name."
     assert wrong_catalog == "No models found."
@@ -76,4 +72,4 @@ def test_list_models_marks_blueprints(tmp_path: Path) -> None:
         out = list_models(db, "bp1")
     finally:
         db.close()
-    assert out == (f"1 Model\n\n  • {memory_fqn('bp1.bp_items')} (BLUEPRINT)\n")
+    assert out == "1 Model\n\n  • bp1.bp_items (BLUEPRINT)\n"

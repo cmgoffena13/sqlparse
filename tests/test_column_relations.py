@@ -13,20 +13,18 @@ from src.sqlparse_mcp.column_relations import (
 from tests.conftest import FIXTURE_PROJECT, memory_fqn
 
 CUSTOMERS_FQN = memory_fqn("sushi.customers")
-CUSTOMER_ORDERS_FQN = memory_fqn("sushi.customer_orders")
-ORDERS_FQN = memory_fqn("sushi.orders")
 RAW_CUSTOMERS_FQN = memory_fqn("raw.customers")
-CUSTOMERS = memory_fqn("sushi.customers")
-CUSTOMER_ORDERS = memory_fqn("sushi.customer_orders")
-ORDERS = memory_fqn("sushi.orders")
-RAW_CUSTOMERS = memory_fqn("raw.customers")
-RAW_ORDERS = memory_fqn("raw.orders")
-CUSTOMER_STATUS = memory_fqn("sushi.customer_status")
+CUSTOMERS = "sushi.customers"
+CUSTOMER_ORDERS = "sushi.customer_orders"
+ORDERS = "sushi.orders"
+RAW_CUSTOMERS = "raw.customers"
+RAW_ORDERS = "raw.orders"
+CUSTOMER_STATUS = "sushi.customer_status"
 
 SHOP_COLUMN_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "shop_column_project"
-EXT_ORDERS = memory_fqn("ext_shop.orders")
-ORDERS_CLEAN = memory_fqn("shop.orders_clean")
-DAILY = memory_fqn("shop.daily")
+EXT_ORDERS = "ext_shop.orders"
+ORDERS_CLEAN = "shop.orders_clean"
+DAILY = "shop.daily"
 
 
 def test_column_parts_from_qn_splits_label_tail() -> None:

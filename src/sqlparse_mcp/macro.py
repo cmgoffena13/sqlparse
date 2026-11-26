@@ -1,6 +1,7 @@
 from src.db import ProjectDB
-from src.sqlparse_mcp.format_utils import bullet
+from src.sqlparse_mcp.format_utils import bullet, omit_default_catalog
 from src.sqlparse_mcp.model import _normalize_file_path
+from src.sqlparse_mcp.model_utils import default_catalog
 
 _MACRO_SQL = """
 SELECT
@@ -40,8 +41,11 @@ def get_macro(db: ProjectDB, file_path: str, macro_name: str) -> str:
                 f"L{lineno:<{gutter}} | {line}"
                 for lineno, line in enumerate(text.splitlines()[start - 1 : end], start)
             ]
+            catalog = default_catalog(db)
             models = [
-                str(row["qualified_name"]) for row in rows if row["qualified_name"] is not None
+                omit_default_catalog(str(row["qualified_name"]), catalog)
+                for row in rows
+                if row["qualified_name"] is not None
             ]
             header = [f"Type: {rows[0]['kind']}", ""]
             footer = ["", "## Models", "", *[bullet(model) for model in models]]
