@@ -21,9 +21,33 @@ def test_bare_sqlparse_prints_help(
     assert "usage:" in out
     assert "mcp" in out
     assert "reload" in out
+    assert "profile" in out
     assert "install" in out
     assert "uninstall" in out
     assert "sync" not in out
+
+
+def test_profile_indexes_and_prints_phase_timings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    out_path = tmp_path / "sqlparse-profile.txt"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["sqlparse", "profile", "--cwd", str(FIXTURE_PROJECT), "--out", str(out_path)],
+    )
+    assert main() == 0
+    captured = capsys.readouterr()
+    assert captured.out.startswith("\n")
+    assert "Wall time:" in captured.out
+    assert "parser.sync" in captured.out
+    assert "parser._extract_models" in captured.out
+    assert "ProjectProcessor.__init__" in captured.out
+    assert "%wall" in captured.out
+    assert out_path.is_file()
+    assert "parser.sync" in out_path.read_text(encoding="utf-8")
 
 
 def test_version_flag_prints_and_exits_zero(

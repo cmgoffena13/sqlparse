@@ -74,6 +74,13 @@ def main() -> int:
         if root is None:
             return 1
         return _run_reload(root)
+    if args.command == "profile":
+        from src.cli.profile import run_profile
+
+        root = _require_indexable_root(args.cwd)
+        if root is None:
+            return 1
+        return run_profile(root, args.out)
     if args.command == "install":
         from src.cli.install_mcp import install_mcp
         from src.sqlparse_mcp.skill import sync_skill

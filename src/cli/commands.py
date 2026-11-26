@@ -78,6 +78,22 @@ def make_parser() -> argparse.ArgumentParser:
         default=Path.cwd(),
         help="SQLMesh project root to index (default: current directory)",
     )
+    profile_parser = subparsers.add_parser(
+        "profile",
+        help="Full-index with phase timings",
+    )
+    profile_parser.add_argument(
+        "--cwd",
+        type=Path,
+        default=Path.cwd(),
+        help="SQLMesh project root to index (default: current directory)",
+    )
+    profile_parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Write the text report to a file (optional)",
+    )
     return parser
 
 
