@@ -1,6 +1,6 @@
 [project]
 name = "sqlparse"
-version = "0.21.0"
+version = "0.22.0"
 description = "Index a SQLMesh project into a local sqlite database and query it over MCP."
 readme = "README.md"
 requires-python = ">=3.12"
