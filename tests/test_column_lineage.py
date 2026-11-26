@@ -34,6 +34,9 @@ def test_extract_model_queries_marks_models_read_count() -> None:
     }
     assert by_name["$cte"] == 2
     assert by_name["$"] == 0
+    line_counts = {query["name"]: query["line_count"] for query in extract_model_queries(customers)}
+    assert line_counts["$"] == 6
+    assert line_counts["$cte"] == 9
     status_by_name = {
         query["name"]: query["models_read_count"] for query in extract_model_queries(status)
     }

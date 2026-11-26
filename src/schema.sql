@@ -123,7 +123,8 @@ CREATE TABLE IF NOT EXISTS queries (
     having_condition_count INTEGER NULL,
     order_by_col_count INTEGER NULL,
     rendered_sql        TEXT NULL,
-    models_read_count   INTEGER NOT NULL
+    models_read_count   INTEGER NOT NULL,
+    line_count          INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS queries_model_id_name_index ON queries (model_id, name);
 

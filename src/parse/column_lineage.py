@@ -124,6 +124,7 @@ class ExtractedQuery(TypedDict):
     query_name: str
     line_start: int
     line_end: int
+    line_count: int
     depth: int
     select_col_count: int
     select_expr_count: int
@@ -400,6 +401,7 @@ def extract_model_queries(
                 "query_name": final_query_name(prepared_query.model_name),
                 "line_start": 0,
                 "line_end": 0,
+                "line_count": 0,
                 "depth": 0,
                 "select_col_count": len(prepared_query.model.columns_to_types or {}),
                 "select_expr_count": 0,
@@ -443,6 +445,7 @@ def extract_model_queries(
                         "query_name": query_name,
                         "line_start": line_start,
                         "line_end": line_end,
+                        "line_count": 0 if not line_end else line_end - line_start + 1,
                         "depth": _query_depth(scope),
                         "select_col_count": select_col_count,
                         "select_expr_count": select_expr_count,

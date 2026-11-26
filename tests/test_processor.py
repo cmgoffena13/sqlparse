@@ -307,7 +307,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash, "
                 "select_col_count, select_expr_count, select_alias_count, where_condition_count, "
                 "join_statement_count, group_by_col_count, having_condition_count, "
-                "order_by_col_count FROM queries"
+                "order_by_col_count, line_count FROM queries"
             )
         }
         first_macros = {
@@ -400,7 +400,7 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash, "
                 "select_col_count, select_expr_count, select_alias_count, where_condition_count, "
                 "join_statement_count, group_by_col_count, having_condition_count, "
-                "order_by_col_count FROM queries"
+                "order_by_col_count, line_count FROM queries"
             )
         }
         second_macros = {
@@ -649,6 +649,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert customers_root["depth"] == 0
     assert customers_root["line_start"] == 12
     assert customers_root["line_end"] == 17
+    assert customers_root["line_count"] == 6
     assert customers_root["file_id"] == customer["id"]
     assert customers_root["model_id"] == customers_id
     assert customers_root["snapshot_hash"]
@@ -663,6 +664,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert customers_cte["depth"] == 1
     assert customers_cte["line_start"] == 1
     assert customers_cte["line_end"] == 9
+    assert customers_cte["line_count"] == 9
     assert customers_cte["select_col_count"] == 4
     assert customers_cte["select_expr_count"] == 0
     assert customers_cte["select_alias_count"] == 0

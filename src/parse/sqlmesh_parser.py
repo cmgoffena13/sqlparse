@@ -535,6 +535,7 @@ class SQLMeshParser:
             name = query["name"]
             line_start = query["line_start"]
             line_end = query["line_end"]
+            line_count = query["line_count"]
             depth = query["depth"]
             select_col_count = query["select_col_count"]
             select_expr_count = query["select_expr_count"]
@@ -553,6 +554,7 @@ class SQLMeshParser:
                     name,
                     line_start,
                     line_end,
+                    line_count,
                     depth,
                     select_col_count,
                     select_expr_count,
@@ -573,6 +575,7 @@ class SQLMeshParser:
                 "name": name,
                 "line_start": line_start,
                 "line_end": line_end,
+                "line_count": line_count,
                 "depth": depth,
                 "file_id": file_id,
                 "select_col_count": select_col_count,
