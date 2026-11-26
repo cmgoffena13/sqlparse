@@ -67,8 +67,8 @@ CREATE TABLE IF NOT EXISTS models (
     snapshot_hash       TEXT NOT NULL,
     data_hash           TEXT NOT NULL,
     metadata_hash       TEXT NOT NULL,
-    direct_dependencies_count INTEGER NOT NULL,
-    direct_dependents_count INTEGER NOT NULL
+    direct_dependencies_count INTEGER NOT NULL DEFAULT 0,
+    direct_dependents_count INTEGER NOT NULL DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS models_qualified_name_index ON models (qualified_name);
 
@@ -110,6 +110,7 @@ CREATE INDEX IF NOT EXISTS model_audits_model_id_index ON model_audits (model_id
 CREATE TABLE IF NOT EXISTS queries (
     id                  INTEGER NOT NULL PRIMARY KEY,
     model_id            INTEGER NOT NULL REFERENCES models(id),
+    qualified_name      TEXT NOT NULL,
     name                TEXT NOT NULL,
     line_start          INTEGER NOT NULL,
     line_end            INTEGER NOT NULL,

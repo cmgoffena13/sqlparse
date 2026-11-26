@@ -115,7 +115,7 @@ class SQLMeshParser:
         queries_snapshot = self.db.get_queries_snapshot()
         extract_models: list[Model] = []
         for prior_query in queries_snapshot.values():
-            self._query_ids[prior_query["query_name"]] = prior_query["id"]
+            self._query_ids[prior_query["qualified_name"]] = prior_query["id"]
         for model in self.context.models.values():
             need_extract = self._sync_model(model, files_snapshot, models_snapshot)
             self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
@@ -545,6 +545,7 @@ class SQLMeshParser:
         file_id = self._file_id(Path(str(model._path)), files_snapshot)
         for query in queries:
             name = query["name"]
+            qualified_name = query["query_name"]
             line_start = query["line_start"]
             line_end = query["line_end"]
             line_count = query["line_count"]
@@ -563,6 +564,7 @@ class SQLMeshParser:
                 [
                     model_id,
                     file_id,
+                    qualified_name,
                     name,
                     line_start,
                     line_end,
@@ -584,6 +586,7 @@ class SQLMeshParser:
             prior = queries_snapshot.get(key)
             row: dict[str, object] = {
                 "model_id": model_id,
+                "qualified_name": qualified_name,
                 "name": name,
                 "line_start": line_start,
                 "line_end": line_end,
@@ -614,11 +617,11 @@ class SQLMeshParser:
             queries_snapshot[key] = {
                 "id": query_id,
                 "model_id": model_id,
-                "query_name": query["query_name"],
+                "qualified_name": qualified_name,
                 "snapshot_hash": digest,
                 "seen": True,
             }
-            self._query_ids[query["query_name"]] = query_id
+            self._query_ids[qualified_name] = query_id
 
     def _sync_columns(
         self,

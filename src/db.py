@@ -76,7 +76,7 @@ class ModelSnapshot(TypedDict):
 class QuerySnapshot(TypedDict):
     id: int
     model_id: int
-    query_name: str
+    qualified_name: str
     snapshot_hash: str
     seen: bool
 
@@ -296,33 +296,46 @@ class ProjectDB:
     def update_model_relation_counts(self, model_ids: list[int]) -> None:
         if model_ids:
             placeholders = ",".join(["?"] * len(model_ids))
+            params = tuple(model_ids)
             with self.connection:
                 self.connection.execute(
                     f"""
-                    UPDATE models
+                    WITH dependency_counts AS (
+                        SELECT
+                            ref_column_model_id AS model_id,
+                            COUNT(DISTINCT source_models_id) AS dependencies_count
+                        FROM column_lineage
+                        WHERE ref_column_model_id != source_models_id
+                            AND ref_column_model_id IN ({placeholders})
+                        GROUP BY ref_column_model_id
+                    ),
+                    dependent_counts AS (
+                        SELECT
+                            source_models_id AS model_id,
+                            COUNT(DISTINCT ref_column_model_id) AS dependents_count
+                        FROM column_lineage
+                        WHERE ref_column_model_id != source_models_id
+                            AND source_models_id IN ({placeholders})
+                        GROUP BY source_models_id
+                    )
+                    UPDATE models AS m
                     SET
-                        direct_dependencies_count = (
-                            SELECT COUNT(DISTINCT lineage.source_models_id)
-                            FROM column_lineage AS lineage
-                            WHERE lineage.ref_column_model_id = models.id
-                                AND lineage.ref_column_model_id != lineage.source_models_id
-                        ),
-                        direct_dependents_count = (
-                            SELECT COUNT(DISTINCT lineage.ref_column_model_id)
-                            FROM column_lineage AS lineage
-                            WHERE lineage.source_models_id = models.id
-                                AND lineage.ref_column_model_id != lineage.source_models_id
-                        )
-                    WHERE id IN ({placeholders})
+                        direct_dependencies_count = IFNULL(dc.dependencies_count, 0),
+                        direct_dependents_count = IFNULL(dt.dependents_count, 0)
+                    FROM models AS targets
+                    LEFT JOIN dependency_counts AS dc
+                        ON dc.model_id = targets.id
+                    LEFT JOIN dependent_counts AS dt
+                        ON dt.model_id = targets.id
+                    WHERE m.id = targets.id
+                        AND targets.id IN ({placeholders})
                     """,  # noqa: S608
-                    tuple(model_ids),
+                    params + params + params,
                 )
 
     def get_queries_snapshot(self) -> dict[str, QuerySnapshot]:
         cursor = self.connection.execute(
-            "SELECT queries.id, queries.model_id, queries.name, models.qualified_name, "
-            "queries.snapshot_hash FROM queries "
-            "INNER JOIN models ON models.id = queries.model_id"
+            "SELECT id, model_id, name, qualified_name, snapshot_hash FROM queries"
         )
         return {f"{row['model_id']}:{row['name']}": self._query_snapshot(row) for row in cursor}
 
@@ -507,7 +520,7 @@ class ProjectDB:
         return {
             "id": int(row["id"]),
             "model_id": int(row["model_id"]),
-            "query_name": f"{row['qualified_name']}/{row['name']}",
+            "qualified_name": str(row["qualified_name"]),
             "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
@@ -680,17 +693,17 @@ class ProjectDB:
             self.connection.executemany(
                 """
                 INSERT OR REPLACE INTO queries (
-                    id, model_id, name, line_start, line_end, depth, file_id, snapshot_hash,
-                    select_col_count, select_expr_count, select_alias_count,
+                    id, model_id, qualified_name, name, line_start, line_end, depth, file_id,
+                    snapshot_hash, select_col_count, select_expr_count, select_alias_count,
                     where_condition_count, join_statement_count, group_by_col_count,
                     having_condition_count, order_by_col_count, rendered_sql, models_read_count,
                     line_count
                 ) VALUES (
-                    :id, :model_id, :name, :line_start, :line_end, :depth, :file_id, :snapshot_hash,
-                    :select_col_count, :select_expr_count, :select_alias_count,
-                    :where_condition_count, :join_statement_count, :group_by_col_count,
-                    :having_condition_count, :order_by_col_count, :rendered_sql, :models_read_count,
-                    :line_count
+                    :id, :model_id, :qualified_name, :name, :line_start, :line_end, :depth,
+                    :file_id, :snapshot_hash, :select_col_count, :select_expr_count,
+                    :select_alias_count, :where_condition_count, :join_statement_count,
+                    :group_by_col_count, :having_condition_count, :order_by_col_count,
+                    :rendered_sql, :models_read_count, :line_count
                 )
                 """,
                 batches["queries"],
