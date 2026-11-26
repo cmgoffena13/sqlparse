@@ -11,7 +11,7 @@ def test_directory_tree_lists_files() -> None:
         out = get_directory_tree(db, None)
     finally:
         db.close()
-    assert out.startswith("PROJECT CONFIG FILE: config.yaml\n.\n")
+    assert out.startswith(".\n")
     assert "models/" in out
     assert "customers.sql" in out
     assert "sushi.customers" not in out
@@ -29,7 +29,6 @@ def test_directory_tree_path_scopes_to_models() -> None:
     finally:
         db.close()
     assert out.startswith("models/")
-    assert "PROJECT CONFIG FILE:" not in out
     assert "customers.sql" in out
     assert "sushi.customers" not in out
     assert "macros/" not in out

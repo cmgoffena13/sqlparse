@@ -4,6 +4,7 @@ from src.db import ProjectDB
 from src.sqlparse_mcp.format_utils import (
     bullet,
     kind_counts_label,
+    line_span,
     tree_glyphs,
     with_reads_models_count,
 )
@@ -16,6 +17,8 @@ SELECT
     models.kind,
     models.time_column,
     models.grain,
+    models.direct_dependencies_count,
+    models.direct_dependents_count,
     files.path AS file_path
 FROM models
 INNER JOIN files
@@ -31,6 +34,8 @@ SELECT
     models.kind,
     models.time_column,
     models.grain,
+    models.direct_dependencies_count,
+    models.direct_dependents_count,
     files.path AS file_path
 FROM models
 INNER JOIN files
@@ -44,6 +49,7 @@ SELECT
     name,
     depth,
     line_start,
+    line_end,
     select_col_count,
     select_expr_count,
     select_alias_count,
@@ -83,18 +89,33 @@ def _parent_indexes(nodes: list[tuple[int, int]]) -> list[int | None]:
 def _query_lines(
     children: dict[int | None, list[int]],
     labels: list[str],
-    parent: int | None,
+    spans: list[str],
+    node: int,
     prefix: str,
+    *,
+    attached: bool,
+    is_last: bool,
 ) -> list[str]:
     lines: list[str] = []
-    kids = children.get(parent, [])
-    last_index = len(kids) - 1
+    kids = children.get(node, [])
     for index, child in enumerate(kids):
-        connector, continuation = (
-            ("", "") if parent is None else tree_glyphs(index == last_index, wide=True)
+        lines.extend(
+            _query_lines(
+                children,
+                labels,
+                spans,
+                child,
+                prefix,
+                attached=index > 0,
+                is_last=False,
+            )
         )
-        lines.append(f"{prefix}{connector}{labels[child]}")
-        lines.extend(_query_lines(children, labels, child, prefix + continuation))
+    connector = ""
+    if kids:
+        connector = tree_glyphs(True, wide=True)[0]
+    elif attached:
+        connector = tree_glyphs(is_last, wide=True)[0]
+    lines.append(f"{spans[node]} {prefix}{connector}{labels[node]}")
     return lines
 
 
@@ -135,12 +156,20 @@ ORDER BY files.path, model_audits.audit_name
 """
 
 
-def _model_facts(kind: str, time_column: str | None, grain: str | None) -> list[str]:
+def _model_facts(
+    kind: str,
+    time_column: str | None,
+    grain: str | None,
+    dependents: int,
+    dependencies: int,
+) -> list[str]:
     lines = [f"Kind: {kind}"]
     if time_column is not None:
         lines.append(f"Time Column: {time_column}")
     if grain is not None:
         lines.append(f"Grain: {grain}")
+    lines.append(f"Direct Model Dependents: {dependents}")
+    lines.append(f"Direct Model Dependencies: {dependencies}")
     return lines
 
 
@@ -182,6 +211,7 @@ def get_model(db: ProjectDB, target: str) -> str:
                     key=lambda row: (int(row["depth"]), int(row["line_start"]), str(row["name"]))
                 )
                 labels: list[str] = []
+                span_labels: list[str] = []
                 nodes: list[tuple[int, int]] = []
                 for row in fetched:
                     relative = str(row["name"])
@@ -202,7 +232,13 @@ def get_model(db: ProjectDB, target: str) -> str:
                         int(row["models_read_count"]),
                     )
                     labels.append(f"{relative} ({label})")
-                    nodes.append((int(row["depth"]), int(row["line_start"])))
+                    line_start = int(row["line_start"])
+                    line_end = int(row["line_end"])
+                    span = line_span(line_start, line_end) if line_end else ""
+                    span_labels.append(span)
+                    nodes.append((int(row["depth"]), line_start))
+                span_width = max((len(span) for span in span_labels), default=0)
+                spans = [f"{span:<{span_width}}" for span in span_labels]
                 children: dict[int | None, list[int]] = {}
                 for index, parent in enumerate(_parent_indexes(nodes)):
                     children.setdefault(parent, []).append(index)
@@ -217,15 +253,24 @@ def get_model(db: ProjectDB, target: str) -> str:
                     str(model["kind"]),
                     None if time_column is None else str(time_column),
                     None if grain is None else str(grain),
+                    int(model["direct_dependents_count"]),
+                    int(model["direct_dependencies_count"]),
                 )
                 sections: list[list[str]] = [[header, *facts]]
-                sections.append(
-                    [
-                        "## SQL Tree",
-                        "",
-                        *_query_lines(children, labels, None, ""),
-                    ]
-                )
+                tree_lines: list[str] = []
+                for root in children.get(None, []):
+                    tree_lines.extend(
+                        _query_lines(
+                            children,
+                            labels,
+                            spans,
+                            root,
+                            "",
+                            attached=False,
+                            is_last=True,
+                        )
+                    )
+                sections.append(["## SQL Tree", "", *tree_lines])
                 macros = [
                     (str(row["file_path"]), str(row["macro_name"]))
                     for row in db.connection.execute(_MACROS_SQL, (model_id,))

@@ -66,7 +66,9 @@ CREATE TABLE IF NOT EXISTS models (
     description         TEXT NULL,
     snapshot_hash       TEXT NOT NULL,
     data_hash           TEXT NOT NULL,
-    metadata_hash       TEXT NOT NULL
+    metadata_hash       TEXT NOT NULL,
+    direct_dependencies_count INTEGER NOT NULL,
+    direct_dependents_count INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS models_qualified_name_index ON models (qualified_name);
 
@@ -171,6 +173,8 @@ CREATE INDEX IF NOT EXISTS column_lineage_source_column_id_index
     ON column_lineage (source_column_id);
 CREATE INDEX IF NOT EXISTS column_lineage_ref_column_model_id_source_models_id_index
     ON column_lineage (ref_column_model_id, source_models_id);
+CREATE INDEX IF NOT EXISTS column_lineage_source_models_id_ref_column_model_id_index
+    ON column_lineage (source_models_id, ref_column_model_id);
 
 CREATE TABLE IF NOT EXISTS tests (
     id                  INTEGER NOT NULL PRIMARY KEY,

@@ -57,11 +57,11 @@ def _seed(root: Path, paths: dict[str, str]) -> None:
         INSERT INTO models (
             id, file_id, gateway_id, dialect, schema_name, qualified_name, kind,
             is_blueprint, config_start_line, config_end_line, snapshot_hash,
-            data_hash, metadata_hash
+            data_hash, metadata_hash, direct_dependencies_count, direct_dependents_count
         )
         VALUES (
             1, 1, 1, 'duckdb', 'sushi', ?, 'FULL', FALSE, 1, 1, 'hash',
-            'data', 'meta'
+            'data', 'meta', 0, 0
         )
         """,
         (CUSTOMERS_FQN,),

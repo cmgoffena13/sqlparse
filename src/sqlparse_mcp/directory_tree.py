@@ -6,13 +6,6 @@ from pathlib import Path
 from src.db import ProjectDB
 from src.sqlparse_mcp.format_utils import file_label, tree_glyphs
 
-_CONFIG_FILES_SQL = """
-SELECT name
-FROM files
-WHERE is_config
-ORDER BY path
-"""
-
 _TREE_SQL = """
 SELECT
     'directory' AS row_type,
@@ -127,12 +120,6 @@ def get_directory_tree(db: ProjectDB, directory_path: str | None) -> str:
     if not result and scoped is None:
         rows = db.connection.execute(_TREE_SQL)
         result = _render(_children_by_parent(rows), None, ".")
-        config_lines = [
-            f"PROJECT CONFIG FILE: {row['name']}"
-            for row in db.connection.execute(_CONFIG_FILES_SQL)
-        ]
-        if config_lines:
-            result = "\n".join(config_lines) + "\n" + result
     elif not result:
         dir_row = db.connection.execute(
             "SELECT id, path FROM directories WHERE path = ?",

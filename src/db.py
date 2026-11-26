@@ -68,6 +68,8 @@ class ModelSnapshot(TypedDict):
     snapshot_hash: str
     data_hash: str
     metadata_hash: str
+    direct_dependencies_count: int
+    direct_dependents_count: int
     seen: bool
 
 
@@ -273,13 +275,48 @@ class ProjectDB:
 
     def get_models_snapshot(self) -> dict[str, ModelSnapshot]:
         cursor = self.connection.execute(
-            "SELECT id, qualified_name, snapshot_hash, data_hash, metadata_hash FROM models"
+            """
+            SELECT
+                id,
+                qualified_name,
+                snapshot_hash,
+                data_hash,
+                metadata_hash,
+                direct_dependencies_count,
+                direct_dependents_count
+            FROM models
+            """
         )
         return {str(row["qualified_name"]): self._model_snapshot(row) for row in cursor}
 
     def delete_models(self, models: dict[str, ModelSnapshot]) -> None:
         model_ids = [row["id"] for row in models.values() if not row["seen"]]
         self.delete_ids("models", model_ids)
+
+    def update_model_relation_counts(self, model_ids: list[int]) -> None:
+        if model_ids:
+            placeholders = ",".join(["?"] * len(model_ids))
+            with self.connection:
+                self.connection.execute(
+                    f"""
+                    UPDATE models
+                    SET
+                        direct_dependencies_count = (
+                            SELECT COUNT(DISTINCT lineage.source_models_id)
+                            FROM column_lineage AS lineage
+                            WHERE lineage.ref_column_model_id = models.id
+                                AND lineage.ref_column_model_id != lineage.source_models_id
+                        ),
+                        direct_dependents_count = (
+                            SELECT COUNT(DISTINCT lineage.ref_column_model_id)
+                            FROM column_lineage AS lineage
+                            WHERE lineage.source_models_id = models.id
+                                AND lineage.ref_column_model_id != lineage.source_models_id
+                        )
+                    WHERE id IN ({placeholders})
+                    """,  # noqa: S608
+                    tuple(model_ids),
+                )
 
     def get_queries_snapshot(self) -> dict[str, QuerySnapshot]:
         cursor = self.connection.execute(
@@ -461,6 +498,8 @@ class ProjectDB:
             "snapshot_hash": str(row["snapshot_hash"]),
             "data_hash": str(row["data_hash"]),
             "metadata_hash": str(row["metadata_hash"]),
+            "direct_dependencies_count": int(row["direct_dependencies_count"]),
+            "direct_dependents_count": int(row["direct_dependents_count"]),
             "seen": False,
         }
 
@@ -587,11 +626,13 @@ class ProjectDB:
                 INSERT OR REPLACE INTO models (
                     id, file_id, gateway_id, dialect, schema_name, qualified_name, kind,
                     is_blueprint, time_column, grain, config_start_line, config_end_line,
-                    description, snapshot_hash, data_hash, metadata_hash
+                    description, snapshot_hash, data_hash, metadata_hash,
+                    direct_dependencies_count, direct_dependents_count
                 ) VALUES (
                     :id, :file_id, :gateway_id, :dialect, :schema_name, :qualified_name, :kind,
                     :is_blueprint, :time_column, :grain, :config_start_line, :config_end_line,
-                    :description, :snapshot_hash, :data_hash, :metadata_hash
+                    :description, :snapshot_hash, :data_hash, :metadata_hash,
+                    :direct_dependencies_count, :direct_dependents_count
                 )
                 """,
                 batches["models"],

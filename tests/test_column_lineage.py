@@ -13,6 +13,7 @@ from src.parse.column_lineage import (
 from src.parse.model_utils import model_qualified_name
 from src.parse.sqlmesh_utils import install_parse_only_engine_support
 from src.processor import ProjectProcessor
+from src.sqlparse_mcp.model import get_model
 from tests.conftest import FIXTURE_PROJECT
 
 UNION_CTE_MODEL = Path(__file__).resolve().parent / "fixtures" / "union_cte_model.sql"
@@ -86,6 +87,39 @@ def test_processor_stores_models_read_count() -> None:
     assert rows[("memory.sushi.customer_status", "$")] == 0
 
 
+def test_processor_stores_direct_model_relation_counts() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        rows = {
+            str(row["qualified_name"]): (
+                int(row["direct_dependencies_count"]),
+                int(row["direct_dependents_count"]),
+            )
+            for row in db.fetch(
+                """
+                SELECT
+                    qualified_name,
+                    direct_dependencies_count,
+                    direct_dependents_count
+                FROM models
+                WHERE qualified_name IN (
+                    'memory.sushi.customers',
+                    'memory.sushi.customer_orders',
+                    'memory.sushi.customer_status',
+                    'memory.sushi.orders'
+                )
+                """
+            )
+        }
+    finally:
+        db.close()
+    assert rows["memory.sushi.customers"] == (2, 2)
+    assert rows["memory.sushi.customer_orders"] == (2, 0)
+    assert rows["memory.sushi.customer_status"] == (1, 0)
+    assert rows["memory.sushi.orders"] == (2, 1)
+
+
 def test_unnest_source_is_not_a_synthetic_query_name() -> None:
     install_parse_only_engine_support()
     context = Context(paths=BIGQUERY_FIXTURE, load=False)
@@ -130,6 +164,41 @@ def test_union_cte_column_lineage_does_not_raise(tmp_path: Path) -> None:
     assert any(
         reference["ref_column_qualified_name"].endswith("customer_id") for reference in references
     )
+
+
+def test_union_cte_query_stats_use_output_width_and_arm_rollups(tmp_path: Path) -> None:
+    root = tmp_path / "sushi"
+    shutil.copytree(FIXTURE_PROJECT, root)
+    shutil.copy(UNION_CTE_MODEL, root / "models" / "union_cte.sql")
+    db = ProjectDB(root)
+    try:
+        ProjectProcessor(db, root).process(full=True)
+        rows = {
+            str(row["name"]): dict(row)
+            for row in db.fetch(
+                """
+                SELECT
+                    queries.name,
+                    queries.select_col_count,
+                    queries.where_condition_count,
+                    queries.join_statement_count,
+                    queries.models_read_count
+                FROM queries
+                INNER JOIN models
+                    ON models.id = queries.model_id
+                WHERE models.qualified_name = 'memory.sushi.union_cte'
+                """
+            )
+        }
+        tree = get_model(db, "sushi.union_cte")
+    finally:
+        db.close()
+    assert rows["$cte"]["select_col_count"] == 1
+    assert rows["$cte"]["models_read_count"] == 2
+    assert rows["$cte"]["where_condition_count"] == 0
+    assert rows["$cte"]["join_statement_count"] == 0
+    assert "L1-9   $cte (1S, 2M)" in tree
+    assert "└── $" in tree
 
 
 def test_union_cte_fed_by_cte_syncs_column_lineage(tmp_path: Path) -> None:

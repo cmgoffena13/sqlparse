@@ -192,6 +192,9 @@ class SQLMeshParser:
         self.db.delete_project_gateways(gateways_snapshot)
         self.db.delete_projects(projects_snapshot)
         self._flush()
+        self.db.update_model_relation_counts(
+            [models_snapshot[model_qualified_name(model)]["id"] for model in extract_models]
+        )
         return len(extract_models)
 
     def _sync_macros(
@@ -403,6 +406,11 @@ class SQLMeshParser:
             or prior["data_hash"] != data_hash
             or prior["metadata_hash"] != metadata_hash
         )
+        dependencies_count = 0
+        dependents_count = 0
+        if prior is not None:
+            dependencies_count = prior["direct_dependencies_count"]
+            dependents_count = prior["direct_dependents_count"]
         row = {
             "file_id": file_id,
             "gateway_id": gateway_id,
@@ -419,6 +427,8 @@ class SQLMeshParser:
             "snapshot_hash": digest,
             "data_hash": data_hash,
             "metadata_hash": metadata_hash,
+            "direct_dependencies_count": dependencies_count,
+            "direct_dependents_count": dependents_count,
         }
         if prior is None:
             model_id = self.assigner.reserve("models", 1)[0]
@@ -432,6 +442,8 @@ class SQLMeshParser:
             "snapshot_hash": digest,
             "data_hash": data_hash,
             "metadata_hash": metadata_hash,
+            "direct_dependencies_count": dependencies_count,
+            "direct_dependents_count": dependents_count,
             "seen": True,
         }
         return need_extract

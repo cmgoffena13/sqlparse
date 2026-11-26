@@ -372,6 +372,25 @@ def _query_models_read_count(scope: Scope, *, default_catalog: str | None, diale
     return len(tables)
 
 
+def _set_operation_models_read_count(
+    expression: exp.Expression,
+    scope_by_expression: dict[int, Scope],
+    *,
+    default_catalog: str | None,
+    dialect: str,
+) -> int:
+    tables: set[str] = set()
+    for leaf in _set_operation_leaf_selects(expression):
+        leaf_scope = scope_by_expression.get(id(leaf))
+        if leaf_scope is not None:
+            for source in leaf_scope.sources.values():
+                if isinstance(source, exp.Table):
+                    tables.add(
+                        _table_source_name(source, default_catalog=default_catalog, dialect=dialect)
+                    )
+    return len(tables)
+
+
 def _rendered_query_sql(expression: exp.Query, dialect: str) -> dict[str, str]:
     sql_by_name: dict[str, str] = {}
     for scope in traverse_scope(expression):
@@ -418,7 +437,9 @@ def extract_model_queries(
     else:
         external = prepared_query.kind == "EXTERNAL"
         seen: set[str] = set()
-        for scope in traverse_scope(prepared_query.qualified):
+        scopes = list(traverse_scope(prepared_query.qualified))
+        scope_by_expression = {id(scope.expression): scope for scope in scopes}
+        for scope in scopes:
             parent = scope.expression.parent
             included = scope.is_cte or scope.is_root
             name = FINAL_QUERY
@@ -439,6 +460,18 @@ def extract_model_queries(
                     having_condition_count,
                     order_by_col_count,
                 ) = _query_counts(scope.expression)
+                models_read_count = _query_models_read_count(
+                    scope,
+                    default_catalog=prepared_query.default_catalog,
+                    dialect=prepared_query.dialect,
+                )
+                if isinstance(scope.expression, _SET_OPERATIONS):
+                    models_read_count = _set_operation_models_read_count(
+                        scope.expression,
+                        scope_by_expression,
+                        default_catalog=prepared_query.default_catalog,
+                        dialect=prepared_query.dialect,
+                    )
                 queries.append(
                     {
                         "name": name,
@@ -456,11 +489,7 @@ def extract_model_queries(
                         "having_condition_count": having_condition_count,
                         "order_by_col_count": order_by_col_count,
                         "rendered_sql": None if external else prepared_query.sql_by_name[name],
-                        "models_read_count": _query_models_read_count(
-                            scope,
-                            default_catalog=prepared_query.default_catalog,
-                            dialect=prepared_query.dialect,
-                        ),
+                        "models_read_count": models_read_count,
                     }
                 )
     return queries
@@ -579,6 +608,20 @@ def _table_column_qn(
     return resolved
 
 
+_SET_OPERATIONS = (exp.Union, exp.Intersect, exp.Except)
+
+
+def _set_operation_leaf_selects(expression: exp.Expression) -> list[exp.Select]:
+    leaves: list[exp.Select] = []
+    if isinstance(expression, exp.Select):
+        leaves = [expression]
+    elif isinstance(expression, _SET_OPERATIONS):
+        leaves = _set_operation_leaf_selects(expression.this) + _set_operation_leaf_selects(
+            expression.expression
+        )
+    return leaves
+
+
 def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, int, int]:
     select_col_count = 0
     select_expr_count = 0
@@ -609,6 +652,35 @@ def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, i
         order = expression.args.get("order")
         if order is not None:
             order_by_col_count = len(order.expressions)
+    elif isinstance(expression, _SET_OPERATIONS):
+        leaves = _set_operation_leaf_selects(expression)
+        if leaves:
+            (
+                select_col_count,
+                select_expr_count,
+                select_alias_count,
+                _where,
+                _join,
+                _group,
+                _having,
+                _order,
+            ) = _query_counts(leaves[0])
+            for leaf in leaves:
+                (
+                    _select,
+                    _expr,
+                    _alias,
+                    where_count,
+                    join_count,
+                    group_count,
+                    having_count,
+                    order_count,
+                ) = _query_counts(leaf)
+                where_condition_count += where_count
+                join_statement_count += join_count
+                group_by_col_count += group_count
+                having_condition_count += having_count
+                order_by_col_count += order_count
     return (
         select_col_count,
         select_expr_count,
