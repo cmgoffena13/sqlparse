@@ -22,6 +22,7 @@ _TOOLS = {
     "get_directory_tree",
     "get_model",
     "get_query",
+    "get_query_schema",
     "get_span_at_lines",
     "get_test",
     "get_macro",

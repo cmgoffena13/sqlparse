@@ -15,6 +15,7 @@ from src.utils import db_path_for_index_root
 _ARGUMENT_KEYS = {
     "get_model": ("target", ("target",)),
     "get_query": ("target", ("target", "query_name")),
+    "get_query_schema": ("target", ("target", "query_name")),
     "get_span_at_lines": ("file_path", ()),
     "get_test": ("file_path", ("test_name",)),
     "get_macro": ("file_path", ("macro_name",)),

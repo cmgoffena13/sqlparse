@@ -72,6 +72,15 @@ async def _print_tools() -> None:
             ),
         )
         _print_section(
+            "QUERY SCHEMA",
+            _body(
+                await client.call_tool(
+                    "get_query_schema",
+                    {"target": "sushi.customers"},
+                )
+            ),
+        )
+        _print_section(
             "MODEL CONFIG",
             _body(
                 await client.call_tool(

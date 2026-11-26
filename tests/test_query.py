@@ -1,7 +1,7 @@
 from src.db import ProjectDB
 from src.processor import ProjectProcessor
 from src.sqlparse_mcp.model_utils import model_not_found_message
-from src.sqlparse_mcp.query import get_query, get_span_at_lines
+from src.sqlparse_mcp.query import get_query, get_query_schema, get_span_at_lines
 from tests.conftest import FIXTURE_PROJECT
 
 _FINAL = (
@@ -16,12 +16,6 @@ _FINAL = (
     "## Macro Refs\n"
     "\n"
     "  • cents_to_dollars\n"
-    "\n"
-    "## Output Schema\n"
-    "\n"
-    "  • memory.sushi.customers.customer_id INT NOT NULL UNIQUE\n"
-    "  • memory.sushi.customers.amount      DOUBLE\n"
-    "  • memory.sushi.customers.status      TEXT\n"
 )
 
 _cte = (
@@ -37,9 +31,15 @@ _cte = (
     "L19 |   JOIN raw.orders AS o\n"
     "L20 |     ON s.customer_id = o.customer_id\n"
     "L21 | )\n"
-    "\n"
-    "## Output Schema\n"
-    "\n"
+)
+
+_FINAL_SCHEMA = (
+    "  • memory.sushi.customers.customer_id INT NOT NULL UNIQUE\n"
+    "  • memory.sushi.customers.amount      DOUBLE\n"
+    "  • memory.sushi.customers.status      TEXT\n"
+)
+
+_CTE_SCHEMA = (
     "  • $cte.customer_id  INT\n"
     "  • $cte.customer_id  INT\n"
     "  • $cte.status       TEXT\n"
@@ -59,12 +59,6 @@ _RENDERED_FINAL = (
     "## Macros Rendered\n"
     "\n"
     "  • cents_to_dollars\n"
-    "\n"
-    "## Output Schema\n"
-    "\n"
-    "  • memory.sushi.customers.customer_id INT NOT NULL UNIQUE\n"
-    "  • memory.sushi.customers.amount      DOUBLE\n"
-    "  • memory.sushi.customers.status      TEXT\n"
 )
 
 _RENDERED_CTE = (
@@ -78,13 +72,6 @@ _RENDERED_CTE = (
     'FROM "memory"."raw"."customers" AS "s"\n'
     'JOIN "memory"."raw"."orders" AS "o"\n'
     '  ON "o"."customer_id" = "s"."customer_id"\n'
-    "\n"
-    "## Output Schema\n"
-    "\n"
-    "  • $cte.customer_id  INT\n"
-    "  • $cte.customer_id  INT\n"
-    "  • $cte.status       TEXT\n"
-    "  • $cte.amount_cents INT\n"
 )
 
 
@@ -98,18 +85,33 @@ def test_query_lists_the_final_select() -> None:
     assert out == _FINAL
 
 
-def test_query_output_schema_lists_only_select_columns() -> None:
+def test_query_schema_lists_only_select_columns() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        out = get_query(db, "sushi.customer_orders", "$")
+        out = get_query_schema(db, "sushi.customer_orders", "$")
     finally:
         db.close()
-    schema = out.split("## Output Schema\n\n", 1)[1]
-    assert schema.count(".customer_id") == 1
-    assert ".order_id" in schema
-    assert ".status" in schema
-    assert len([line for line in schema.splitlines() if line.startswith("  • ")]) == 3
+    assert out.count(".customer_id") == 1
+    assert ".order_id" in out
+    assert ".status" in out
+    assert len([line for line in out.splitlines() if line.startswith("  • ")]) == 3
+
+
+def test_query_schema_lists_final_and_cte_columns() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        final = get_query_schema(db, "sushi.customers", None)
+        cte = get_query_schema(db, "sushi.customers", "cte")
+        query = get_query(db, "sushi.customers", None)
+        query_cte = get_query(db, "sushi.customers", "cte")
+    finally:
+        db.close()
+    assert final == _FINAL_SCHEMA
+    assert cte == _CTE_SCHEMA
+    assert "## Output Schema" not in query
+    assert "## Output Schema" not in query_cte
 
 
 def test_query_defaults_to_the_final_query() -> None:
@@ -182,13 +184,6 @@ def test_query_header_follows_the_input_kind() -> None:
         "L19 |   JOIN raw.orders AS o\n"
         "L20 |     ON s.customer_id = o.customer_id\n"
         "L21 | )\n"
-        "\n"
-        "## Output Schema\n"
-        "\n"
-        "  • $cte.customer_id  INT\n"
-        "  • $cte.customer_id  INT\n"
-        "  • $cte.status       TEXT\n"
-        "  • $cte.amount_cents INT\n"
     )
     assert "File:" not in by_file
 
@@ -243,15 +238,10 @@ def test_query_named_model_returns_the_config() -> None:
     assert "## Output" not in by_name
 
 
-_EXTERNAL_FINAL = (
-    "File: external_models.yaml\n"
-    "\n"
-    "$EXTERNAL\n"
-    "\n"
-    "## Output Schema\n"
-    "\n"
-    "  • memory.raw.customers.customer_id INT\n"
-    "  • memory.raw.customers.status      TEXT\n"
+_EXTERNAL_FINAL = "File: external_models.yaml\n\n$EXTERNAL\n"
+
+_EXTERNAL_SCHEMA = (
+    "  • memory.raw.customers.customer_id INT\n  • memory.raw.customers.status      TEXT\n"
 )
 
 
@@ -261,6 +251,7 @@ def test_query_external_model_has_no_query() -> None:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
         out = get_query(db, "raw.customers", None)
         rendered = get_query(db, "raw.customers", "$", render=True)
+        schema = get_query_schema(db, "raw.customers", None)
         stored = db.connection.execute(
             """
             SELECT queries.rendered_sql
@@ -275,6 +266,7 @@ def test_query_external_model_has_no_query() -> None:
         db.close()
     assert out == _EXTERNAL_FINAL
     assert rendered == _EXTERNAL_FINAL
+    assert schema == _EXTERNAL_SCHEMA
     assert stored["rendered_sql"] is None
 
 

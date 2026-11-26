@@ -275,13 +275,45 @@ def _rendered_sql(db: ProjectDB, model_name: str, query_name: str) -> str | None
     return None if stored is None else str(stored)
 
 
+def _select_columns(
+    db: ProjectDB, model_name: str, relative: str
+) -> list[tuple[str, str, int | None, int | None]]:
+    return [
+        (
+            str(column["name"]),
+            str(column["data_type"]),
+            None if column["nullable"] is None else int(column["nullable"]),
+            None if column["unique_constraint"] is None else int(column["unique_constraint"]),
+        )
+        for column in db.connection.execute(_COLUMNS_SQL, (model_name, relative))
+    ]
+
+
+def _format_output_schema(
+    qualifier: str,
+    columns: list[tuple[str, str, int | None, int | None]],
+) -> str:
+    result = "No columns found.\n"
+    if columns:
+        labels = [f"{qualifier}.{name}" for name, _data_type, _nullable, _unique in columns]
+        width = max(len(label) for label in labels)
+        result = (
+            "\n".join(
+                bullet(_output_label(label, data_type, nullable, unique_constraint, width))
+                for label, (_name, data_type, nullable, unique_constraint) in zip(
+                    labels, columns, strict=True
+                )
+            )
+            + "\n"
+        )
+    return result
+
+
 def _format_query(
     header: str,
     lines: list[str],
     start: int,
     end: int,
-    qualifier: str,
-    columns: list[tuple[str, str, int | None, int | None]],
     macros: list[str],
     sql: str | None,
 ) -> str:
@@ -295,16 +327,6 @@ def _format_query(
         heading = "## Macros Rendered" if sql is not None else "## Macro Refs"
         rendered.extend(["", heading, ""])
         rendered.extend(bullet(name) for name in macros)
-    if columns:
-        rendered.extend(["", "## Output Schema", ""])
-        labels = [f"{qualifier}.{name}" for name, _data_type, _nullable, _unique in columns]
-        width = max(len(label) for label in labels)
-        rendered.extend(
-            bullet(_output_label(label, data_type, nullable, unique_constraint, width))
-            for label, (_name, data_type, nullable, unique_constraint) in zip(
-                labels, columns, strict=True
-            )
-        )
     return "\n".join(rendered) + "\n"
 
 
@@ -338,38 +360,11 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                     text.splitlines(),
                     int(model_row["config_start_line"]),
                     int(model_row["config_end_line"]),
-                    model_name,
-                    [],
                     [],
                     None,
                 )
             elif str(model_row["kind"]) == "EXTERNAL":
-                relative = _relative_query(model_name, query_name)
-                columns: list[tuple[str, str, int | None, int | None]] = []
-                if relative == FINAL_QUERY:
-                    columns = [
-                        (
-                            str(column["name"]),
-                            str(column["data_type"]),
-                            None if column["nullable"] is None else int(column["nullable"]),
-                            (
-                                None
-                                if column["unique_constraint"] is None
-                                else int(column["unique_constraint"])
-                            ),
-                        )
-                        for column in db.connection.execute(_COLUMNS_SQL, (model_name, relative))
-                    ]
-                result = _format_query(
-                    header,
-                    [],
-                    1,
-                    1,
-                    model_name,
-                    columns,
-                    [],
-                    _EXTERNAL_QUERY,
-                )
+                result = _format_query(header, [], 1, 1, [], _EXTERNAL_QUERY)
             else:
                 relative = _relative_query(model_name, query_name)
                 query_row = db.connection.execute(_QUERY_SQL, (model_name, relative)).fetchone()
@@ -382,21 +377,6 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                     if span is not None:
                         query_lines = text.splitlines()
                         source = "\n".join(query_lines[span[0] - 1 : span[1]])
-                        columns = [
-                            (
-                                str(column["name"]),
-                                str(column["data_type"]),
-                                None if column["nullable"] is None else int(column["nullable"]),
-                                (
-                                    None
-                                    if column["unique_constraint"] is None
-                                    else int(column["unique_constraint"])
-                                ),
-                            )
-                            for column in db.connection.execute(
-                                _COLUMNS_SQL, (model_name, relative)
-                            )
-                        ]
                         sql = _rendered_sql(db, model_name, relative) if render else None
                         if not render or sql is not None:
                             result = _format_query(
@@ -404,11 +384,47 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                                 query_lines,
                                 span[0],
                                 span[1],
-                                span[2],
-                                columns,
                                 _query_macros(db, model_name, source),
                                 sql,
                             )
+    return result
+
+
+def get_query_schema(db: ProjectDB, target: str, query_name: str | None) -> str:
+    key = target.strip()
+    result = "No target given; pass a model name or file path."
+    if key:
+        resolved = resolve_model_qualified_name(db, key)
+        rows = list(db.connection.execute(_MODEL_SQL, (resolved,))) if resolved is not None else []
+        if not rows:
+            file_path = _normalize_file_path(key, db.root)
+            rows = list(db.connection.execute(_MODEL_BY_FILE_SQL, (file_path,)))
+        if not rows:
+            result = model_not_found_message()
+        elif len(rows) > 1:
+            result = "File contains more than one model; pass a model name."
+        else:
+            model_row = rows[0]
+            model_name = str(model_row["qualified_name"])
+            asked = "" if query_name is None else query_name.strip()
+            result = "No columns found.\n"
+            if asked != _CONFIG_QUERY:
+                relative = _relative_query(model_name, query_name)
+                columns: list[tuple[str, str, int | None, int | None]] = []
+                if str(model_row["kind"]) == "EXTERNAL":
+                    if relative == FINAL_QUERY:
+                        columns = _select_columns(db, model_name, relative)
+                else:
+                    query_row = db.connection.execute(_QUERY_SQL, (model_name, relative)).fetchone()
+                    if query_row is None:
+                        result = "No query found."
+                    else:
+                        columns = _select_columns(db, model_name, relative)
+                if result != "No query found.":
+                    qualifier = model_name
+                    if relative != FINAL_QUERY:
+                        qualifier = stored_query_name(relative)
+                    result = _format_output_schema(qualifier, columns)
     return result
 
 
@@ -573,21 +589,9 @@ def _referenced_models(db: ProjectDB, kind: str, name: str) -> list[str]:
 
 
 def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
-    columns: list[tuple[str, str, int | None, int | None]] = []
     macros: list[str] = []
     detail = f"Model: {span['model_name']}"
     if span["kind"] == "query":
-        columns = [
-            (
-                str(column["name"]),
-                str(column["data_type"]),
-                None if column["nullable"] is None else int(column["nullable"]),
-                (None if column["unique_constraint"] is None else int(column["unique_constraint"])),
-            )
-            for column in db.connection.execute(
-                _COLUMNS_SQL, (span["model_name"], span["query_name"])
-            )
-        ]
         shown = _shown_query_name(span["query_name"], span["display_name"])
         detail = f"{detail}\nQuery: {shown}"
         source = "\n".join(lines[span["start"] - 1 : span["end"]])
@@ -600,16 +604,11 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
         detail = f"Macro: {span['model_name']}\nType: {span['query_name']}"
     elif span["kind"] == "test":
         detail = f"Test: {span['model_name']}"
-    qualifier = span["display_name"]
-    if span["kind"] == "query" and span["query_name"] != FINAL_QUERY:
-        qualifier = stored_query_name(span["display_name"])
     text = _format_query(
         detail,
         lines,
         span["start"],
         span["end"],
-        qualifier,
-        columns,
         macros,
         None,
     )

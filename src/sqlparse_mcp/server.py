@@ -20,6 +20,7 @@ from src.sqlparse_mcp.model import get_model as run_get_model
 from src.sqlparse_mcp.model_relations import get_model_relations as run_get_model_relations
 from src.sqlparse_mcp.model_test import get_test as run_get_test
 from src.sqlparse_mcp.query import get_query as run_get_query
+from src.sqlparse_mcp.query import get_query_schema as run_get_query_schema
 from src.sqlparse_mcp.query import get_span_at_lines as run_get_span_at_lines
 from src.sqlparse_mcp.search import search as run_search
 from src.sqlparse_mcp.session_stats import SessionStatsMiddleware, format_session_stats_report
@@ -182,7 +183,7 @@ def get_query(
     ctx: Context, target: str, query_name: str | None = None, render: bool = False
 ) -> str:
     """
-    Return a query's definition and output schema.
+    Return a query's definition.
 
     Target can be a model name or model file path.
     Ex. ``catalog.schema.customer_orders`` or `models/customer_orders.sql`
@@ -190,6 +191,17 @@ def get_query(
     Enable ``render`` to render the SQL and the query's macros.
     """
     return _processor(ctx).run_query(lambda db: run_get_query(db, target, query_name, render))
+
+
+@mcp.tool()
+def get_query_schema(ctx: Context, target: str, query_name: str | None = None) -> str:
+    """
+    Return a query's output schema. Columns, data types, and constraints.
+
+    Target can be a model name or model file path.
+    Ex. ``catalog.schema.customer_orders`` or `models/customer_orders.sql`
+    """
+    return _processor(ctx).run_query(lambda db: run_get_query_schema(db, target, query_name))
 
 
 @mcp.tool()
