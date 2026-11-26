@@ -7,11 +7,11 @@ from tests.conftest import FIXTURE_PROJECT
 _FINAL = (
     "File: models/customers.sql\n"
     "\n"
-    "L19 | SELECT\n"
-    "L20 |   customer_id, -- Customer identifier\n"
-    "L21 |   {{ cents_to_dollars('amount_cents') }} AS amount, /* Order amount in dollars */\n"
-    "L22 |   status -- Customer status\n"
-    "L23 | FROM cte\n"
+    "L22 | SELECT\n"
+    "L23 |   customer_id, -- Customer identifier\n"
+    "L24 |   {{ cents_to_dollars('amount_cents') }} AS amount, /* Order amount in dollars */\n"
+    "L25 |   status -- Customer status\n"
+    "L26 | FROM cte\n"
     "\n"
     "## Macro Refs\n"
     "\n"
@@ -19,7 +19,7 @@ _FINAL = (
     "\n"
     "## Output Schema\n"
     "\n"
-    "  • memory.sushi.customers.customer_id INT NOT NULL\n"
+    "  • memory.sushi.customers.customer_id INT NOT NULL UNIQUE\n"
     "  • memory.sushi.customers.amount      DOUBLE\n"
     "  • memory.sushi.customers.status      TEXT\n"
 )
@@ -27,16 +27,16 @@ _FINAL = (
 _cte = (
     "File: models/customers.sql\n"
     "\n"
-    "L9  | WITH cte AS (\n"
-    "L10 |   SELECT\n"
-    "L11 |     s.customer_id,\n"
-    "L12 |     o.customer_id,\n"
-    "L13 |     s.status,\n"
-    "L14 |     o.amount_cents\n"
-    "L15 |   FROM raw.customers AS s\n"
-    "L16 |   JOIN raw.orders AS o\n"
-    "L17 |     ON s.customer_id = o.customer_id\n"
-    "L18 | )\n"
+    "L12 | WITH cte AS (\n"
+    "L13 |   SELECT\n"
+    "L14 |     s.customer_id,\n"
+    "L15 |     o.customer_id,\n"
+    "L16 |     s.status,\n"
+    "L17 |     o.amount_cents\n"
+    "L18 |   FROM raw.customers AS s\n"
+    "L19 |   JOIN raw.orders AS o\n"
+    "L20 |     ON s.customer_id = o.customer_id\n"
+    "L21 | )\n"
     "\n"
     "## Output Schema\n"
     "\n"
@@ -62,7 +62,7 @@ _RENDERED_FINAL = (
     "\n"
     "## Output Schema\n"
     "\n"
-    "  • memory.sushi.customers.customer_id INT NOT NULL\n"
+    "  • memory.sushi.customers.customer_id INT NOT NULL UNIQUE\n"
     "  • memory.sushi.customers.amount      DOUBLE\n"
     "  • memory.sushi.customers.status      TEXT\n"
 )
@@ -172,16 +172,16 @@ def test_query_header_follows_the_input_kind() -> None:
     assert by_file == (
         "Model: memory.sushi.customers\n"
         "\n"
-        "L9  | WITH cte AS (\n"
-        "L10 |   SELECT\n"
-        "L11 |     s.customer_id,\n"
-        "L12 |     o.customer_id,\n"
-        "L13 |     s.status,\n"
-        "L14 |     o.amount_cents\n"
-        "L15 |   FROM raw.customers AS s\n"
-        "L16 |   JOIN raw.orders AS o\n"
-        "L17 |     ON s.customer_id = o.customer_id\n"
-        "L18 | )\n"
+        "L12 | WITH cte AS (\n"
+        "L13 |   SELECT\n"
+        "L14 |     s.customer_id,\n"
+        "L15 |     o.customer_id,\n"
+        "L16 |     s.status,\n"
+        "L17 |     o.amount_cents\n"
+        "L18 |   FROM raw.customers AS s\n"
+        "L19 |   JOIN raw.orders AS o\n"
+        "L20 |     ON s.customer_id = o.customer_id\n"
+        "L21 | )\n"
         "\n"
         "## Output Schema\n"
         "\n"
@@ -218,9 +218,12 @@ def test_query_named_model_returns_the_config() -> None:
         "L1 | MODEL (\n"
         "L2 |   name sushi.customers,\n"
         "L3 |   kind FULL,\n"
-        "L4 |   audits [not_null_customer_id],\n"
-        "L5 |   description 'Customer grain with order amounts'\n"
-        "L6 | );\n"
+        "L4 |   audits [\n"
+        "L5 |     not_null_customer_id,\n"
+        "L6 |     unique_values(columns := (customer_id)),\n"
+        "L7 |   ],\n"
+        "L8 |   description 'Customer grain with order amounts'\n"
+        "L9 | );\n"
     )
     assert by_name == f"File: models/customers.sql\n\n{config}"
     assert by_file == f"Model: memory.sushi.customers\n\n{config}"
@@ -289,8 +292,8 @@ def test_span_at_lines_returns_the_containing_query() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        cte = get_span_at_lines(db, "models/customers.sql", 12)
-        final = get_span_at_lines(db, "models/customers.sql", 21)
+        cte = get_span_at_lines(db, "models/customers.sql", 15)
+        final = get_span_at_lines(db, "models/customers.sql", 24)
     finally:
         db.close()
     assert cte == _cte.replace(
@@ -315,9 +318,12 @@ def test_span_at_lines_on_model_config_shows_the_config() -> None:
         "L1 | MODEL (\n"
         "L2 |   name sushi.customers,\n"
         "L3 |   kind FULL,\n"
-        "L4 |   audits [not_null_customer_id],\n"
-        "L5 |   description 'Customer grain with order amounts'\n"
-        "L6 | );\n"
+        "L4 |   audits [\n"
+        "L5 |     not_null_customer_id,\n"
+        "L6 |     unique_values(columns := (customer_id)),\n"
+        "L7 |   ],\n"
+        "L8 |   description 'Customer grain with order amounts'\n"
+        "L9 | );\n"
     )
 
 
@@ -339,7 +345,7 @@ def test_span_at_lines_uses_the_closest_query_beside_the_range() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:
         ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
-        out = get_span_at_lines(db, "models/customers.sql", 8)
+        out = get_span_at_lines(db, "models/customers.sql", 11)
     finally:
         db.close()
     assert out == _cte.replace(

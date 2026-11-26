@@ -24,7 +24,11 @@ from src.db import (
     TestReferenceSnapshot,
     TestSnapshot,
 )
-from src.parse.audit_utils import audit_line_span, not_null_column_names
+from src.parse.audit_utils import (
+    audit_line_span,
+    not_null_column_names,
+    unique_values_column_names,
+)
 from src.parse.column_lineage import (
     ExtractedColumn,
     ExtractedColumnReference,
@@ -616,6 +620,7 @@ class SQLMeshParser:
         column_descriptions = model.column_descriptions
         final_query = final_query_name(model_name)
         not_null_columns = not_null_column_names(model, self.context._audits)
+        unique_columns = unique_values_column_names(model)
         for column in columns:
             query_name = column["query_name"]
             from_table = column["from_table"]
@@ -629,6 +634,7 @@ class SQLMeshParser:
             is_final = query_name == final_query
             description = column_descriptions.get(name) if is_final else None
             nullable = None if not is_final else name not in not_null_columns
+            unique_constraint = None if not is_final else name in unique_columns
             data_type = column["data_type"]
             query_id = self._query_ids[query_name]
             digest = snapshot_hash(
@@ -643,6 +649,7 @@ class SQLMeshParser:
                     qualified_name,
                     data_type,
                     nullable,
+                    unique_constraint,
                     line_start,
                     line_end,
                     context,
@@ -666,6 +673,7 @@ class SQLMeshParser:
                         "qualified_name": qualified_name,
                         "data_type": data_type,
                         "nullable": nullable,
+                        "unique_constraint": unique_constraint,
                         "line_start": line_start,
                         "line_end": line_end,
                         "context": context,
@@ -690,6 +698,7 @@ class SQLMeshParser:
                             "qualified_name": qualified_name,
                             "data_type": data_type,
                             "nullable": nullable,
+                            "unique_constraint": unique_constraint,
                             "line_start": line_start,
                             "line_end": line_end,
                             "context": context,

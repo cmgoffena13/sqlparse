@@ -41,6 +41,14 @@ def not_null_column_names(model: Model, audits_by_name: dict) -> set[str]:
     return names
 
 
+def unique_values_column_names(model: Model) -> set[str]:
+    names: set[str] = set()
+    for audit_name, args in model.audits:
+        if audit_name in {"unique_values", "unique_values_non_blocking"}:
+            names |= _names_from_columns_arg(args.get("columns"))
+    return names
+
+
 def audit_line_span(path: Path, dialect: str, name: str) -> tuple[int, int]:
     text = path.read_text(encoding="utf-8")
     expressions = sqlmesh_parse(text, default_dialect=dialect)

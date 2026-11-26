@@ -293,8 +293,9 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT c.id, c.model_id, c.file_id, c.query_id, "
                 "m.qualified_name || '/' || q.name AS query_name, c.from_table, c.name, "
                 "c.column_name, "
-                "c.qualified_name, c.data_type, c.nullable, c.line_start, c.line_end, "
-                "c.context, c.description, c.is_select, c.snapshot_hash "
+                "c.qualified_name, c.data_type, c.nullable, c.unique_constraint, "
+                "c.line_start, c.line_end, c.context, c.description, c.is_select, "
+                "c.snapshot_hash "
                 "FROM columns AS c "
                 "INNER JOIN queries AS q ON q.id = c.query_id "
                 "INNER JOIN models AS m ON m.id = c.model_id"
@@ -385,8 +386,9 @@ def test_processor_indexes_files_and_directories() -> None:
                 "SELECT c.id, c.model_id, c.file_id, c.query_id, "
                 "m.qualified_name || '/' || q.name AS query_name, c.from_table, c.name, "
                 "c.column_name, "
-                "c.qualified_name, c.data_type, c.nullable, c.line_start, c.line_end, "
-                "c.context, c.description, c.is_select, c.snapshot_hash "
+                "c.qualified_name, c.data_type, c.nullable, c.unique_constraint, "
+                "c.line_start, c.line_end, c.context, c.description, c.is_select, "
+                "c.snapshot_hash "
                 "FROM columns AS c "
                 "INNER JOIN queries AS q ON q.id = c.query_id "
                 "INNER JOIN models AS m ON m.id = c.model_id"
@@ -541,7 +543,7 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_models[CUSTOMERS_FQN]["gateway_id"] == first_gateways["local"]["id"]
     assert first_models[CUSTOMERS_FQN]["dialect"] == "duckdb"
     assert first_models[CUSTOMERS_FQN]["config_start_line"] == 1
-    assert first_models[CUSTOMERS_FQN]["config_end_line"] == 6
+    assert first_models[CUSTOMERS_FQN]["config_end_line"] == 9
     assert first_models[CUSTOMERS_FQN]["description"] == "Customer grain with order amounts"
     assert first_models[CUSTOMERS_FQN]["snapshot_hash"]
     assert first_models[CUSTOMERS_FQN]["data_hash"]
@@ -590,18 +592,22 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["description"] == "Customer identifier"
     assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["data_type"] == "INT"
     assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["nullable"] == 0
+    assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["unique_constraint"] == 1
     assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["is_select"] == 1
     assert first_columns[f"{ORDERS_FQN}/$/{CUSTOMERS_FQN}.customer_id"]["is_select"] == 0
     assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["snapshot_hash"]
     assert first_columns[CUSTOMERS_CTE_AMOUNT]["description"] == "Order amount in dollars"
     assert first_columns[CUSTOMERS_CTE_AMOUNT]["data_type"] == "DOUBLE"
     assert first_columns[CUSTOMERS_CTE_AMOUNT]["nullable"] == 1
+    assert first_columns[CUSTOMERS_CTE_AMOUNT]["unique_constraint"] == 0
     assert first_columns[CUSTOMERS_CTE_STATUS]["description"] == "Customer status"
     assert first_columns[CUSTOMERS_CTE_STATUS]["data_type"] == "TEXT"
     assert first_columns[CUSTOMERS_CTE_STATUS]["nullable"] == 1
+    assert first_columns[CUSTOMERS_CTE_STATUS]["unique_constraint"] == 0
     assert first_columns[CUSTOMERS_CTE_RAW_CUSTOMER_ID]["description"] is None
     assert first_columns[CUSTOMERS_CTE_RAW_CUSTOMER_ID]["data_type"] == "INT"
     assert first_columns[CUSTOMERS_CTE_RAW_CUSTOMER_ID]["nullable"] is None
+    assert first_columns[CUSTOMERS_CTE_RAW_CUSTOMER_ID]["unique_constraint"] is None
     assert first_columns[CUSTOMERS_CTE_RAW_AMOUNT_CENTS]["data_type"] == "INT"
     assert first_columns[CUSTOMERS_CTE_CUSTOMER_ID]["model_id"] == first_models[CUSTOMERS_FQN]["id"]
     assert first_columns[CUSTOMERS_CTE_RAW_CUSTOMER_ID]["query_name"] == (f"{CUSTOMERS_FQN}/$cte")

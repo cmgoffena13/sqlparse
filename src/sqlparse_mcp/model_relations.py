@@ -9,7 +9,6 @@ from src.sqlparse_mcp.format_utils import (
 )
 from src.sqlparse_mcp.model_utils import model_not_found_message, resolve_model_qualified_name
 
-_MAX_NODES = 100
 _PAGE_SIZE = 100
 
 _MODEL_TESTS_SQL = """
@@ -88,7 +87,6 @@ def _relation_lines(
     branch_prefix: str,
     *,
     seen: set[str],
-    budget: list[int],
     meta: dict[str, tuple[str, bool]],
     mark_external: bool,
     nested: bool,
@@ -105,13 +103,6 @@ def _relation_lines(
         lines.extend(f"{branch_prefix}{continuation}• {name}" for name in names)
         index += 1
     for child in siblings:
-        if budget[0] < 0:
-            break
-        if budget[0] == 0:
-            lines.append(f"{branch_prefix}...[truncated]")
-            budget[0] = -1
-            break
-        budget[0] -= 1
         seen.add(child)
         label = _labeled_model(child, meta, mark_external)
         prefix = ""
@@ -127,7 +118,6 @@ def _relation_lines(
                 child,
                 branch_prefix + continuation,
                 seen=seen,
-                budget=budget,
                 meta=meta,
                 mark_external=mark_external,
                 nested=True,
@@ -180,7 +170,6 @@ def get_model_relations(
                         resolved,
                         "",
                         seen={resolved},
-                        budget=[_MAX_NODES],
                         meta=meta,
                         mark_external=mark_external,
                         nested=False,

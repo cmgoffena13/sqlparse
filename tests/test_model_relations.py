@@ -113,3 +113,28 @@ def test_model_relations_pages_top_level_models(monkeypatch: pytest.MonkeyPatch)
     assert page_two == (f"{ORDERS}\n└── {CUSTOMER_ORDERS}\n\n… page 2 of 2 (1 of 2 dependents)\n")
     assert missing == "No more dependents; page 3 is past 2."
     assert invalid == "Invalid page; pass page >= 1."
+
+
+def test_model_relations_does_not_hard_truncate_nested_trees(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(model_relations_mod, "_PAGE_SIZE", 100)
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        out = get_model_relations(db, "sushi.customer_orders", "dependencies")
+    finally:
+        db.close()
+    assert "...[truncated]" not in out
+    assert "page" not in out
+    assert out == (
+        f"{CUSTOMERS}\n"
+        f"├── {RAW_CUSTOMERS} (EXTERNAL)\n"
+        f"└── {RAW_ORDERS} (EXTERNAL)\n"
+        "\n"
+        f"{ORDERS}\n"
+        f"├── {RAW_ORDERS} (EXTERNAL)\n"
+        f"└── {CUSTOMERS}\n"
+        f"    ├── {RAW_CUSTOMERS} (EXTERNAL)\n"
+        f"    └── {RAW_ORDERS} (EXTERNAL)\n"
+    )

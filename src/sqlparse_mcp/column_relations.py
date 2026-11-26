@@ -371,7 +371,7 @@ def _dependency_nodes(
             column,
             source_id,
         ), (ref_kinds, reads_models) in grouped.items():
-            if source_id not in level_children and source_id not in seen and len(seen) < 100:
+            if source_id not in level_children and source_id not in seen:
                 seen.add(source_id)
                 source_model_name, source_model_kind, source_name = sources[source_id]
                 if source_model_kind == "EXTERNAL":

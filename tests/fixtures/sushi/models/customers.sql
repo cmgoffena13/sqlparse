@@ -1,7 +1,10 @@
 MODEL (
   name sushi.customers,
   kind FULL,
-  audits [not_null_customer_id],
+  audits [
+    not_null_customer_id,
+    unique_values(columns := (customer_id)),
+  ],
   description 'Customer grain with order amounts'
 );
 

@@ -150,7 +150,8 @@ _COLUMNS_SQL = """
 SELECT
     columns.name,
     columns.data_type,
-    columns.nullable
+    columns.nullable,
+    columns.unique_constraint
 FROM columns
 INNER JOIN queries
     ON queries.id = columns.query_id
@@ -253,8 +254,18 @@ def _query_macros(db: ProjectDB, model_name: str, text: str) -> list[str]:
     return _called_macros(text, names)
 
 
-def _output_label(name: str, data_type: str, nullable: int | None, width: int) -> str:
-    constraint = " NOT NULL" if nullable == 0 else ""
+def _output_label(
+    name: str,
+    data_type: str,
+    nullable: int | None,
+    unique_constraint: int | None,
+    width: int,
+) -> str:
+    constraint = ""
+    if nullable == 0:
+        constraint = f"{constraint} NOT NULL"
+    if unique_constraint == 1:
+        constraint = f"{constraint} UNIQUE"
     return f"{name:<{width}} {data_type}{constraint}"
 
 
@@ -270,7 +281,7 @@ def _format_query(
     start: int,
     end: int,
     qualifier: str,
-    columns: list[tuple[str, str, int | None]],
+    columns: list[tuple[str, str, int | None, int | None]],
     macros: list[str],
     sql: str | None,
 ) -> str:
@@ -286,11 +297,13 @@ def _format_query(
         rendered.extend(bullet(name) for name in macros)
     if columns:
         rendered.extend(["", "## Output Schema", ""])
-        labels = [f"{qualifier}.{name}" for name, _data_type, _nullable in columns]
+        labels = [f"{qualifier}.{name}" for name, _data_type, _nullable, _unique in columns]
         width = max(len(label) for label in labels)
         rendered.extend(
-            bullet(_output_label(label, data_type, nullable, width))
-            for label, (_name, data_type, nullable) in zip(labels, columns, strict=True)
+            bullet(_output_label(label, data_type, nullable, unique_constraint, width))
+            for label, (_name, data_type, nullable, unique_constraint) in zip(
+                labels, columns, strict=True
+            )
         )
     return "\n".join(rendered) + "\n"
 
@@ -332,13 +345,18 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                 )
             elif str(model_row["kind"]) == "EXTERNAL":
                 relative = _relative_query(model_name, query_name)
-                columns: list[tuple[str, str, int | None]] = []
+                columns: list[tuple[str, str, int | None, int | None]] = []
                 if relative == FINAL_QUERY:
                     columns = [
                         (
                             str(column["name"]),
                             str(column["data_type"]),
                             None if column["nullable"] is None else int(column["nullable"]),
+                            (
+                                None
+                                if column["unique_constraint"] is None
+                                else int(column["unique_constraint"])
+                            ),
                         )
                         for column in db.connection.execute(_COLUMNS_SQL, (model_name, relative))
                     ]
@@ -369,6 +387,11 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                                 str(column["name"]),
                                 str(column["data_type"]),
                                 None if column["nullable"] is None else int(column["nullable"]),
+                                (
+                                    None
+                                    if column["unique_constraint"] is None
+                                    else int(column["unique_constraint"])
+                                ),
                             )
                             for column in db.connection.execute(
                                 _COLUMNS_SQL, (model_name, relative)
@@ -550,7 +573,7 @@ def _referenced_models(db: ProjectDB, kind: str, name: str) -> list[str]:
 
 
 def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
-    columns: list[tuple[str, str, int | None]] = []
+    columns: list[tuple[str, str, int | None, int | None]] = []
     macros: list[str] = []
     detail = f"Model: {span['model_name']}"
     if span["kind"] == "query":
@@ -559,6 +582,7 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
                 str(column["name"]),
                 str(column["data_type"]),
                 None if column["nullable"] is None else int(column["nullable"]),
+                (None if column["unique_constraint"] is None else int(column["unique_constraint"])),
             )
             for column in db.connection.execute(
                 _COLUMNS_SQL, (span["model_name"], span["query_name"])

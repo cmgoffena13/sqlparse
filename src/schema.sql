@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS columns (
     qualified_name      TEXT NOT NULL,
     data_type           TEXT NOT NULL,
     nullable            BOOLEAN NULL,
+    unique_constraint   BOOLEAN NULL,
     line_start          INTEGER NOT NULL,
     line_end            INTEGER NOT NULL,
     context             TEXT NOT NULL,
