@@ -8,6 +8,42 @@ from src.git_utils import relative_path_is_ignored
 from src.utils import line_count
 
 
+def test_get_queries_snapshot_includes_line_spans(tmp_path: Path) -> None:
+    db = ProjectDB(tmp_path)
+    try:
+        db.connection.executescript(
+            """
+            INSERT INTO directories (id, parent_id, name, path, depth)
+            VALUES (1, NULL, '.', '.', 0);
+            INSERT INTO files (
+                id, directory_id, name, path, normalized_path, language, content_hash,
+                mtime_ns, size_bytes, line_count, is_test, is_config
+            ) VALUES (1, 1, 'm.sql', 'm.sql', 'm.sql', 'sql', 'h', 0, 0, 1, 0, 0);
+            INSERT INTO projects (id, name) VALUES (1, 'p');
+            INSERT INTO project_gateways (
+                id, project_id, name, catalog_name, dialect, is_default, snapshot_hash
+            ) VALUES (1, 1, 'local', 'c', 'duckdb', 1, 'g');
+            INSERT INTO models (
+                id, file_id, gateway_id, dialect, schema_name, qualified_name, kind,
+                is_blueprint, time_column, grain, config_start_line, config_end_line,
+                description, snapshot_hash, data_hash, metadata_hash
+            ) VALUES (
+                1, 1, 1, 'duckdb', 's', 's.m', 'FULL', 0, NULL, NULL, 1, 1, NULL, 'mh', 'dh', 'mdh'
+            );
+            INSERT INTO queries (
+                id, model_id, qualified_name, name, line_start, line_end, depth, file_id,
+                snapshot_hash, select_col_count, models_read_count, line_count
+            ) VALUES (1, 1, 's.m/$', '$', 10, 20, 0, 1, 'qh', 1, 0, 11);
+            """
+        )
+        snapshot = db.get_queries_snapshot()
+    finally:
+        db.close()
+    assert snapshot["1:$"]["name"] == "$"
+    assert snapshot["1:$"]["line_start"] == 10
+    assert snapshot["1:$"]["line_end"] == 20
+
+
 def test_bulk_insert_upserts_search_docs_snapshot_and_fts(tmp_path: Path) -> None:
     db = ProjectDB(tmp_path)
     try:

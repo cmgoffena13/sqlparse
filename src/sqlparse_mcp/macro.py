@@ -8,7 +8,8 @@ SELECT
     macros.kind,
     macros.line_start,
     macros.line_end,
-    models.qualified_name
+    models.qualified_name,
+    queries.name AS query_name
 FROM macros
 INNER JOIN files
     ON files.id = macros.file_id
@@ -16,9 +17,11 @@ LEFT JOIN model_macros
     ON model_macros.macro_name = macros.name
 LEFT JOIN models
     ON models.id = model_macros.model_id
+LEFT JOIN queries
+    ON queries.id = model_macros.query_id
 WHERE files.path = ?
   AND macros.name = ?
-ORDER BY models.qualified_name
+ORDER BY models.qualified_name, queries.name
 """
 
 
@@ -47,12 +50,15 @@ def get_macro(
             lines = [*header, *body]
             if include_call_sites:
                 catalog = default_catalog(db)
-                models = [
-                    omit_default_catalog(str(row["qualified_name"]), catalog)
+                sites = [
+                    (
+                        f"{omit_default_catalog(str(row['qualified_name']), catalog)}"
+                        f"/{row['query_name']}"
+                    )
                     for row in rows
-                    if row["qualified_name"] is not None
+                    if row["qualified_name"] is not None and row["query_name"] is not None
                 ]
-                if models:
-                    lines.extend(["", "## Models", "", *[bullet(model) for model in models]])
+                if sites:
+                    lines.extend(["", "## Model Queries", "", *[bullet(site) for site in sites]])
             result = "\n".join(lines) + "\n"
     return result

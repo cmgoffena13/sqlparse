@@ -135,7 +135,7 @@ def _normalize_file_path(target: str, root: Path) -> str:
 
 
 _MACROS_SQL = """
-SELECT
+SELECT DISTINCT
     model_macros.macro_name,
     files.path AS file_path
 FROM model_macros

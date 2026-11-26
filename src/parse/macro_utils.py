@@ -1,4 +1,6 @@
 import inspect
+import re
+from functools import cache
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
@@ -28,6 +30,25 @@ def _python_macro_span(registered: object) -> tuple[int, int]:
     lines, line_start = inspect.getsourcelines(cast(Any, registered).func)
     line_end = line_start + len(lines) - 1
     return line_start, line_end
+
+
+@cache
+def _macro_call_pattern(name: str) -> re.Pattern[str]:
+    return re.compile(r"(?:@|\{\{|\{%)\s*" + re.escape(name) + r"\b")
+
+
+def macro_call_lines(text: str, name: str) -> list[int]:
+    pattern = _macro_call_pattern(name)
+    return [index for index, line in enumerate(text.splitlines(), 1) if pattern.search(line)]
+
+
+def query_name_for_line(spans: list[tuple[str, int, int]], line: int) -> str | None:
+    matches = [(name, start, end) for name, start, end in spans if start <= line <= end]
+    chosen: str | None = None
+    if matches:
+        matches.sort(key=lambda item: (item[2] - item[1], -item[1]))
+        chosen = matches[0][0]
+    return chosen
 
 
 def macro_locations(context: Context) -> dict[str, MacroLocation]:

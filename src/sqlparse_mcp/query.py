@@ -1,4 +1,3 @@
-import re
 import sqlite3
 from typing import TypedDict
 
@@ -134,12 +133,15 @@ ORDER BY tests.line_start, tests.name
 
 _MACRO_MODELS_SQL = """
 SELECT
-    models.qualified_name
+    models.qualified_name,
+    queries.name AS query_name
 FROM model_macros
 INNER JOIN models
     ON models.id = model_macros.model_id
+INNER JOIN queries
+    ON queries.id = model_macros.query_id
 WHERE model_macros.macro_name = ?
-ORDER BY models.qualified_name
+ORDER BY models.qualified_name, queries.name
 """
 
 _AUDIT_MODELS_SQL = """
@@ -159,7 +161,10 @@ INNER JOIN macros
     ON macros.name = model_macros.macro_name
 INNER JOIN models
     ON models.id = model_macros.model_id
+INNER JOIN queries
+    ON queries.id = model_macros.query_id
 WHERE models.qualified_name = ?
+  AND queries.name = ?
 ORDER BY macros.name
 """
 
@@ -190,15 +195,11 @@ def _relative_query(model_name: str, query_name: str | None) -> str:
     return relative
 
 
-def _called_macros(text: str, names: list[str]) -> list[str]:
+def _query_macros(db: ProjectDB, model_name: str, query_name: str) -> list[str]:
     return [
-        name for name in names if re.search(r"(?:@|\{\{|\{%)\s*" + re.escape(name) + r"\b", text)
+        str(row["name"])
+        for row in db.connection.execute(_QUERY_MACROS_SQL, (model_name, query_name))
     ]
-
-
-def _query_macros(db: ProjectDB, model_name: str, text: str) -> list[str]:
-    names = [str(row["name"]) for row in db.connection.execute(_QUERY_MACROS_SQL, (model_name,))]
-    return _called_macros(text, names)
 
 
 def _output_label(
@@ -325,7 +326,6 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                         end = int(query_row["line_end"])
                         text = (db.root / path).read_text(encoding="utf-8")
                         query_lines = text.splitlines()
-                        source = "\n".join(query_lines[start - 1 : end])
                         sql = _rendered_sql(db, model_name, relative) if render else None
                         if not render or sql is not None:
                             result = _format_query(
@@ -333,7 +333,7 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                                 query_lines,
                                 start,
                                 end,
-                                _query_macros(db, model_name, source),
+                                _query_macros(db, model_name, relative),
                                 sql,
                             )
     return result
@@ -505,12 +505,19 @@ def _matching_spans(spans: list[_LineSpan], start: int, end: int) -> list[_LineS
 
 
 def _referenced_models(db: ProjectDB, kind: str, name: str) -> list[str]:
-    sql = _AUDIT_MODELS_SQL if kind == "audit" else _MACRO_MODELS_SQL
     catalog = default_catalog(db)
-    return [
-        omit_default_catalog(str(row["qualified_name"]), catalog)
-        for row in db.connection.execute(sql, (name,))
-    ]
+    labels: list[str] = []
+    if kind == "audit":
+        labels = [
+            omit_default_catalog(str(row["qualified_name"]), catalog)
+            for row in db.connection.execute(_AUDIT_MODELS_SQL, (name,))
+        ]
+    else:
+        labels = [
+            f"{omit_default_catalog(str(row['qualified_name']), catalog)}/{row['query_name']}"
+            for row in db.connection.execute(_MACRO_MODELS_SQL, (name,))
+        ]
+    return labels
 
 
 def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
@@ -521,8 +528,7 @@ def _render_span(db: ProjectDB, lines: list[str], span: _LineSpan) -> str:
     if span["kind"] == "query":
         shown = _shown_query_name(span["query_name"], span["display_name"])
         detail = f"{detail}\nQuery: {shown}"
-        source = "\n".join(lines[span["start"] - 1 : span["end"]])
-        macros = _query_macros(db, span["model_name"], source)
+        macros = _query_macros(db, span["model_name"], span["query_name"])
     elif span["kind"] == "config":
         detail = f"{detail}\nQuery: {_CONFIG_QUERY}"
     elif span["kind"] == "audit":

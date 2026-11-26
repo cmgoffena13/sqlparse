@@ -76,7 +76,10 @@ class ModelSnapshot(TypedDict):
 class QuerySnapshot(TypedDict):
     id: int
     model_id: int
+    name: str
     qualified_name: str
+    line_start: int | None
+    line_end: int | None
     snapshot_hash: str
     seen: bool
 
@@ -97,6 +100,7 @@ class MacroSnapshot(TypedDict):
 class ModelMacroSnapshot(TypedDict):
     macro_name: str
     model_id: int
+    query_id: int
     seen: bool
 
 
@@ -335,7 +339,10 @@ class ProjectDB:
 
     def get_queries_snapshot(self) -> dict[str, QuerySnapshot]:
         cursor = self.connection.execute(
-            "SELECT id, model_id, name, qualified_name, snapshot_hash FROM queries"
+            """
+            SELECT id, model_id, name, qualified_name, line_start, line_end, snapshot_hash
+            FROM queries
+            """
         )
         return {f"{row['model_id']}:{row['name']}": self._query_snapshot(row) for row in cursor}
 
@@ -381,19 +388,26 @@ class ProjectDB:
         self.delete_ids("macros", macro_ids)
 
     def get_model_macros_snapshot(self) -> dict[str, ModelMacroSnapshot]:
-        cursor = self.connection.execute("SELECT macro_name, model_id FROM model_macros")
+        cursor = self.connection.execute("SELECT macro_name, model_id, query_id FROM model_macros")
         return {
-            f"{row['macro_name']}:{row['model_id']}": self._model_macro_snapshot(row)
+            f"{row['macro_name']}:{row['model_id']}:{row['query_id']}": self._model_macro_snapshot(
+                row
+            )
             for row in cursor
         }
 
     def delete_model_macros(self, model_macros: dict[str, ModelMacroSnapshot]) -> None:
         rows = [
-            (row["macro_name"], row["model_id"]) for row in model_macros.values() if not row["seen"]
+            (row["macro_name"], row["model_id"], row["query_id"])
+            for row in model_macros.values()
+            if not row["seen"]
         ]
         with self.connection:
             self.connection.executemany(
-                "DELETE FROM model_macros WHERE macro_name = ? AND model_id = ?",
+                """
+                DELETE FROM model_macros
+                WHERE macro_name = ? AND model_id = ? AND query_id = ?
+                """,
                 rows,
             )
 
@@ -517,10 +531,15 @@ class ProjectDB:
         }
 
     def _query_snapshot(self, row: sqlite3.Row) -> QuerySnapshot:
+        line_start = row["line_start"]
+        line_end = row["line_end"]
         return {
             "id": int(row["id"]),
             "model_id": int(row["model_id"]),
+            "name": str(row["name"]),
             "qualified_name": str(row["qualified_name"]),
+            "line_start": int(line_start) if line_start is not None else None,
+            "line_end": int(line_end) if line_end is not None else None,
             "snapshot_hash": str(row["snapshot_hash"]),
             "seen": False,
         }
@@ -544,6 +563,7 @@ class ProjectDB:
         return {
             "macro_name": str(row["macro_name"]),
             "model_id": int(row["model_id"]),
+            "query_id": int(row["query_id"]),
             "seen": False,
         }
 
@@ -662,16 +682,6 @@ class ProjectDB:
             )
             self.connection.executemany(
                 """
-                INSERT OR IGNORE INTO model_macros (
-                    macro_name, model_id
-                ) VALUES (
-                    :macro_name, :model_id
-                )
-                """,
-                batches["model_macros"],
-            )
-            self.connection.executemany(
-                """
                 INSERT OR REPLACE INTO audits (
                     id, file_id, name, line_start, line_end, snapshot_hash
                 ) VALUES (
@@ -707,6 +717,16 @@ class ProjectDB:
                 )
                 """,
                 batches["queries"],
+            )
+            self.connection.executemany(
+                """
+                INSERT OR IGNORE INTO model_macros (
+                    macro_name, model_id, query_id
+                ) VALUES (
+                    :macro_name, :model_id, :query_id
+                )
+                """,
+                batches["model_macros"],
             )
             self.connection.executemany(
                 """

@@ -400,7 +400,7 @@ def test_span_at_lines_returns_a_macro() -> None:
         "\n"
         "## Models\n"
         "\n"
-        "  • sushi.customers\n"
+        "  • sushi.customers/$\n"
     )
     assert python == (
         "Macro: identity\n"

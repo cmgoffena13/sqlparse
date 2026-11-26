@@ -18,9 +18,9 @@ _MACRO_WITH_SITES = (
     "L2 |   {{ column }} / 100\n"
     "L3 | {% endmacro %}\n"
     "\n"
-    "## Models\n"
+    "## Model Queries\n"
     "\n"
-    "  • sushi.customers\n"
+    "  • sushi.customers/$\n"
 )
 
 _UNUSED_MACRO = (

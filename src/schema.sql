@@ -83,13 +83,6 @@ CREATE TABLE IF NOT EXISTS macros (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS macros_name_index ON macros (file_id, name);
 
-CREATE TABLE IF NOT EXISTS model_macros (
-    macro_name          TEXT NOT NULL REFERENCES macros(name),
-    model_id            INTEGER NOT NULL REFERENCES models(id),
-    PRIMARY KEY (macro_name, model_id)
-);
-CREATE INDEX IF NOT EXISTS model_macros_model_id_index ON model_macros (model_id, macro_name);
-
 CREATE TABLE IF NOT EXISTS audits (
     id                  INTEGER NOT NULL PRIMARY KEY,
     file_id             INTEGER NOT NULL REFERENCES files(id),
@@ -130,6 +123,15 @@ CREATE TABLE IF NOT EXISTS queries (
     line_count          INTEGER
 );
 CREATE UNIQUE INDEX IF NOT EXISTS queries_model_id_name_index ON queries (model_id, name);
+
+CREATE TABLE IF NOT EXISTS model_macros (
+    macro_name          TEXT NOT NULL REFERENCES macros(name),
+    model_id            INTEGER NOT NULL REFERENCES models(id),
+    query_id            INTEGER NOT NULL REFERENCES queries(id),
+    PRIMARY KEY (macro_name, model_id, query_id)
+);
+CREATE INDEX IF NOT EXISTS model_macros_model_id_index ON model_macros (model_id, macro_name);
+CREATE INDEX IF NOT EXISTS model_macros_query_id_index ON model_macros (query_id, macro_name);
 
 CREATE TABLE IF NOT EXISTS columns (
     id                  INTEGER NOT NULL PRIMARY KEY,

@@ -317,8 +317,8 @@ def test_processor_indexes_files_and_directories() -> None:
             )
         }
         first_model_macros = {
-            (str(row["macro_name"]), int(row["model_id"]))
-            for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+            (str(row["macro_name"]), int(row["model_id"]), int(row["query_id"]))
+            for row in db.fetch("SELECT macro_name, model_id, query_id FROM model_macros")
         }
         first_audits = {
             str(row["name"]): dict(row)
@@ -410,8 +410,8 @@ def test_processor_indexes_files_and_directories() -> None:
             )
         }
         second_model_macros = {
-            (str(row["macro_name"]), int(row["model_id"]))
-            for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+            (str(row["macro_name"]), int(row["model_id"]), int(row["query_id"]))
+            for row in db.fetch("SELECT macro_name, model_id, query_id FROM model_macros")
         }
         second_audits = {
             str(row["name"]): dict(row)
@@ -706,7 +706,13 @@ def test_processor_indexes_files_and_directories() -> None:
     assert first_macros["identity"]["snapshot_hash"]
     assert "star" not in first_macros
     assert second_macros == first_macros
-    assert first_model_macros == {("cents_to_dollars", first_models[CUSTOMERS_FQN]["id"])}
+    assert first_model_macros == {
+        (
+            "cents_to_dollars",
+            first_models[CUSTOMERS_FQN]["id"],
+            customers_root["id"],
+        )
+    }
     assert second_model_macros == first_model_macros
     assert set(first_audits) == {"not_null_customer_id"}
     assert first_audits["not_null_customer_id"]["file_id"] == audit_file["id"]
@@ -1023,8 +1029,8 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         }
         before_macros = {str(row["name"]) for row in db.fetch("SELECT name FROM macros")}
         before_model_macros = {
-            (str(row["macro_name"]), int(row["model_id"]))
-            for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+            (str(row["macro_name"]), int(row["model_id"]), int(row["query_id"]))
+            for row in db.fetch("SELECT macro_name, model_id, query_id FROM model_macros")
         }
         before_model_audits = {
             (str(row["audit_name"]), int(row["model_id"]))
@@ -1049,8 +1055,8 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
         }
         after_macros = {str(row["name"]) for row in db.fetch("SELECT name FROM macros")}
         after_model_macros = {
-            (str(row["macro_name"]), int(row["model_id"]))
-            for row in db.fetch("SELECT macro_name, model_id FROM model_macros")
+            (str(row["macro_name"]), int(row["model_id"]), int(row["query_id"]))
+            for row in db.fetch("SELECT macro_name, model_id, query_id FROM model_macros")
         }
         after_model_audits = {
             (str(row["audit_name"]), int(row["model_id"]))
@@ -1081,7 +1087,10 @@ def test_processor_drops_models_when_their_files_disappear(tmp_path: Path) -> No
     assert f"{RAW_CUSTOMERS_FQN}/$/customer_id" in after_columns
     assert "cents_to_dollars" in before_macros
     assert "cents_to_dollars" not in after_macros
-    assert ("cents_to_dollars", customers_model_id) in before_model_macros
+    assert any(
+        macro_name == "cents_to_dollars" and model_id == customers_model_id
+        for macro_name, model_id, _query_id in before_model_macros
+    )
     assert after_model_macros == set()
     assert ("not_null_customer_id", customers_model_id) in before_model_audits
     assert after_model_audits == set()

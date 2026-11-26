@@ -41,7 +41,7 @@ from src.parse.column_lineage import (
     final_query_name,
     model_query_name,
 )
-from src.parse.macro_utils import macro_locations
+from src.parse.macro_utils import macro_call_lines, macro_locations, query_name_for_line
 from src.parse.model_utils import (
     model_config_lines,
     model_grain,
@@ -118,7 +118,6 @@ class SQLMeshParser:
             self._query_ids[prior_query["qualified_name"]] = prior_query["id"]
         for model in self.context.models.values():
             need_extract = self._sync_model(model, files_snapshot, models_snapshot)
-            self._sync_model_macros(model, models_snapshot, macros_snapshot, model_macros_snapshot)
             self._sync_model_audits(model, models_snapshot, audits_snapshot, model_audits_snapshot)
             if need_extract:
                 extract_models.append(model)
@@ -146,6 +145,20 @@ class SQLMeshParser:
                 columns_snapshot,
                 search_docs_snapshot,
                 bundle.columns,
+            )
+
+        for model in self.context.models.values():
+            model_key = model_qualified_name(model)
+            model_id = models_snapshot[model_key]["id"]
+            query_spans = self._model_query_spans(
+                model_id, bundles.get(model_key), queries_snapshot
+            )
+            self._sync_model_macros(
+                model,
+                models_snapshot,
+                macros_snapshot,
+                model_macros_snapshot,
+                query_spans,
             )
 
         self.db.delete_model_macros(model_macros_snapshot)
@@ -475,32 +488,71 @@ class SQLMeshParser:
             if prior["ref_column_model_id"] == model_id:
                 prior["seen"] = True
 
+    def _model_query_spans(
+        self,
+        model_id: int,
+        bundle: ModelExtractBundle | None,
+        queries_snapshot: dict[str, QuerySnapshot],
+    ) -> list[tuple[str, int, int]]:
+        spans: list[tuple[str, int, int]] = []
+        if bundle is not None:
+            for query in bundle.queries:
+                if query["line_start"] is not None and query["line_end"] is not None:
+                    spans.append((query["name"], query["line_start"], query["line_end"]))
+        else:
+            for query in queries_snapshot.values():
+                if (
+                    query["model_id"] == model_id
+                    and query["line_start"] is not None
+                    and query["line_end"] is not None
+                ):
+                    spans.append((query["name"], query["line_start"], query["line_end"]))
+        return spans
+
     def _sync_model_macros(
         self,
         model: Model,
         models_snapshot: dict[str, ModelSnapshot],
         macros_snapshot: dict[str, MacroSnapshot],
         model_macros_snapshot: dict[str, ModelMacroSnapshot],
+        query_spans: list[tuple[str, int, int]],
     ) -> None:
-        model_id = models_snapshot[model_qualified_name(model)]["id"]
+        model_name = model_qualified_name(model)
+        model_id = models_snapshot[model_name]["id"]
         macro_names = set(model.jinja_macros.root_macros)
         for name in model.python_env or {}:
             if name in macros_snapshot:
                 macro_names.add(name)
+        text = ""
+        path = model._path
+        if path is not None:
+            text = Path(str(path)).read_text(encoding="utf-8")
+        linked: set[tuple[str, int]] = set()
         for macro_name in macro_names:
-            key = f"{macro_name}:{model_id}"
+            for line in macro_call_lines(text, macro_name):
+                query_name = query_name_for_line(query_spans, line)
+                if query_name is not None:
+                    query_id = self._query_ids[model_query_name(model_name, query_name)]
+                    linked.add((macro_name, query_id))
+        for macro_name, query_id in linked:
+            key = f"{macro_name}:{model_id}:{query_id}"
             prior = model_macros_snapshot.get(key)
             if prior is None:
-                self._queue("model_macros", {"macro_name": macro_name, "model_id": model_id})
+                self._queue(
+                    "model_macros",
+                    {"macro_name": macro_name, "model_id": model_id, "query_id": query_id},
+                )
                 model_macros_snapshot[key] = {
                     "macro_name": macro_name,
                     "model_id": model_id,
+                    "query_id": query_id,
                     "seen": True,
                 }
                 continue
             model_macros_snapshot[key] = {
                 "macro_name": macro_name,
                 "model_id": model_id,
+                "query_id": query_id,
                 "seen": True,
             }
 
@@ -617,7 +669,10 @@ class SQLMeshParser:
             queries_snapshot[key] = {
                 "id": query_id,
                 "model_id": model_id,
+                "name": query["name"],
                 "qualified_name": qualified_name,
+                "line_start": line_start,
+                "line_end": line_end,
                 "snapshot_hash": digest,
                 "seen": True,
             }
