@@ -1,7 +1,7 @@
 import inspect
 import io
 
-from src.cli.progress import ProgressBar
+from src.cli.progress import ProgressBar, render_bar
 from src.parse.sqlmesh_parser import SQLMeshParser
 from src.processor import ProjectProcessor
 
@@ -18,6 +18,13 @@ def test_progress_bar_renders_oldschool_meter() -> None:
     assert "50%" in output
     assert "5/10" not in output
     assert output.endswith("\n")
+
+
+def test_render_bar_moves_with_small_percent_steps() -> None:
+    assert render_bar(0, 100, 10) == "          "
+    assert render_bar(1, 100, 10) == "▏         "
+    assert render_bar(5, 100, 10) != render_bar(1, 100, 10)
+    assert render_bar(100, 100, 10) == "██████████"
 
 
 def test_progress_bar_silent_when_disabled() -> None:
