@@ -44,6 +44,9 @@ def test_profile_indexes_and_prints_phase_timings(
     assert "Wall time:" in captured.out
     assert "parser.sync" in captured.out
     assert "parser._extract_models" in captured.out
+    assert "column_lineage.prepare_model_query" in captured.out
+    assert "column_lineage.extract_model_column_references" in captured.out
+    assert "model_utils.model_config_lines" in captured.out
     assert "ProjectProcessor.__init__" in captured.out
     assert "%wall" in captured.out
     assert out_path.is_file()

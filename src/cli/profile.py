@@ -52,7 +52,7 @@ def format_profile_report(
 
 def run_profile(root: Path, out: Path | None) -> int:
     from src.db import ProjectDB
-    from src.parse import sqlmesh_parser
+    from src.parse import column_lineage, sqlmesh_parser
     from src.processor import ProjectProcessor
 
     totals: dict[str, float] = {}
@@ -138,6 +138,83 @@ def run_profile(root: Path, out: Path | None) -> int:
             sqlmesh_parser,
             "extract_model_bundle",
             "column_lineage.extract_model_bundle",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            sqlmesh_parser,
+            "model_config_lines",
+            "model_utils.model_config_lines",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "prepare_model_query",
+            "column_lineage.prepare_model_query",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "_rendered_query_sql",
+            "column_lineage._rendered_query_sql",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "_qualify_query",
+            "column_lineage._qualify_query",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "_ast_missing_types",
+            "column_lineage._ast_missing_types",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "annotate_types",
+            "column_lineage.annotate_types",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "extract_model_queries",
+            "column_lineage.extract_model_queries",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "extract_model_columns",
+            "column_lineage.extract_model_columns",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "extract_model_column_references",
+            "column_lineage.extract_model_column_references",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "_emit_root_lineage_refs",
+            "column_lineage._emit_root_lineage_refs",
+            totals,
+            counts,
+        ),
+        _wrap_accumulate(
+            column_lineage,
+            "model_query_line_spans",
+            "query_spans.model_query_line_spans",
             totals,
             counts,
         ),
