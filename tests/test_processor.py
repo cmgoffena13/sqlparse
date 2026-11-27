@@ -82,9 +82,7 @@ def test_sync_flushes_every_batch_size(monkeypatch: pytest.MonkeyPatch) -> None:
         db.close()
 
 
-def test_full_sync_extracts_models_in_parallel(monkeypatch: pytest.MonkeyPatch) -> None:
-    from concurrent.futures import ThreadPoolExecutor
-
+def test_full_sync_extracts_each_model_once(monkeypatch: pytest.MonkeyPatch) -> None:
     from sqlmesh.core.model import Model
 
     from src.parse import column_lineage
@@ -97,23 +95,13 @@ def test_full_sync_extracts_models_in_parallel(monkeypatch: pytest.MonkeyPatch) 
         bundle_calls["count"] += 1
         return real_bundle(model)
 
-    submitted: list[int] = []
-
-    class TrackingExecutor(ThreadPoolExecutor):
-        def map(self, fn, *iterables, timeout=None, chunksize=1):
-            items = list(iterables[0])
-            submitted.append(len(items))
-            return super().map(fn, items, timeout=timeout, chunksize=chunksize)
-
     monkeypatch.setattr("src.parse.sqlmesh_parser.extract_model_bundle", tracking_bundle)
-    monkeypatch.setattr("src.parse.sqlmesh_parser.ThreadPoolExecutor", TrackingExecutor)
     db = ProjectDB(FIXTURE_PROJECT)
     processor = ProjectProcessor(db, FIXTURE_PROJECT)
     try:
         processor.process(full=True)
-        assert bundle_calls["count"] > 0
-        assert submitted
-        assert submitted[0] == bundle_calls["count"]
+        model_count = len(processor.parser.context.models)
+        assert bundle_calls["count"] == model_count
         assert db.fetch("SELECT COUNT(*) AS c FROM column_lineage")[0]["c"] > 0
     finally:
         processor.close()

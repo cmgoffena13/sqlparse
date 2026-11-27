@@ -59,6 +59,42 @@ def test_prepare_model_query_reuse_matches_direct_extracts() -> None:
     )
 
 
+def test_source_models_id_uses_qn_model_prefix() -> None:
+    from src.parse.sqlmesh_parser import resolve_source_models_id
+
+    mapping = {
+        "memory.sushi.customers": 1,
+        "memory.sushi.customer_orders": 2,
+        "memory.sushi": 3,
+    }
+    assert resolve_source_models_id("memory.sushi.customers/$/id", mapping, 0) == 1
+    assert resolve_source_models_id("memory.sushi.customer_orders/$cte/x", mapping, 0) == 2
+    assert resolve_source_models_id("memory.other/$/x", mapping, 9) == 9
+
+
+def test_column_lineage_source_models_id_matches_source_model() -> None:
+    db = ProjectDB(FIXTURE_PROJECT)
+    try:
+        ProjectProcessor(db, FIXTURE_PROJECT).process(full=True)
+        rows = db.fetch(
+            """
+            SELECT
+                source_models.qualified_name AS source_model,
+                column_lineage.source_column_qualified_name AS source_qn
+            FROM column_lineage
+            INNER JOIN models AS source_models
+                ON source_models.id = column_lineage.source_models_id
+            WHERE column_lineage.source_column_qualified_name LIKE 'memory.sushi.customers/%'
+            """
+        )
+    finally:
+        db.close()
+    assert rows
+    for row in rows:
+        assert str(row["source_model"]) == "memory.sushi.customers"
+        assert str(row["source_qn"]).startswith("memory.sushi.customers/")
+
+
 def test_processor_stores_models_read_count() -> None:
     db = ProjectDB(FIXTURE_PROJECT)
     try:

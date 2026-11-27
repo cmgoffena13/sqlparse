@@ -1,5 +1,3 @@
-import os
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sqlmesh.core.context import Context
@@ -61,6 +59,12 @@ from src.utils import snapshot_hash
 FLUSH_BATCH_SIZE = 1000
 
 
+def resolve_source_models_id(
+    source_qn: str, model_name_to_id: dict[str, int], default_id: int
+) -> int:
+    return model_name_to_id.get(source_qn.partition("/")[0], default_id)
+
+
 class SQLMeshParser:
     def __init__(self, db: ProjectDB, assigner: GlobalIDAssigner, root: Path) -> None:
         self.db = db
@@ -92,10 +96,7 @@ class SQLMeshParser:
         self.batches = self._new_batches()
 
     def _extract_models(self, models: list[Model]) -> dict[str, ModelExtractBundle]:
-        workers = min(32, os.cpu_count() or 4, max(len(models), 1))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            bundles = list(pool.map(extract_model_bundle, models))
-        return {bundle.model_name: bundle for bundle in bundles}
+        return {bundle.model_name: bundle for bundle in map(extract_model_bundle, models)}
 
     def sync(self, files_snapshot: dict[str, FileSnapshot]) -> int:
         projects_snapshot = self.db.get_projects_snapshot()
@@ -181,6 +182,11 @@ class SQLMeshParser:
 
         column_lineage_snapshot = self.db.get_column_lineage_snapshot()
         column_name_index = build_column_name_index(columns_snapshot)
+        model_name_to_id = {
+            model_qualified_name(synced): models_snapshot[model_qualified_name(synced)]["id"]
+            for synced in self.context.models.values()
+            if model_qualified_name(synced) in models_snapshot
+        }
         for model in self.context.models.values():
             if model_qualified_name(model) in lineage_refs:
                 self._sync_column_lineage(
@@ -190,6 +196,7 @@ class SQLMeshParser:
                     column_lineage_snapshot,
                     lineage_refs[model_qualified_name(model)],
                     column_name_index,
+                    model_name_to_id,
                 )
             else:
                 self._retain_model_lineage(
@@ -821,13 +828,9 @@ class SQLMeshParser:
         column_lineage_snapshot: dict[str, ColumnLineageSnapshot],
         references: list[ExtractedColumnReference],
         name_index: dict[str, dict[str, list[str]]],
+        model_name_to_id: dict[str, int],
     ) -> None:
         model_id = models_snapshot[model_qualified_name(model)]["id"]
-        model_name_to_id = {
-            model_qualified_name(synced): models_snapshot[model_qualified_name(synced)]["id"]
-            for synced in self.context.models.values()
-            if model_qualified_name(synced) in models_snapshot
-        }
         for reference in references:
             ref_query_name = reference["ref_column_query_name"]
             ref_qn = _stored_qualified_name(
@@ -851,13 +854,7 @@ class SQLMeshParser:
                 continue
             ref_column_id = columns_snapshot[ref_qn]["id"]
             source_column_id = columns_snapshot[source_qn]["id"]
-            source_models_id = model_id
-            matched_name = ""
-            for name, mid in model_name_to_id.items():
-                prefix = source_qn == name or source_qn.startswith((f"{name}/", f"{name}."))
-                if prefix and len(name) > len(matched_name):
-                    matched_name = name
-                    source_models_id = mid
+            source_models_id = resolve_source_models_id(source_qn, model_name_to_id, model_id)
             digest = snapshot_hash(
                 [
                     ref_column_id,

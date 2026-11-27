@@ -151,12 +151,13 @@ class ModelExtractBundle(BaseModel):
 
 def extract_model_bundle(model: Model) -> ModelExtractBundle:
     prepared = prepare_model_query(model)
+    scopes = list(traverse_scope(prepared.qualified)) if prepared.qualified is not None else []
     return ModelExtractBundle(
         model_name=prepared.model_name,
         prepared=prepared,
-        queries=extract_model_queries(model, prepared),
-        columns=extract_model_columns(model, prepared),
-        references=extract_model_column_references(model, prepared),
+        queries=extract_model_queries(model, prepared, scopes=scopes),
+        columns=extract_model_columns(model, prepared, scopes=scopes),
+        references=extract_model_column_references(model, prepared, scopes=scopes),
     )
 
 
@@ -295,9 +296,10 @@ def _columns_from_query(
     dialect: str,
     *,
     default_catalog: str | None,
+    scopes: list[Scope] | None = None,
 ) -> list[ExtractedColumn]:
     columns: list[ExtractedColumn] = []
-    for scope in traverse_scope(qualified):
+    for scope in scopes if scopes is not None else traverse_scope(qualified):
         if not (scope.is_cte or scope.is_root):
             continue
         parent = scope.expression.parent
@@ -410,7 +412,10 @@ def _rendered_query_sql(expression: exp.Query, dialect: str) -> dict[str, str]:
 
 
 def extract_model_queries(
-    model: Model, prepared: PreparedModelQuery | None = None
+    model: Model,
+    prepared: PreparedModelQuery | None = None,
+    *,
+    scopes: list[Scope] | None = None,
 ) -> list[ExtractedQuery]:
     prepared_query = prepared if prepared is not None else prepare_model_query(model)
     queries: list[ExtractedQuery] = []
@@ -418,7 +423,7 @@ def extract_model_queries(
         external = prepared_query.kind == "EXTERNAL"
         seen: set[str] = set()
         source_spans = model_query_line_spans(prepared_query.model, prepared_query.dialect)
-        scopes = list(traverse_scope(prepared_query.qualified))
+        scopes = scopes if scopes is not None else list(traverse_scope(prepared_query.qualified))
         scope_by_expression = {id(scope.expression): scope for scope in scopes}
         for scope in scopes:
             parent = scope.expression.parent
@@ -483,7 +488,10 @@ def extract_model_queries(
 
 
 def extract_model_columns(
-    model: Model, prepared: PreparedModelQuery | None = None
+    model: Model,
+    prepared: PreparedModelQuery | None = None,
+    *,
+    scopes: list[Scope] | None = None,
 ) -> list[ExtractedColumn]:
     prepared_query = prepared if prepared is not None else prepare_model_query(model)
     return (
@@ -494,6 +502,7 @@ def extract_model_columns(
             prepared_query.qualified,
             prepared_query.dialect,
             default_catalog=prepared_query.default_catalog,
+            scopes=scopes,
         )
     )
 
@@ -890,8 +899,10 @@ def _emit_root_lineage_refs(
     dialect: str,
     default_catalog: str | None,
     schema: dict | None,
+    scopes: list[Scope] | None = None,
 ) -> None:
-    root_scope = next(scope for scope in traverse_scope(query) if scope.is_root)
+    walked = scopes if scopes is not None else list(traverse_scope(query))
+    root_scope = next(scope for scope in walked if scope.is_root)
     query_name = final_query_name(model_name)
     nodes = lineage(
         None,
@@ -938,7 +949,10 @@ def _emit_root_lineage_refs(
 
 
 def extract_model_column_references(
-    model: Model, prepared: PreparedModelQuery | None = None
+    model: Model,
+    prepared: PreparedModelQuery | None = None,
+    *,
+    scopes: list[Scope] | None = None,
 ) -> list[ExtractedColumnReference]:
     prepared_query = prepared if prepared is not None else prepare_model_query(model)
     refs: list[ExtractedColumnReference] = []
@@ -946,7 +960,8 @@ def extract_model_column_references(
         model_name = prepared_query.model_name
         dialect = prepared_query.dialect
         default_catalog = prepared_query.default_catalog
-        for scope in traverse_scope(prepared_query.qualified):
+        walked = scopes if scopes is not None else list(traverse_scope(prepared_query.qualified))
+        for scope in walked:
             if not (scope.is_cte or scope.is_root):
                 continue
             parent = scope.expression.parent
@@ -979,5 +994,6 @@ def extract_model_column_references(
             dialect=dialect,
             default_catalog=default_catalog,
             schema=prepared_query.mapping_schema,
+            scopes=walked,
         )
     return refs
