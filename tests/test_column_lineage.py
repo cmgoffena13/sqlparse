@@ -1,6 +1,7 @@
 import shutil
 from pathlib import Path
 
+import pytest
 from sqlmesh.core.context import Context
 
 from src.db import ProjectDB
@@ -57,6 +58,37 @@ def test_prepare_model_query_reuse_matches_direct_extracts() -> None:
     assert extract_model_column_references(model, prepared) == extract_model_column_references(
         model
     )
+
+
+def test_prepare_skips_annotate_when_qualify_already_typed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.parse import column_lineage
+
+    install_parse_only_engine_support()
+    context = Context(paths=FIXTURE_PROJECT, load=False)
+    context.load(update_schemas=True)
+    customers = next(model for model in context.models.values() if model.name == "sushi.customers")
+    orders = next(model for model in context.models.values() if model.name == "sushi.orders")
+    calls = {"count": 0}
+    real_annotate = column_lineage.annotate_types
+
+    def tracking_annotate(*args, **kwargs):
+        calls["count"] += 1
+        return real_annotate(*args, **kwargs)
+
+    monkeypatch.setattr(column_lineage, "annotate_types", tracking_annotate)
+    typed = prepare_model_query(customers)
+    skipped = calls["count"]
+    needs_annotate = prepare_model_query(orders)
+    assert skipped == 0
+    assert calls["count"] == 1
+    assert all(
+        column["data_type"]
+        for column in extract_model_columns(customers, typed)
+        if column["is_select"]
+    )
+    assert all(column["data_type"] for column in extract_model_columns(orders, needs_annotate))
 
 
 def test_source_models_id_uses_qn_model_prefix() -> None:

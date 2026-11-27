@@ -42,6 +42,15 @@ def _qualify_query(query: exp.Query, dialect: str, schema: dict | None) -> exp.Q
     )
 
 
+def _ast_missing_types(query: exp.Query) -> bool:
+    return any(column.type is None for column in query.find_all(exp.Column)) or any(
+        expression.type is None
+        for scope in traverse_scope(query)
+        if scope.is_cte or scope.is_root
+        for expression in _select_projections(cast(exp.Expression, scope.expression))
+    )
+
+
 def prepare_model_query(model: Model) -> PreparedModelQuery:
     rendered: exp.Query | None
     try:
@@ -54,9 +63,10 @@ def prepare_model_query(model: Model) -> PreparedModelQuery:
     qualified: exp.Query | None = None
     if rendered is not None:
         external = model.kind.name == "EXTERNAL"
-        sql_by_name = {} if external else _rendered_query_sql(rendered.copy(), dialect)
+        sql_by_name = {} if external else _rendered_query_sql(rendered, dialect)
         qualified = _qualify_query(rendered, dialect, mapping_schema)
-        annotate_types(qualified, schema=mapping_schema, dialect=model.dialect)
+        if _ast_missing_types(qualified):
+            annotate_types(qualified, schema=mapping_schema, dialect=model.dialect)
     return PreparedModelQuery(
         model=model,
         model_name=model_qualified_name(model),
@@ -404,8 +414,9 @@ def _rendered_query_sql(expression: exp.Query, dialect: str) -> dict[str, str]:
             name = parent.alias_or_name
         name = stored_query_name(name)
         if included and name not in sql_by_name:
-            rendered = scope.expression.copy()
+            rendered = scope.expression
             if scope.is_root:
+                rendered = scope.expression.copy()
                 rendered.set("with_", None)
             sql_by_name[name] = rendered.sql(dialect=dialect, pretty=True)
     return sql_by_name
