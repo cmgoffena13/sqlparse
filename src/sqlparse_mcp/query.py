@@ -1,6 +1,8 @@
 import sqlite3
 from typing import TypedDict
 
+from sqlglot import parse_one
+
 from src.db import ProjectDB
 from src.parse.column_lineage import FINAL_QUERY, stored_query_name
 from src.sqlparse_mcp.column_relations import _resolve_query_name
@@ -217,10 +219,14 @@ def _output_label(
     return f"{name:<{width}} {data_type}{constraint}"
 
 
-def _rendered_sql(db: ProjectDB, model_name: str, query_name: str) -> str | None:
+def _pretty_sql(sql: str, dialect: str) -> str:
+    return parse_one(sql, read=dialect).sql(dialect=dialect, pretty=True)
+
+
+def _rendered_sql(db: ProjectDB, model_name: str, query_name: str, dialect: str) -> str | None:
     row = db.connection.execute(_RENDERED_SQL, (model_name, query_name)).fetchone()
     stored = None if row is None else row["rendered_sql"]
-    return None if stored is None else str(stored)
+    return None if stored is None else _pretty_sql(str(stored), dialect)
 
 
 def _select_columns(
@@ -326,7 +332,11 @@ def get_query(db: ProjectDB, target: str, query_name: str | None, render: bool =
                         end = int(query_row["line_end"])
                         text = (db.root / path).read_text(encoding="utf-8")
                         query_lines = text.splitlines()
-                        sql = _rendered_sql(db, model_name, relative) if render else None
+                        sql = (
+                            _rendered_sql(db, model_name, relative, str(model_row["dialect"]))
+                            if render
+                            else None
+                        )
                         if not render or sql is not None:
                             result = _format_query(
                                 header,

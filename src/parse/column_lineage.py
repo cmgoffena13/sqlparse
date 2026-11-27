@@ -418,7 +418,7 @@ def _rendered_query_sql(expression: exp.Query, dialect: str) -> dict[str, str]:
             if scope.is_root:
                 rendered = scope.expression.copy()
                 rendered.set("with_", None)
-            sql_by_name[name] = rendered.sql(dialect=dialect, pretty=True)
+            sql_by_name[name] = rendered.sql(dialect=dialect, pretty=False)
     return sql_by_name
 
 

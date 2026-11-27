@@ -1,5 +1,4 @@
 import re
-from pathlib import Path
 
 from sqlglot import exp
 from sqlglot.errors import ParseError
@@ -7,6 +6,8 @@ from sqlglot.optimizer.scope import traverse_scope
 from sqlmesh.core.dialect import MacroFunc
 from sqlmesh.core.dialect import parse as parse_sql
 from sqlmesh.core.model import Model
+
+from src.parse.model_utils import read_model_file
 
 _FINAL = "$"
 
@@ -107,7 +108,7 @@ def source_query_spans(text: str, dialect: str) -> dict[str, tuple[int, int]]:
 def model_query_line_spans(model: Model, dialect: str) -> dict[str, tuple[int, int]]:
     spans: dict[str, tuple[int, int]] = {}
     path = model._path
-    text = "" if path is None else Path(str(path)).read_text(encoding="utf-8")
+    text = "" if path is None else read_model_file(str(path))
     lines = text.splitlines()
     query = getattr(model, "query", None)
     if isinstance(query, exp.Expression) and lines:

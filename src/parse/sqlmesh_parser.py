@@ -79,6 +79,10 @@ class SQLMeshParser:
         self._gateway_ids: dict[tuple[str, str], int] = {}
         self._project_defaults: dict[str, str] = {}
         self._query_ids: dict[str, int] = {}
+        self._config_roots = [
+            (Path(config_path).resolve(), config.project or Path(config_path).name)
+            for config_path, config in self.context.configs.items()
+        ]
 
     def _new_batches(self) -> dict[str, list[dict[str, object]]]:
         return {table: [] for table in BATCH_TABLES}
@@ -375,9 +379,7 @@ class SQLMeshParser:
         if not project_name:
             model_path = Path(str(model._path)).resolve()
             project_name = next(
-                config.project or Path(config_path).name
-                for config_path, config in self.context.configs.items()
-                if model_path.is_relative_to(Path(config_path).resolve())
+                name for root, name in self._config_roots if model_path.is_relative_to(root)
             )
         return project_name
 

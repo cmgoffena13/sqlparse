@@ -51,11 +51,15 @@ def test_processor_stores_is_blueprint(tmp_path: Path) -> None:
 def test_model_config_lines_parses_with_the_model_dialect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from src.parse.model_utils import clear_model_file_caches
+
     install_parse_only_engine_support()
+    clear_model_file_caches()
     context = Context(paths=BIGQUERY_FIXTURE, load=False)
     context.load(update_schemas=True)
     model = next(model for model in context.models.values() if model.name.endswith("subscriptions"))
     seen: dict[str, str | None] = {}
+    parse_calls = {"count": 0}
 
     def tracking_parse(
         text: str,
@@ -64,18 +68,24 @@ def test_model_config_lines_parses_with_the_model_dialect(
     ) -> list:
         from sqlmesh.core.dialect import parse as real_parse
 
+        parse_calls["count"] += 1
         seen["default_dialect"] = default_dialect
         return real_parse(text, default_dialect=default_dialect, match_dialect=match_dialect)
 
     monkeypatch.setattr("src.parse.model_utils.sqlmesh_parse", tracking_parse)
     start_line, end_line = model_config_lines(model)
+    assert model_config_lines(model) == (start_line, end_line)
     assert seen["default_dialect"] == "bigquery"
     assert start_line == 1
     assert end_line == 5
+    assert parse_calls["count"] == 1
 
 
 def test_model_config_lines_matches_sqlmesh_external_yaml_names() -> None:
+    from src.parse.model_utils import clear_model_file_caches
+
     install_parse_only_engine_support()
+    clear_model_file_caches()
     context = Context(paths=QUOTED_EXTERNAL_FIXTURE, load=False)
     context.load(update_schemas=True)
     by_name = {

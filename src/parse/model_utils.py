@@ -1,4 +1,5 @@
 import ast
+from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
@@ -36,40 +37,68 @@ def model_grain(model: Model) -> str | None:
     return ", ".join(names) if names else None
 
 
+@lru_cache(maxsize=4096)
+def read_model_file(path: str) -> str:
+    return Path(path).read_text(encoding="utf-8")
+
+
+@lru_cache(maxsize=4096)
+def _sql_model_config_span(path: str, dialect: str) -> tuple[int, int]:
+    text = read_model_file(path)
+    model_sql = next(
+        expression.meta["sql"]
+        for expression in sqlmesh_parse(text, default_dialect=dialect)
+        if isinstance(expression, ModelExpr)
+    )
+    offset = text.find(model_sql)
+    start_line = text.count("\n", 0, offset) + 1
+    return start_line, start_line + model_sql.count("\n")
+
+
+@lru_cache(maxsize=4096)
+def _python_model_config_span(path: str, entrypoint: str) -> tuple[int, int]:
+    tree = ast.parse(read_model_file(path))
+    decorator = next(
+        deco
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == entrypoint
+        for deco in node.decorator_list
+        if isinstance(deco, ast.Call)
+    )
+    return decorator.lineno, cast(int, decorator.end_lineno)
+
+
+@lru_cache(maxsize=4096)
+def _external_model_config_span(path: str, model_name: str) -> tuple[int, int]:
+    text = read_model_file(path)
+    lines = text.splitlines()
+    row = next(entry for entry in YAML(typ="rt").load(text) if entry["name"] == model_name)
+    start_line = row.lc.line + 1
+    end_line = start_line
+    for i, line in enumerate(lines[start_line:], start=start_line + 1):
+        if line.startswith("- "):
+            break
+        if line.strip():
+            end_line = i
+    return start_line, end_line
+
+
+def clear_model_file_caches() -> None:
+    read_model_file.cache_clear()
+    _sql_model_config_span.cache_clear()
+    _python_model_config_span.cache_clear()
+    _external_model_config_span.cache_clear()
+
+
 def model_config_lines(model: Model) -> tuple[int, int]:
-    text = Path(str(model._path)).read_text(encoding="utf-8")
+    path = str(model._path)
     source_type = model.source_type
     start_line = 0
     end_line = 0
     if source_type in ("sql", "seed"):
-        model_sql = next(
-            expression.meta["sql"]
-            for expression in sqlmesh_parse(text, default_dialect=model.dialect)
-            if isinstance(expression, ModelExpr)
-        )
-        offset = text.find(model_sql)
-        start_line = text.count("\n", 0, offset) + 1
-        end_line = start_line + model_sql.count("\n")
+        start_line, end_line = _sql_model_config_span(path, str(model.dialect))
     if source_type == "python" and isinstance(model, PythonModel):
-        tree = ast.parse(text)
-        decorator = next(
-            deco
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == model.entrypoint
-            for deco in node.decorator_list
-            if isinstance(deco, ast.Call)
-        )
-        start_line = decorator.lineno
-        end_line = cast(int, decorator.end_lineno)
+        start_line, end_line = _python_model_config_span(path, model.entrypoint)
     if source_type == "external":
-        lines = text.splitlines()
-        row = next(entry for entry in YAML(typ="rt").load(text) if entry["name"] == model.name)
-        start_line = row.lc.line + 1
-        end_line = start_line
-        for i, line in enumerate(lines[start_line:], start=start_line + 1):
-            if line.startswith("- "):
-                break
-            if line.strip():
-                end_line = i
+        start_line, end_line = _external_model_config_span(path, model.name)
     return start_line, end_line
