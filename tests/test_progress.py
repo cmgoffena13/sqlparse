@@ -10,6 +10,7 @@ def test_progress_bar_renders_oldschool_meter() -> None:
     stream = io.StringIO()
     bar = ProgressBar(10, label="Indexing", width=10, stream=stream, enabled=True)
     bar.update(0)
+    assert "0%" in stream.getvalue()
     bar.update(5)
     bar.finish()
     output = stream.getvalue()

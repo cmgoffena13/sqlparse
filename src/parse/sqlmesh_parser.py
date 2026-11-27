@@ -109,6 +109,7 @@ class SQLMeshParser:
             label="Indexing",
             enabled=False if not show_progress else None,
         )
+        progress.update(0)
         for index, model in enumerate(models, start=1):
             bundle = extract_model_bundle(model)
             bundles[bundle.model_name] = bundle
