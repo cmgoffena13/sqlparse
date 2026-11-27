@@ -1,5 +1,4 @@
 import ast
-from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
@@ -37,12 +36,10 @@ def model_grain(model: Model) -> str | None:
     return ", ".join(names) if names else None
 
 
-@lru_cache(maxsize=4096)
 def read_model_file(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-@lru_cache(maxsize=4096)
 def _sql_model_config_span(path: str, dialect: str) -> tuple[int, int]:
     text = read_model_file(path)
     model_sql = next(
@@ -55,7 +52,6 @@ def _sql_model_config_span(path: str, dialect: str) -> tuple[int, int]:
     return start_line, start_line + model_sql.count("\n")
 
 
-@lru_cache(maxsize=4096)
 def _python_model_config_span(path: str, entrypoint: str) -> tuple[int, int]:
     tree = ast.parse(read_model_file(path))
     decorator = next(
@@ -68,7 +64,6 @@ def _python_model_config_span(path: str, entrypoint: str) -> tuple[int, int]:
     return decorator.lineno, cast(int, decorator.end_lineno)
 
 
-@lru_cache(maxsize=4096)
 def _external_model_config_span(path: str, model_name: str) -> tuple[int, int]:
     text = read_model_file(path)
     lines = text.splitlines()
@@ -81,13 +76,6 @@ def _external_model_config_span(path: str, model_name: str) -> tuple[int, int]:
         if line.strip():
             end_line = i
     return start_line, end_line
-
-
-def clear_model_file_caches() -> None:
-    read_model_file.cache_clear()
-    _sql_model_config_span.cache_clear()
-    _python_model_config_span.cache_clear()
-    _external_model_config_span.cache_clear()
 
 
 def model_config_lines(model: Model) -> tuple[int, int]:

@@ -48,13 +48,20 @@ def test_processor_stores_is_blueprint(tmp_path: Path) -> None:
     assert rows["memory.sushi.customers"] is False
 
 
+def test_read_model_file_reflects_disk_changes(tmp_path: Path) -> None:
+    from src.parse.model_utils import read_model_file
+
+    path = tmp_path / "model.sql"
+    path.write_text("first\n", encoding="utf-8")
+    assert read_model_file(str(path)) == "first\n"
+    path.write_text("second\n", encoding="utf-8")
+    assert read_model_file(str(path)) == "second\n"
+
+
 def test_model_config_lines_parses_with_the_model_dialect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.parse.model_utils import clear_model_file_caches
-
     install_parse_only_engine_support()
-    clear_model_file_caches()
     context = Context(paths=BIGQUERY_FIXTURE, load=False)
     context.load(update_schemas=True)
     model = next(model for model in context.models.values() if model.name.endswith("subscriptions"))
@@ -78,14 +85,11 @@ def test_model_config_lines_parses_with_the_model_dialect(
     assert seen["default_dialect"] == "bigquery"
     assert start_line == 1
     assert end_line == 5
-    assert parse_calls["count"] == 1
+    assert parse_calls["count"] == 2
 
 
 def test_model_config_lines_matches_sqlmesh_external_yaml_names() -> None:
-    from src.parse.model_utils import clear_model_file_caches
-
     install_parse_only_engine_support()
-    clear_model_file_caches()
     context = Context(paths=QUOTED_EXTERNAL_FIXTURE, load=False)
     context.load(update_schemas=True)
     by_name = {
