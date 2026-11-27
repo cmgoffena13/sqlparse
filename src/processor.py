@@ -281,7 +281,7 @@ class ProjectProcessor:
         }
         models_indexed = 0
         if reloaded or full or self.files_indexed or deleted:
-            models_indexed = self.parser.sync(self.files_snapshot)
+            models_indexed = self.parser.sync(self.files_snapshot, show_progress=full)
 
         duration_ms = round((time.perf_counter() - start_time) * 1000)
         indexed = (

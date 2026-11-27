@@ -4,6 +4,7 @@ from sqlmesh.core.context import Context
 from sqlmesh.core.model import Model
 
 from src.assigner import GlobalIDAssigner
+from src.cli.progress import ProgressBar
 from src.db import (
     BATCH_TABLES,
     AuditSnapshot,
@@ -99,10 +100,23 @@ class SQLMeshParser:
         self.db.bulk_insert(self.batches)
         self.batches = self._new_batches()
 
-    def _extract_models(self, models: list[Model]) -> dict[str, ModelExtractBundle]:
-        return {bundle.model_name: bundle for bundle in map(extract_model_bundle, models)}
+    def _extract_models(
+        self, models: list[Model], *, show_progress: bool = False
+    ) -> dict[str, ModelExtractBundle]:
+        bundles: dict[str, ModelExtractBundle] = {}
+        progress = ProgressBar(
+            len(models),
+            label="Indexing",
+            enabled=False if not show_progress else None,
+        )
+        for index, model in enumerate(models, start=1):
+            bundle = extract_model_bundle(model)
+            bundles[bundle.model_name] = bundle
+            progress.update(index)
+        progress.finish()
+        return bundles
 
-    def sync(self, files_snapshot: dict[str, FileSnapshot]) -> int:
+    def sync(self, files_snapshot: dict[str, FileSnapshot], *, show_progress: bool = False) -> int:
         projects_snapshot = self.db.get_projects_snapshot()
         gateways_snapshot = self.db.get_project_gateways_snapshot()
         self._sync_projects(projects_snapshot, gateways_snapshot)
@@ -135,7 +149,11 @@ class SQLMeshParser:
                     search_docs_snapshot,
                 )
 
-        bundles = self._extract_models(extract_models) if extract_models else {}
+        bundles = (
+            self._extract_models(extract_models, show_progress=show_progress)
+            if extract_models
+            else {}
+        )
         lineage_refs: dict[str, list[ExtractedColumnReference]] = {}
         for model in extract_models:
             bundle = bundles[model_qualified_name(model)]
