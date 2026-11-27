@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlglot import exp
 from sqlglot.errors import ParseError
 from sqlglot.optimizer.scope import traverse_scope
+from sqlmesh.core.dialect import MacroFunc
 from sqlmesh.core.dialect import parse as parse_sql
 from sqlmesh.core.model import Model
 
@@ -63,12 +64,20 @@ def _expand_query_span(lines: list[str], start: int, end: int) -> tuple[int, int
     return start, end
 
 
+def _expression_for_scope_walk(expression: exp.Expression) -> exp.Expression:
+    prepared = expression.copy()
+    for cte in prepared.find_all(exp.CTE):
+        if isinstance(cte.this, MacroFunc):
+            cte.set("this", exp.Select(expressions=[cte.this]))
+    return prepared
+
+
 def _spans_from_expression(
     expression: exp.Expression, lines: list[str]
 ) -> dict[str, tuple[int, int]]:
     spans: dict[str, tuple[int, int]] = {}
     if isinstance(expression, exp.Query):
-        for scope in traverse_scope(expression):
+        for scope in traverse_scope(_expression_for_scope_walk(expression)):
             parent = scope.expression.parent
             name = _FINAL
             if scope.is_cte and parent is not None:
