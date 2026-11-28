@@ -144,6 +144,7 @@ class ExtractedQuery(TypedDict):
     join_statement_count: int
     group_by_col_count: int
     having_condition_count: int
+    qualify_condition_count: int
     order_by_col_count: int
     rendered_sql: str | None
     models_read_count: int
@@ -458,6 +459,7 @@ def extract_model_queries(
                     join_statement_count,
                     group_by_col_count,
                     having_condition_count,
+                    qualify_condition_count,
                     order_by_col_count,
                 ) = _query_counts(scope.expression)
                 models_read_count = _query_models_read_count(
@@ -490,6 +492,7 @@ def extract_model_queries(
                         "join_statement_count": join_statement_count,
                         "group_by_col_count": group_by_col_count,
                         "having_condition_count": having_condition_count,
+                        "qualify_condition_count": qualify_condition_count,
                         "order_by_col_count": order_by_col_count,
                         "rendered_sql": None if external else prepared_query.sql_by_name[name],
                         "models_read_count": models_read_count,
@@ -629,7 +632,7 @@ def _set_operation_leaf_selects(expression: exp.Expression) -> list[exp.Select]:
     return leaves
 
 
-def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, int, int]:
+def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, int, int, int]:
     select_col_count = 0
     select_expr_count = 0
     select_alias_count = 0
@@ -637,6 +640,7 @@ def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, i
     join_statement_count = 0
     group_by_col_count = 0
     having_condition_count = 0
+    qualify_condition_count = 0
     order_by_col_count = 0
     if isinstance(expression, exp.Select):
         select_col_count = len(expression.expressions)
@@ -656,6 +660,9 @@ def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, i
         having = expression.args.get("having")
         if having is not None:
             having_condition_count = len(_and_predicates(having.this))
+        qualify = expression.args.get("qualify")
+        if qualify is not None:
+            qualify_condition_count = len(_and_predicates(qualify.this))
         order = expression.args.get("order")
         if order is not None:
             order_by_col_count = len(order.expressions)
@@ -670,6 +677,7 @@ def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, i
                 _join,
                 _group,
                 _having,
+                _qualify,
                 _order,
             ) = _query_counts(leaves[0])
             for leaf in leaves:
@@ -681,12 +689,14 @@ def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, i
                     join_count,
                     group_count,
                     having_count,
+                    qualify_count,
                     order_count,
                 ) = _query_counts(leaf)
                 where_condition_count += where_count
                 join_statement_count += join_count
                 group_by_col_count += group_count
                 having_condition_count += having_count
+                qualify_condition_count += qualify_count
                 order_by_col_count += order_count
     return (
         select_col_count,
@@ -696,6 +706,7 @@ def _query_counts(expression: exp.Expr) -> tuple[int, int, int, int, int, int, i
         join_statement_count,
         group_by_col_count,
         having_condition_count,
+        qualify_condition_count,
         order_by_col_count,
     )
 
@@ -717,7 +728,7 @@ def _clause_nodes(select: exp.Select) -> list[tuple[str, exp.Expression]]:
     if where is not None:
         for predicate in _and_predicates(where.this):
             nodes.append(("where", predicate))
-    for kind in ("group", "having", "order"):
+    for kind in ("group", "having", "qualify", "order"):
         node = select.args.get(kind)
         if node is not None:
             nodes.append((kind, node))

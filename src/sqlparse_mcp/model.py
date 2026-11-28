@@ -62,6 +62,7 @@ SELECT
     where_condition_count,
     group_by_col_count,
     having_condition_count,
+    qualify_condition_count,
     order_by_col_count,
     models_read_count
 FROM queries
@@ -245,6 +246,7 @@ def get_model(db: ProjectDB, target: str) -> str:
                                 "where": int(row["where_condition_count"]),
                                 "group": int(row["group_by_col_count"]),
                                 "having": int(row["having_condition_count"]),
+                                "qualify": int(row["qualify_condition_count"]),
                                 "order": int(row["order_by_col_count"]),
                             },
                             always=frozenset({"select"}),

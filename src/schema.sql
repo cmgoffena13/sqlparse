@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS queries (
     join_statement_count          INTEGER NULL,
     group_by_col_count  INTEGER NULL,
     having_condition_count INTEGER NULL,
+    qualify_condition_count INTEGER NULL,
     order_by_col_count INTEGER NULL,
     rendered_sql        TEXT NULL,
     models_read_count   INTEGER NOT NULL,

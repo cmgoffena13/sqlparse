@@ -169,6 +169,7 @@ def get_model(ctx: Context, target: str) -> str:
      - Where Conditions = W
      - Grouped By Columns = G
      - Having Conditions = H
+     - Qualify Conditions = Q
      - Expressions in Select = E
      - Aliases in Select = A
      - Total Select Columns = S
@@ -302,6 +303,7 @@ def get_column_relations(
      - Where = W
      - Group By = G
      - Having = H
+     - Qualify = Q
      - Expression = E
      - Alias = A
      - Select = S

@@ -306,6 +306,17 @@ def test_union_cte_fed_by_cte_syncs_column_lineage(tmp_path: Path) -> None:
     assert "memory.sushi.union_from_cte/$combined/$base.id" in refs
 
 
+def test_qualify_clause_emits_qualify_lineage_refs() -> None:
+    install_parse_only_engine_support()
+    context = Context(paths=BIGQUERY_FIXTURE, load=False)
+    context.load(update_schemas=True)
+    model = next(
+        model for model in context.models.values() if model.name.endswith("ranked_customers")
+    )
+    kinds = {reference["ref_kind"] for reference in extract_model_column_references(model)}
+    assert "qualify" in kinds
+
+
 def test_date_expression_join_syncs_column_lineage(tmp_path: Path) -> None:
     root = tmp_path / "project"
     shutil.copytree(DATE_EXPR_JOIN_FIXTURE, root)

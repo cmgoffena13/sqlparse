@@ -71,8 +71,20 @@ def test_tree_glyphs_wide() -> None:
 
 def test_kind_label_orders_by_sql_logical_order() -> None:
     assert (
-        kind_label(["order", "expression", "alias", "select", "having", "group", "where", "join"])
-        == "J, W, G, H, E, A, S, O"
+        kind_label(
+            [
+                "order",
+                "expression",
+                "alias",
+                "select",
+                "qualify",
+                "having",
+                "group",
+                "where",
+                "join",
+            ]
+        )
+        == "J, W, G, H, Q, E, A, S, O"
     )
 
 

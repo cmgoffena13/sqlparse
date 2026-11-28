@@ -637,6 +637,7 @@ class SQLMeshParser:
             join_statement_count = query["join_statement_count"]
             group_by_col_count = query["group_by_col_count"]
             having_condition_count = query["having_condition_count"]
+            qualify_condition_count = query["qualify_condition_count"]
             order_by_col_count = query["order_by_col_count"]
             rendered_sql = query["rendered_sql"]
             models_read_count = query["models_read_count"]
@@ -657,6 +658,7 @@ class SQLMeshParser:
                     join_statement_count,
                     group_by_col_count,
                     having_condition_count,
+                    qualify_condition_count,
                     order_by_col_count,
                     rendered_sql,
                     models_read_count,
@@ -680,6 +682,7 @@ class SQLMeshParser:
                 "join_statement_count": join_statement_count,
                 "group_by_col_count": group_by_col_count,
                 "having_condition_count": having_condition_count,
+                "qualify_condition_count": qualify_condition_count,
                 "order_by_col_count": order_by_col_count,
                 "rendered_sql": rendered_sql,
                 "models_read_count": models_read_count,

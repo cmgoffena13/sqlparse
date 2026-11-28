@@ -116,7 +116,20 @@ def test_where_and_is_another_clause_and_group_by_is_one() -> None:
     )
     kinds = [kind for kind, _node in _clause_nodes(select)]
     assert kinds == ["join", "where", "where", "group"]
-    assert _query_counts(select) == (1, 0, 0, 2, 1, 2, 0, 0)
+    assert _query_counts(select) == (1, 0, 0, 2, 1, 2, 0, 0, 0)
+
+
+def test_clause_nodes_and_counts_include_qualify() -> None:
+    select = cast(
+        exp.Select,
+        parse_one(
+            "SELECT a FROM t QUALIFY ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) = 1 AND a > 0",
+            dialect="bigquery",
+        ),
+    )
+    kinds = [kind for kind, _node in _clause_nodes(select)]
+    assert kinds == ["qualify"]
+    assert _query_counts(select) == (1, 0, 0, 0, 0, 0, 0, 2, 0)
 
 
 def test_query_counts_splits_select_kinds_and_having_order() -> None:
@@ -127,7 +140,7 @@ def test_query_counts_splits_select_kinds_and_having_order() -> None:
             "GROUP BY a HAVING COUNT(*) > 1 AND x = 2 ORDER BY a, b"
         ),
     )
-    assert _query_counts(select) == (3, 1, 1, 0, 0, 1, 2, 2)
+    assert _query_counts(select) == (3, 1, 1, 0, 0, 1, 2, 0, 2)
 
 
 def test_query_counts_rolls_union_arm_stats_onto_set_operation() -> None:
@@ -139,7 +152,7 @@ def test_query_counts_rolls_union_arm_stats_onto_set_operation() -> None:
             "SELECT a, b FROM t3 WHERE z = 1"
         ),
     )
-    assert _query_counts(union) == (2, 0, 0, 3, 1, 0, 0, 0)
+    assert _query_counts(union) == (2, 0, 0, 3, 1, 0, 0, 0, 0)
 
 
 def test_model_lists_kind_and_time_column_when_present() -> None:
