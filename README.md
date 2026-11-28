@@ -26,12 +26,12 @@ SQLParse is a SQLMesh project indexer that gives agents fast, accurate, and comp
 | `list_models` | Return the model names in one schema. |
 | `get_directory_tree` | Return the project's directory/file tree with line counts. |
 | `search` | Full-text search model, query, and column names. |
-| `get_model` | Return a model's SQL tree, macro refs, and audit refs. |
+| `get_model` | Return a model's SQL tree, macro refs, audit refs, and test refs. |
 | `get_query` | Return a query's definition. |
 | `get_query_schema` | Return a query's output schema. |
 | `get_span_at_lines` | Return the query, audit, macro, or test that covers a line range. |
 | `get_test` | Return a test definition. |
-| `get_macro` | Return a macro's definition and the models that use it. |
+| `get_macro` | Return a macro's definition and the model queries that use it. |
 | `get_audit` | Return an audit's definition and the models that use it. |
 | `get_model_relations` | Return dependents or dependencies for one model. |
 | `get_column_relations` | Return dependents or dependencies for one column. |
