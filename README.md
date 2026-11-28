@@ -54,3 +54,4 @@ SQLParse is a SQLMesh project indexer that gives agents fast, accurate, and comp
 | `update` | Replace the binary with the latest release (`--version` optional) and update the skill. |
 | `mcp` | Start the MCP server. |
 | `reload` | Drop the index and reprocess the SQLMesh project. |
+| `profile` | Full-index with phase timings (`--out` optional). |
