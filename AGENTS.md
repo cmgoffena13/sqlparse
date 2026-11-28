@@ -15,6 +15,7 @@
  - NEVER use `dataclass`. Use the `pydantic` package instead.
  - NEVER add `from __future__ import annotations` to a file.
  - DO NOT use `global` ever.
+ - DO NOT USE `nonlocal` ever.
 
 ## SQL Standards
  - NEVER alias a column name as the exact same column name.
