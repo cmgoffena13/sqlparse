@@ -15,7 +15,7 @@ SQLParse is a SQLMesh project indexer that gives agents fast, accurate, and comp
 1. Put the `sqlparse` binary on your PATH (release asset or `make compile` → `dist/sqlparse`).
 2. `sqlparse install`
 
-> Note: The SQLMesh project must match the binary Python version, 3.12, or issues could occur upon 3rd party package import to initialize the config.
+> Note: The SQLMesh project must match the binary Python version, 3.12, or issues could occur during 3rd party package imports to initialize the config.
 
 ## Tools
 
